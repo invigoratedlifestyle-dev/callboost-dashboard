@@ -99,13 +99,25 @@ function getRecord(value: unknown): Record<string, unknown> {
 
 function extractTextBody(payload: Record<string, unknown>) {
   const data = getRecord(payload.data);
+  const dataEmail = getRecord(data.email);
   const text = pickFirstString(
     data.text,
+    data.text_body,
     data.reply_text,
+    data.body,
+    data.message,
+    data.content,
+    dataEmail.text,
     payload.text,
-    payload.reply_text
+    payload.reply_text,
+    payload.body
   );
-  const html = pickFirstString(data.html, payload.html);
+  const html = pickFirstString(
+    data.html,
+    data.html_body,
+    dataEmail.html,
+    payload.html
+  );
 
   return text || stripHtml(html);
 }
@@ -204,11 +216,13 @@ export async function POST(req: Request) {
     >;
 
     console.log("Inbound email payload:", JSON.stringify(payload, null, 2));
+    console.log("Inbound email keys", Object.keys(payload));
+    console.log("Inbound email data keys", Object.keys(getRecord(payload.data)));
 
     const inbound = extractInboundEmail(payload);
 
-    if (!inbound.from || !inbound.body) {
-      console.log("Inbound email ignored: missing sender or body", {
+    if (!inbound.from) {
+      console.log("Inbound email ignored: missing sender", {
         from: inbound.from,
       });
       return new Response("", { status: 200 });
@@ -233,7 +247,7 @@ export async function POST(req: Request) {
       toAddress: inbound.to,
       fromAddress: inbound.from,
       subject: inbound.subject,
-      body: inbound.body,
+      body: inbound.body || "(No message body)",
       status: "received",
       provider: "resend",
     });
