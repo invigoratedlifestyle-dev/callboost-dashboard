@@ -138,3 +138,18 @@ export async function listLeadMessages(args: {
 
   return (data || []).map((row) => rowToLeadMessage(row as LeadMessageRow));
 }
+
+export async function listRecentOutboundSmsMessages(limit = 1000) {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("lead_messages")
+    .select("*")
+    .eq("channel", "sms")
+    .eq("direction", "outbound")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+
+  return (data || []).map((row) => rowToLeadMessage(row as LeadMessageRow));
+}

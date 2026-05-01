@@ -1,5 +1,13 @@
-import { insertLeadMessage } from "../../lib/supabase/leadMessages";
-import { listLeadRows, rowToLead, type LeadRow } from "../../lib/supabase/leads";
+import {
+  insertLeadMessage,
+  listRecentOutboundSmsMessages,
+} from "../../lib/supabase/leadMessages";
+import {
+  getLeadRowBySlug,
+  listLeadRows,
+  rowToLead,
+  type LeadRow,
+} from "../../lib/supabase/leads";
 
 function getString(value: FormDataEntryValue | null) {
   return typeof value === "string" ? value.trim() : "";
@@ -27,6 +35,25 @@ function normalizePhone(value: unknown) {
   return phone;
 }
 
+async function findLeadByOutboundSms(fromPhone: string) {
+  const normalizedFrom = normalizePhone(fromPhone);
+  const messages = await listRecentOutboundSmsMessages();
+  const matchedMessage = messages.find(
+    (message) => normalizePhone(message.toAddress) === normalizedFrom
+  );
+
+  if (!matchedMessage) return null;
+
+  const row = matchedMessage.slug
+    ? await getLeadRowBySlug(matchedMessage.slug)
+    : null;
+
+  return {
+    leadId: matchedMessage.leadId || row?.id || null,
+    slug: matchedMessage.slug || String(row?.slug || ""),
+  };
+}
+
 async function findLeadByPhone(fromPhone: string) {
   const normalizedFrom = normalizePhone(fromPhone);
   const rows = await listLeadRows();
@@ -37,8 +64,8 @@ async function findLeadByPhone(fromPhone: string) {
 
     if (leadPhone && leadPhone === normalizedFrom) {
       return {
-        row: row as LeadRow,
-        lead,
+        leadId: (row as LeadRow).id || null,
+        slug: String((row as LeadRow).slug || lead.slug || ""),
       };
     }
   }
@@ -58,16 +85,19 @@ export async function POST(req: Request) {
       return new Response("", { status: 200 });
     }
 
-    const match = await findLeadByPhone(from);
+    const match =
+      (await findLeadByOutboundSms(from)) || (await findLeadByPhone(from));
 
     if (!match) {
-      console.log("Inbound SMS ignored: no matching lead", { from });
+      console.log("Inbound SMS ignored: no matching lead or outbound message", {
+        from,
+      });
       return new Response("", { status: 200 });
     }
 
     await insertLeadMessage({
-      leadId: match.row.id || null,
-      slug: String(match.row.slug || match.lead.slug || ""),
+      leadId: match.leadId,
+      slug: match.slug,
       channel: "sms",
       direction: "inbound",
       toAddress: to,
