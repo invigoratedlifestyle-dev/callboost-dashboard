@@ -1,7 +1,8 @@
 import { getSupabaseAdmin } from "./server";
 
 export type LeadMessageChannel = "sms" | "email";
-export type LeadMessageStatus = "draft" | "sent" | "failed";
+export type LeadMessageDirection = "inbound" | "outbound";
+export type LeadMessageStatus = "draft" | "sent" | "failed" | "received";
 
 export type LeadMessageRow = {
   id?: string;
@@ -25,7 +26,7 @@ export type LeadMessage = {
   leadId?: string | number | null;
   slug: string;
   channel: LeadMessageChannel;
-  direction: string;
+  direction: LeadMessageDirection;
   toAddress: string;
   fromAddress: string;
   subject: string;
@@ -46,9 +47,15 @@ function getChannel(value: unknown): LeadMessageChannel {
 }
 
 function getStatus(value: unknown): LeadMessageStatus {
-  if (value === "draft" || value === "failed") return value;
+  if (value === "draft" || value === "failed" || value === "received") {
+    return value;
+  }
 
   return "sent";
+}
+
+function getDirection(value: unknown): LeadMessageDirection {
+  return value === "inbound" ? "inbound" : "outbound";
 }
 
 export function rowToLeadMessage(row: LeadMessageRow): LeadMessage {
@@ -57,7 +64,7 @@ export function rowToLeadMessage(row: LeadMessageRow): LeadMessage {
     leadId: row.lead_id || null,
     slug: getString(row.slug),
     channel: getChannel(row.channel),
-    direction: getString(row.direction) || "outbound",
+    direction: getDirection(row.direction),
     toAddress: getString(row.to_address),
     fromAddress: getString(row.from_address),
     subject: getString(row.subject),
@@ -74,6 +81,7 @@ export async function insertLeadMessage(args: {
   leadId?: string | number | null;
   slug: string;
   channel: LeadMessageChannel;
+  direction?: LeadMessageDirection;
   toAddress: string;
   fromAddress?: string | null;
   subject?: string | null;
@@ -90,7 +98,7 @@ export async function insertLeadMessage(args: {
       lead_id: args.leadId || null,
       slug: args.slug,
       channel: args.channel,
-      direction: "outbound",
+      direction: args.direction || "outbound",
       to_address: args.toAddress,
       from_address: args.fromAddress || null,
       subject: args.subject || null,

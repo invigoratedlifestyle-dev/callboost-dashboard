@@ -47,7 +47,7 @@ export type LeadMessage = {
   fromAddress: string;
   subject: string;
   body: string;
-  status: "draft" | "sent" | "failed";
+  status: "draft" | "sent" | "failed" | "received";
   provider: string;
   providerMessageId: string;
   error: string;
