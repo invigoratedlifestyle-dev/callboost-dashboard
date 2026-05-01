@@ -1,15 +1,19 @@
 import { NextResponse } from "next/server";
-import path from "path";
-import { execFileSync } from "child_process";
 import OpenAI from "openai";
 import { withLifecycleDefaults } from "../../lib/leadLifecycle";
-import { getLeadBySlug, updateLeadBySlug } from "../../lib/supabase/leads";
+import {
+  buildGeneratedSiteHtml,
+  saveGeneratedSite,
+} from "../../lib/supabase/generatedSites";
+import {
+  getLeadRowBySlug,
+  rowToLead,
+  updateLeadBySlug,
+} from "../../lib/supabase/leads";
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
-
-const generatorRoot = path.join(process.cwd(), "..", "local-site-generator");
 
 function extractJson(text: string) {
   const cleaned = text.trim();
@@ -33,6 +37,12 @@ function extractJson(text: string) {
   throw new Error("AI response did not contain valid JSON");
 }
 
+function getPublicUrl(request: Request, slug: string) {
+  const origin = new URL(request.url).origin;
+
+  return `${origin}/sites/${slug}`;
+}
+
 export async function POST(req: Request) {
   try {
     const { slug } = await req.json();
@@ -47,12 +57,13 @@ export async function POST(req: Request) {
 
     console.log("Generate single requested:", { slug });
 
-    const existingLead = await getLeadBySlug(slug);
+    const leadRow = await getLeadRowBySlug(slug);
 
-    if (!existingLead) {
+    if (!leadRow) {
       return NextResponse.json({ error: "Lead not found" }, { status: 404 });
     }
 
+    const existingLead = rowToLead(leadRow);
     const prompt = `
 Generate local business website content.
 
@@ -91,7 +102,7 @@ Return ONLY valid JSON:
       existingLead.reviewsSource === "google" &&
       Array.isArray(existingLead.reviews) &&
       existingLead.reviews.length > 0;
-
+    const publicUrl = getPublicUrl(req, slug);
     const updatedLead = withLifecycleDefaults({
       ...existingLead,
       description: ai.description,
@@ -100,24 +111,24 @@ Return ONLY valid JSON:
       reviewsSource: hasGoogleReviews
         ? "google"
         : existingLead.reviewsSource || "none",
+      generatedSiteUrl: publicUrl,
       aiGeneratedAt: new Date().toISOString(),
     });
-
-    const savedLead = await updateLeadBySlug(slug, updatedLead);
-    const command = `node scripts/generate.js --slug ${slug}`;
-
-    console.log("Generate single command:", command);
-
-    execFileSync("node", ["scripts/generate.js", "--slug", slug], {
-      cwd: generatorRoot,
-      stdio: "inherit",
+    const html = buildGeneratedSiteHtml(updatedLead);
+    const generatedSite = await saveGeneratedSite({
+      leadId: leadRow.id || null,
+      slug,
+      html,
     });
+    const savedLead = await updateLeadBySlug(slug, updatedLead);
 
-    console.log("Generate single succeeded:", { slug });
+    console.log("Generate single succeeded:", { slug, publicUrl });
 
     return NextResponse.json({
       success: true,
       lead: savedLead,
+      generatedSite,
+      publicUrl,
     });
   } catch (error) {
     console.error("Generate single failed:", error);
