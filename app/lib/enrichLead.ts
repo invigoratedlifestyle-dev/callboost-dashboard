@@ -6,10 +6,7 @@ import {
   fetchGooglePlaceDetails,
   normalizeGoogleReviews,
 } from "./googleReviews";
-import { withLifecycleDefaults } from "./leadLifecycle";
-
-const generatorRoot = path.join(process.cwd(), "..", "local-site-generator");
-const businessesDir = path.join(generatorRoot, "data", "businesses");
+import { businessesDir, ensureBusinessesDir, withLifecycleDefaults } from "./leadLifecycle";
 const ignoredSearchDomains = [
   "google.com",
   "facebook.com",
@@ -867,6 +864,7 @@ function readLead(filePath: string) {
 }
 
 function writeLead(filePath: string, lead: Record<string, unknown>) {
+  ensureBusinessesDir();
   fs.writeFileSync(filePath, JSON.stringify(lead, null, 2));
 }
 

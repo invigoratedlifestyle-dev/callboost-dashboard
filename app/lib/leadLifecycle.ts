@@ -17,8 +17,24 @@ export const lifecycleTimestampFields: Record<
   contacted: "contactedAt",
 };
 
-const generatorRoot = path.join(process.cwd(), "..", "local-site-generator");
-export const businessesDir = path.join(generatorRoot, "data", "businesses");
+export const dataDir = path.join(process.cwd(), "data");
+export const businessesDir = path.join(dataDir, "businesses");
+export const ignoredLeadsDir = path.join(dataDir, "ignored-leads");
+
+// Vercel can read files bundled with the deployment. Runtime writes to this
+// project data directory are kept for local/demo use, but are not durable across
+// deployments and may be restricted depending on the hosting runtime.
+export function ensureBusinessesDir() {
+  if (!fs.existsSync(businessesDir)) {
+    fs.mkdirSync(businessesDir, { recursive: true });
+  }
+}
+
+export function ensureIgnoredLeadsDir() {
+  if (!fs.existsSync(ignoredLeadsDir)) {
+    fs.mkdirSync(ignoredLeadsDir, { recursive: true });
+  }
+}
 
 export type LeadRecord = Record<string, unknown>;
 
@@ -100,6 +116,8 @@ export function updateLeadStatus(
   status: LifecycleStatus,
   reviewNotes?: string
 ) {
+  ensureBusinessesDir();
+
   const filePath = getLeadFilePath(slug);
 
   if (!fs.existsSync(filePath)) {

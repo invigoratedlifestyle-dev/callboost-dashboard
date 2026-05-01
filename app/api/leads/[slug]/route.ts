@@ -26,8 +26,6 @@ export async function GET(
 
   const lead = withLifecycleDefaults(JSON.parse(fs.readFileSync(filePath, "utf8")));
 
-  fs.writeFileSync(filePath, JSON.stringify(lead, null, 2));
-
   return NextResponse.json({ lead });
 }
 

@@ -6,9 +6,7 @@ import {
   fetchGooglePlaceDetails,
   normalizeGoogleReviews,
 } from "../../lib/googleReviews";
-
-const generatorRoot = path.join(process.cwd(), "..", "local-site-generator");
-const businessesDir = path.join(generatorRoot, "data", "businesses");
+import { businessesDir, ensureBusinessesDir } from "../../lib/leadLifecycle";
 
 type GenerateRequest = {
   query?: string;
@@ -112,9 +110,7 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!fs.existsSync(businessesDir)) {
-      fs.mkdirSync(businessesDir, { recursive: true });
-    }
+    ensureBusinessesDir();
 
     let body: GenerateRequest = {};
 

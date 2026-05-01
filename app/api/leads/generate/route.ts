@@ -8,6 +8,10 @@ import {
   normalizeGoogleReviews,
 } from "../../../lib/googleReviews";
 import {
+  businessesDir,
+  ensureBusinessesDir,
+  ensureIgnoredLeadsDir,
+  ignoredLeadsDir,
   normalizeLeadIdentity,
   shouldSkipExistingLead,
   withLifecycleDefaults,
@@ -21,10 +25,6 @@ const DEFAULT_TRADE = "plumber";
 const DEFAULT_CITY = "Hobart";
 const MAX_LEADS_PER_RUN = 50;
 const ENRICH_AFTER_GENERATE = true;
-
-const generatorRoot = path.join(process.cwd(), "..", "local-site-generator");
-const businessesDir = path.join(generatorRoot, "data", "businesses");
-const ignoredLeadsDir = path.join(generatorRoot, "data", "ignored-leads");
 
 type GenerateRequest = {
   trade?: string;
@@ -372,9 +372,7 @@ function saveIgnoredLead(
   tradeValidation: TradeValidationResult,
   index: number
 ) {
-  if (!fs.existsSync(ignoredLeadsDir)) {
-    fs.mkdirSync(ignoredLeadsDir, { recursive: true });
-  }
+  ensureIgnoredLeadsDir();
 
   const name = getBusinessName(place);
   const slug = getUniqueSlugInDir(
@@ -442,13 +440,8 @@ export async function POST(req: Request) {
       );
     }
 
-    if (!fs.existsSync(businessesDir)) {
-      fs.mkdirSync(businessesDir, { recursive: true });
-    }
-
-    if (!fs.existsSync(ignoredLeadsDir)) {
-      fs.mkdirSync(ignoredLeadsDir, { recursive: true });
-    }
+    ensureBusinessesDir();
+    ensureIgnoredLeadsDir();
 
     let body: GenerateRequest = {};
 

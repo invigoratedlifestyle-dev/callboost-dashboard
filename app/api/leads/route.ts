@@ -16,11 +16,8 @@ export async function GET() {
     const leads = files.map((file) => {
       const filePath = path.join(businessesDir, file);
       const lead = JSON.parse(fs.readFileSync(filePath, "utf8"));
-      const leadWithDefaults = withLifecycleDefaults(lead);
 
-      fs.writeFileSync(filePath, JSON.stringify(leadWithDefaults, null, 2));
-
-      return leadWithDefaults;
+      return withLifecycleDefaults(lead);
     });
 
     leads.sort((a, b) =>

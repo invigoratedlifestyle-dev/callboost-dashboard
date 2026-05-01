@@ -3,14 +3,17 @@ import fs from "fs";
 import path from "path";
 import { execFileSync } from "child_process";
 import OpenAI from "openai";
-import { withLifecycleDefaults } from "../../lib/leadLifecycle";
+import {
+  businessesDir,
+  ensureBusinessesDir,
+  withLifecycleDefaults,
+} from "../../lib/leadLifecycle";
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
 const generatorRoot = path.join(process.cwd(), "..", "local-site-generator");
-const businessesDir = path.join(generatorRoot, "data", "businesses");
 
 function extractJson(text: string) {
   const cleaned = text.trim();
@@ -47,6 +50,8 @@ export async function POST(req: Request) {
     }
 
     console.log("Generate single requested:", { slug });
+
+    ensureBusinessesDir();
 
     const filePath = path.join(businessesDir, `${slug}.json`);
 

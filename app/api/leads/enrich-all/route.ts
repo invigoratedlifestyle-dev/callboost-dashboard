@@ -2,9 +2,7 @@ import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 import { enrichLead } from "../../../lib/enrichLead";
-
-const generatorRoot = path.join(process.cwd(), "..", "local-site-generator");
-const businessesDir = path.join(generatorRoot, "data", "businesses");
+import { businessesDir } from "../../../lib/leadLifecycle";
 
 function isPlaceholderEmail(email?: string) {
   const normalizedEmail = email?.trim().toLowerCase() || "";
