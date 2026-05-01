@@ -7,6 +7,7 @@ function isProtectedPath(pathname: string) {
   if (pathname.startsWith("/api/auth/")) return false;
   if (pathname === "/api/callback") return false;
   if (pathname === "/api/sms") return false;
+  if (pathname === "/api/email/inbound") return false;
 
   return pathname.startsWith("/api/");
 }
