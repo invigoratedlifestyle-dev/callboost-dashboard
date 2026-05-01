@@ -35,6 +35,11 @@ type GooglePlace = {
   displayName?: {
     text?: string;
   };
+  addressComponents?: Array<{
+    longText?: string;
+    shortText?: string;
+    types?: string[];
+  }>;
   formattedAddress?: string;
   location?: {
     latitude?: number;
@@ -185,8 +190,9 @@ async function saveIgnoredLead(
   place: GooglePlace,
   city: string,
   trade: string,
-  tradeValidation: TradeValidationResult,
-  index: number
+  reason: "wrong_trade" | "invalid_location" | "invalid_phone",
+  index: number,
+  tradeValidation?: TradeValidationResult
 ) {
   const name = getBusinessName(place);
   const slug = getUniqueSlug(slugify(name), place.id || "", index);
@@ -197,12 +203,47 @@ async function saveIgnoredLead(
     placeId: place.id || "",
     city,
     trade,
-    reason: "wrong_trade",
+    reason,
     tradeValidation,
+    formattedAddress: place.formattedAddress || "",
     ignoredAt: new Date().toISOString(),
   };
 
   await insertIgnoredLead(ignoredLead);
+}
+
+function isValidLocation(place: GooglePlace) {
+  const formattedAddress = (place.formattedAddress || "").toLowerCase();
+  const hasTasmania =
+    formattedAddress.includes("tasmania") ||
+    /\btas\b/i.test(place.formattedAddress || "");
+  const hasAustralia = formattedAddress.includes("australia");
+  const hasAuCountryCode = (place.addressComponents || []).some((component) => {
+    const types = component.types || [];
+    const shortText = (component.shortText || "").toUpperCase();
+
+    return types.includes("country") && shortText === "AU";
+  });
+
+  return (hasTasmania && hasAustralia) || hasAuCountryCode;
+}
+
+function isValidPhone(phone?: string) {
+  const trimmedPhone = phone?.trim() || "";
+
+  if (!trimmedPhone) return false;
+  if (trimmedPhone.startsWith("+1")) return false;
+  if (/^\(?[2-9]\d{2}\)?[\s.-]?\d{3}[\s.-]?\d{4}$/.test(trimmedPhone)) {
+    return false;
+  }
+
+  const normalizedPhone = trimmedPhone.replace(/[\s().-]/g, "");
+
+  return (
+    normalizedPhone.startsWith("+61") ||
+    normalizedPhone.startsWith("04") ||
+    normalizedPhone.startsWith("03")
+  );
 }
 
 async function textSearch(query: string, apiKey: string) {
@@ -212,7 +253,7 @@ async function textSearch(query: string, apiKey: string) {
       "Content-Type": "application/json",
       "X-Goog-Api-Key": apiKey,
       "X-Goog-FieldMask":
-        "places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.websiteUri,places.nationalPhoneNumber,places.types",
+        "places.id,places.displayName,places.addressComponents,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.websiteUri,places.nationalPhoneNumber,places.types",
     },
     body: JSON.stringify({
       textQuery: query,
@@ -429,9 +470,42 @@ export async function POST(req: Request) {
       tradeValidation: TradeValidationResult;
     }> = [];
     let skippedWrongTrade = 0;
+    let skippedInvalidLocation = 0;
+    let skippedInvalidPhone = 0;
 
     for (const place of newPlaces) {
       const businessName = getBusinessName(place);
+
+      if (!isValidLocation(place)) {
+        skippedInvalidLocation += 1;
+        console.log(`Skipped (wrong location): ${businessName}`);
+
+        await saveIgnoredLead(
+          place,
+          city,
+          trade,
+          "invalid_location",
+          skippedInvalidLocation
+        );
+        continue;
+      }
+
+      if (!isValidPhone(place.nationalPhoneNumber)) {
+        skippedInvalidPhone += 1;
+        console.log(
+          `Skipped (invalid phone): ${place.nationalPhoneNumber || ""}`
+        );
+
+        await saveIgnoredLead(
+          place,
+          city,
+          trade,
+          "invalid_phone",
+          skippedInvalidPhone
+        );
+        continue;
+      }
+
       const tradeValidation = isValidTradeLead(place, trade);
 
       if (!tradeValidation.isValid) {
@@ -444,8 +518,9 @@ export async function POST(req: Request) {
           place,
           city,
           trade,
-          tradeValidation,
-          skippedWrongTrade
+          "wrong_trade",
+          skippedWrongTrade,
+          tradeValidation
         );
         continue;
       }
@@ -558,6 +633,8 @@ export async function POST(req: Request) {
       existingSkipped,
       skippedDuplicates,
       skippedWrongTrade,
+      skippedInvalidLocation,
+      skippedInvalidPhone,
       enriched,
       enrichmentFailed,
     });
@@ -572,6 +649,8 @@ export async function POST(req: Request) {
       existingSkipped,
       skippedDuplicates,
       skippedWrongTrade,
+      skippedInvalidLocation,
+      skippedInvalidPhone,
       saved: leads.length,
       enriched,
       enrichmentFailed,
