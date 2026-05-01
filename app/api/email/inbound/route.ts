@@ -63,24 +63,6 @@ function normalizeEmail(value: unknown) {
   return extractEmailAddress(value) || getString(value).toLowerCase();
 }
 
-function stripHtml(value: string) {
-  return value
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/p>/gi, "\n\n")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&#x27;/g, "'")
-    .replace(/&#x2F;/g, "/")
-    .trim();
-}
-
 function pickFirstString(...values: unknown[]) {
   for (const value of values) {
     const text = getString(value);
@@ -97,21 +79,9 @@ function getRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
-function extractTextBody(payload: Record<string, unknown>) {
+function extractFromHtml(payload: Record<string, unknown>) {
   const data = getRecord(payload.data);
   const dataEmail = getRecord(data.email);
-  const text = pickFirstString(
-    data.text,
-    data.text_body,
-    data.reply_text,
-    data.body,
-    data.message,
-    data.content,
-    dataEmail.text,
-    payload.text,
-    payload.reply_text,
-    payload.body
-  );
   const html = pickFirstString(
     data.html,
     data.html_body,
@@ -119,7 +89,36 @@ function extractTextBody(payload: Record<string, unknown>) {
     payload.html
   );
 
-  return text || stripHtml(html);
+  if (!html) return "";
+
+  return html
+    .replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, "")
+    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractTextBody(payload: Record<string, unknown>) {
+  const data = getRecord(payload.data);
+  const dataEmail = getRecord(data.email);
+  const content = getRecord(data.content);
+
+  return (
+    pickFirstString(
+      data.text,
+      data.text_body,
+      dataEmail.text,
+      content.text,
+      payload.text
+    ) || extractFromHtml(payload)
+  );
 }
 
 function extractInboundEmail(payload: Record<string, unknown>) {
@@ -215,7 +214,7 @@ export async function POST(req: Request) {
       unknown
     >;
 
-    console.log("Inbound email payload:", JSON.stringify(payload, null, 2));
+    console.log("Inbound email FULL payload:", JSON.stringify(payload, null, 2));
     console.log("Inbound email keys", Object.keys(payload));
     console.log("Inbound email data keys", Object.keys(getRecord(payload.data)));
 
