@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Resend } from "resend";
 import {
   insertCallbackRequest,
   markCallbackForwarded,
@@ -13,6 +14,12 @@ function isForwardingEnabled(value: unknown) {
   return value === true || value === "true";
 }
 
+function getResendClient() {
+  const apiKey = process.env.RESEND_API_KEY;
+
+  return apiKey ? new Resend(apiKey) : null;
+}
+
 async function forwardToEmail(args: {
   to: string;
   businessName: string;
@@ -20,38 +27,31 @@ async function forwardToEmail(args: {
   visitorPhone: string;
   visitorMessage: string;
 }) {
-  const apiKey = process.env.RESEND_API_KEY;
+  const resend = getResendClient();
 
-  if (!apiKey) {
+  if (!resend) {
     console.log("Callback email forwarding skipped: missing RESEND_API_KEY");
     return false;
   }
 
   const from =
     process.env.CALLBOOST_CALLBACK_FROM_EMAIL || "callbacks@callboost.co";
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from,
-      to: args.to,
-      subject: `New callback request for ${args.businessName}`,
-      text: [
-        `New callback request for ${args.businessName}`,
-        "",
-        `Name: ${args.visitorName}`,
-        `Phone: ${args.visitorPhone}`,
-        `Message: ${args.visitorMessage || "No message provided"}`,
-      ].join("\n"),
-    }),
+  const { error } = await resend.emails.send({
+    from,
+    to: args.to,
+    subject: `New callback request - ${args.businessName}`,
+    text: [
+      "New callback request received:",
+      "",
+      `Business: ${args.businessName}`,
+      `Name: ${args.visitorName}`,
+      `Phone: ${args.visitorPhone}`,
+      `Message: ${args.visitorMessage || "No message provided"}`,
+    ].join("\n"),
   });
 
-  if (!response.ok) {
-    const details = await response.text().catch(() => "");
-    throw new Error(`Email forwarding failed: ${details || response.status}`);
+  if (error) {
+    throw new Error(`Email forwarding failed: ${error.message}`);
   }
 
   return true;
