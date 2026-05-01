@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
+import Twilio from "twilio";
 import {
   insertCallbackRequest,
   markCallbackForwarded,
@@ -18,6 +19,13 @@ function getResendClient() {
   const apiKey = process.env.RESEND_API_KEY;
 
   return apiKey ? new Resend(apiKey) : null;
+}
+
+function getTwilioClient() {
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+
+  return accountSid && authToken ? Twilio(accountSid, authToken) : null;
 }
 
 async function forwardToEmail(args: {
@@ -73,28 +81,30 @@ async function forwardToPhone(args: {
   visitorPhone: string;
   visitorMessage: string;
 }) {
-  const webhookUrl = process.env.CALLBOOST_SMS_WEBHOOK_URL;
+  const twilio = getTwilioClient();
+  const from = process.env.TWILIO_FROM_NUMBER;
 
-  if (!webhookUrl) {
-    console.log("Callback phone forwarding skipped: missing CALLBOOST_SMS_WEBHOOK_URL");
+  if (!twilio || !from) {
+    console.log(
+      "Callback phone forwarding skipped: missing Twilio environment variables"
+    );
     return false;
   }
 
-  const response = await fetch(webhookUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      to: args.to,
-      message: `New callback request for ${args.businessName}: ${args.visitorName} (${args.visitorPhone}) - ${args.visitorMessage || "No message provided"}`,
-    }),
+  await twilio.messages.create({
+    body: [
+      `🔥 New Lead - ${args.businessName}`,
+      "",
+      `Name: ${args.visitorName}`,
+      `Phone: ${args.visitorPhone}`,
+      "",
+      args.visitorMessage || "No message provided",
+      "",
+      "Call them ASAP.",
+    ].join("\n"),
+    from,
+    to: args.to,
   });
-
-  if (!response.ok) {
-    const details = await response.text().catch(() => "");
-    throw new Error(`Phone forwarding failed: ${details || response.status}`);
-  }
 
   return true;
 }
