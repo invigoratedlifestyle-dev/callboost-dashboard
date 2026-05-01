@@ -25,6 +25,18 @@ export type WebsiteEvaluation = {
   recommendation: "target" | "maybe" | "skip";
 };
 
+export type CallbackRequest = {
+  id?: string;
+  leadId?: string | number | null;
+  sourceSlug: string;
+  visitorName: string;
+  visitorPhone: string;
+  visitorMessage: string;
+  forwarded: boolean;
+  forwardedTo: string;
+  createdAt: string;
+};
+
 export type Lead = {
   id: string;
   businessName: string;
@@ -52,6 +64,9 @@ export type Lead = {
   enrichedAt?: string;
   generatedSiteUrl?: string;
   websiteEvaluation?: WebsiteEvaluation;
+  callbackForwardingEnabled?: boolean;
+  callbackForwardToEmail?: string | null;
+  callbackForwardToPhone?: string | null;
 };
 
 export const leads: Lead[] = [

@@ -3,7 +3,12 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { generateOfferEmail } from "../../lib/emailTemplate";
-import type { Lead, LeadStatus, WebsiteEvaluation } from "../../lib/leads";
+import type {
+  CallbackRequest,
+  Lead,
+  LeadStatus,
+  WebsiteEvaluation,
+} from "../../lib/leads";
 import { EnrichButton } from "./EnrichButton";
 import { GenerateSiteButton } from "./GenerateSiteButton";
 
@@ -105,8 +110,14 @@ function getReviewSource(lead: LeadWithGeneratedContent) {
 
 export default function LeadDetailClient({ slug }: { slug: string }) {
   const [lead, setLead] = useState<LeadWithGeneratedContent | null>(null);
+  const [callbacks, setCallbacks] = useState<CallbackRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingStatus, setUpdatingStatus] = useState("");
+  const [savingForwarding, setSavingForwarding] = useState(false);
+  const [callbackForwardingEnabled, setCallbackForwardingEnabled] =
+    useState(false);
+  const [callbackForwardToEmail, setCallbackForwardToEmail] = useState("");
+  const [callbackForwardToPhone, setCallbackForwardToPhone] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -128,6 +139,12 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       if (!active) return;
 
       setLead(data.lead);
+      setCallbacks(data.callbacks || []);
+      setCallbackForwardingEnabled(
+        Boolean(data.lead?.callbackForwardingEnabled)
+      );
+      setCallbackForwardToEmail(data.lead?.callbackForwardToEmail || "");
+      setCallbackForwardToPhone(data.lead?.callbackForwardToPhone || "");
       setLoading(false);
     }
 
@@ -158,6 +175,37 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const subject = `Quick win for ${lead.businessName}`;
   const handleLeadUpdated = (updatedLead: Lead) => {
     setLead(updatedLead);
+  };
+  const handleSaveForwarding = async () => {
+    if (!lead) return;
+
+    setSavingForwarding(true);
+
+    try {
+      const res = await fetch(`/api/leads/${lead.slug || lead.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          callbackForwardingEnabled,
+          callbackForwardToEmail,
+          callbackForwardToPhone,
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to update forwarding");
+      }
+
+      setLead(data.lead);
+    } catch (error) {
+      console.error("Failed to update callback forwarding:", error);
+      alert("Failed to update callback forwarding.");
+    } finally {
+      setSavingForwarding(false);
+    }
   };
   const handleLifecycleUpdate = async (status: LeadStatus) => {
     if (!lead) return;
@@ -402,6 +450,115 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
             </div>
           </section>
         </div>
+
+        <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
+          <h2 className="mb-4 text-xl font-bold">Callback Requests</h2>
+
+          <div className="grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
+            <div className="rounded-xl border border-white/10 bg-slate-900 p-4">
+              <h3 className="mb-3 font-bold text-white">Forwarding</h3>
+
+              <label className="flex items-center gap-3 text-sm font-bold text-slate-200">
+                <input
+                  type="checkbox"
+                  checked={callbackForwardingEnabled}
+                  onChange={(event) =>
+                    setCallbackForwardingEnabled(event.target.checked)
+                  }
+                  className="h-4 w-4"
+                />
+                Forward callback requests
+              </label>
+
+              <div className="mt-4 space-y-3">
+                <label className="grid gap-2 text-sm font-bold text-slate-300">
+                  Forward to email
+                  <input
+                    value={callbackForwardToEmail}
+                    onChange={(event) =>
+                      setCallbackForwardToEmail(event.target.value)
+                    }
+                    className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none"
+                    placeholder="owner@example.com"
+                  />
+                </label>
+
+                <label className="grid gap-2 text-sm font-bold text-slate-300">
+                  Forward to mobile
+                  <input
+                    value={callbackForwardToPhone}
+                    onChange={(event) =>
+                      setCallbackForwardToPhone(event.target.value)
+                    }
+                    className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none"
+                    placeholder="+614..."
+                  />
+                </label>
+              </div>
+
+              <p className="mt-3 text-xs text-slate-500">
+                Email forwarding uses Resend when configured. Mobile forwarding
+                uses the configured SMS webhook.
+              </p>
+
+              <button
+                onClick={handleSaveForwarding}
+                disabled={savingForwarding}
+                className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {savingForwarding ? "Saving..." : "Save forwarding"}
+              </button>
+            </div>
+
+            <div>
+              {callbacks.length ? (
+                <div className="space-y-3">
+                  {callbacks.map((callback) => (
+                    <div
+                      key={callback.id || `${callback.createdAt}-${callback.visitorPhone}`}
+                      className="rounded-xl border border-white/10 bg-slate-900 p-4"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <p className="font-bold text-white">
+                            {callback.visitorName || "Unknown visitor"}
+                          </p>
+                          <p className="text-sm text-blue-300">
+                            {callback.visitorPhone || "No phone"}
+                          </p>
+                        </div>
+
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-bold ${
+                            callback.forwarded
+                              ? "bg-green-500/15 text-green-300"
+                              : "bg-white/10 text-slate-400"
+                          }`}
+                        >
+                          {callback.forwarded
+                            ? `Forwarded to ${callback.forwardedTo}`
+                            : "Saved only"}
+                        </span>
+                      </div>
+
+                      <p className="mt-3 text-slate-300">
+                        {callback.visitorMessage || "No message provided."}
+                      </p>
+
+                      <p className="mt-2 text-xs text-slate-500">
+                        {formatTimestamp(callback.createdAt)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-slate-400">
+                  No callback requests have been submitted yet.
+                </p>
+              )}
+            </div>
+          </div>
+        </section>
 
         <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
           <h2 className="mb-4 text-xl font-bold">Website Opportunity</h2>

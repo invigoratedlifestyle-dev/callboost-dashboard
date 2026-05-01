@@ -5,6 +5,7 @@ function isProtectedPath(pathname: string) {
   if (pathname === "/") return true;
   if (pathname === "/leads" || pathname.startsWith("/leads/")) return true;
   if (pathname.startsWith("/api/auth/")) return false;
+  if (pathname === "/api/callback") return false;
 
   return pathname.startsWith("/api/");
 }

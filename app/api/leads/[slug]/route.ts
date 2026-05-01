@@ -1,11 +1,20 @@
 import { NextResponse } from "next/server";
 import {
   isLifecycleStatus,
+  type LeadRecord,
 } from "../../../lib/leadLifecycle";
+import { listCallbacksForLead } from "../../../lib/supabase/callbacks";
 import {
   getLeadBySlug,
+  getLeadRowBySlug,
+  rowToLead,
+  updateLeadBySlug,
   updateLeadStatusBySlug,
 } from "../../../lib/supabase/leads";
+
+function getNullableString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
 
 export async function GET(
   req: Request,
@@ -14,13 +23,19 @@ export async function GET(
   const { slug } = await params;
 
   try {
-    const lead = await getLeadBySlug(slug);
+    const leadRow = await getLeadRowBySlug(slug);
 
-    if (!lead) {
+    if (!leadRow) {
       return NextResponse.json({ error: "Lead not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ lead });
+    const lead = rowToLead(leadRow);
+    const callbacks = await listCallbacksForLead({
+      leadId: leadRow.id || null,
+      slug,
+    });
+
+    return NextResponse.json({ lead, callbacks });
   } catch (error) {
     console.error("Failed to load lead:", error);
 
@@ -44,12 +59,31 @@ export async function PATCH(
   const reviewNotes =
     typeof body.reviewNotes === "string" ? body.reviewNotes : undefined;
 
-  if (!isLifecycleStatus(status)) {
-    return NextResponse.json({ error: "Invalid status" }, { status: 400 });
-  }
-
   try {
-    const updatedLead = await updateLeadStatusBySlug(slug, status, reviewNotes);
+    let updatedLead: LeadRecord | null = null;
+
+    if (status !== undefined) {
+      if (!isLifecycleStatus(status)) {
+        return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+      }
+
+      updatedLead = await updateLeadStatusBySlug(slug, status, reviewNotes);
+    } else {
+      const existingLead = await getLeadBySlug(slug);
+
+      if (!existingLead) {
+        return NextResponse.json({ error: "Lead not found" }, { status: 404 });
+      }
+
+      updatedLead = await updateLeadBySlug(slug, {
+        ...existingLead,
+        callbackForwardingEnabled:
+          body.callbackForwardingEnabled === true ||
+          body.callbackForwardingEnabled === "true",
+        callbackForwardToEmail: getNullableString(body.callbackForwardToEmail),
+        callbackForwardToPhone: getNullableString(body.callbackForwardToPhone),
+      });
+    }
 
     if (!updatedLead) {
       return NextResponse.json({ error: "Lead not found" }, { status: 404 });

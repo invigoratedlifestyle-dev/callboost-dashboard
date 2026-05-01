@@ -844,7 +844,7 @@ export function buildGeneratedSiteHtml(lead: LeadRecord) {
             <h2>Need ${escapeHtml(isPlumberTrade(trade) ? "plumbing" : tradeLabel.toLowerCase())} help?</h2>
             <p class="muted">Send the basics through and ${escapeHtml(businessName)} can call back with the next step.</p>
           </div>
-          <form class="mini-form" data-email="${escapeAttribute(emailHref)}">
+          <form class="mini-form" data-slug="${escapeAttribute(businessSlug)}">
             <label>Name<input name="name" type="text" autocomplete="name" required /></label>
             <label>Phone<input name="phone" type="tel" autocomplete="tel" required /></label>
             <label>Service needed<input name="service" type="text" placeholder="${escapeAttribute(isPlumberTrade(trade) ? "Blocked drain, leak, hot water..." : "Repairs, maintenance, quote...")}" /></label>
@@ -934,7 +934,7 @@ export function buildGeneratedSiteHtml(lead: LeadRecord) {
             ${hoursHtml}
             ${callButtonHtml}
           </div>
-          <form class="callback-form" data-email="${escapeAttribute(emailHref)}">
+          <form class="callback-form" data-slug="${escapeAttribute(businessSlug)}">
             <h3>Request a callback</h3>
             <p class="muted">Leave your details and a short description of the job.</p>
             <label>Name<input name="name" type="text" autocomplete="name" required /></label>
@@ -989,25 +989,50 @@ export function buildGeneratedSiteHtml(lead: LeadRecord) {
 
   <script>
     document.querySelectorAll(".callback-form, .mini-form").forEach((form) => {
-      form.addEventListener("submit", (event) => {
+      form.addEventListener("submit", async (event) => {
         event.preventDefault();
-        const email = form.getAttribute("data-email");
-        form.classList.add("is-sent");
-        if (email) {
-          const formData = new FormData(form);
-          const subject = encodeURIComponent("Callback request");
-          const message = encodeURIComponent(
-            ["name", "phone", "service", "message"]
-              .map((key) => {
-                const value = formData.get(key);
-                return value ? key + ": " + value : "";
-              })
-              .filter(Boolean)
-              .join("\\n")
-          );
-          window.location.href = email + "?subject=" + subject + "&body=" + message;
+        const formData = new FormData(form);
+        const submitButton = form.querySelector("button[type='submit']");
+
+        if (submitButton) {
+          submitButton.disabled = true;
+          submitButton.textContent = "Sending...";
         }
-        form.reset();
+
+        try {
+          const response = await fetch("/api/callback", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              slug: form.getAttribute("data-slug"),
+              name: formData.get("name") || "",
+              phone: formData.get("phone") || "",
+              message: ["service", "message"]
+                .map((key) => {
+                  const value = formData.get(key);
+                  return value ? key + ": " + value : "";
+                })
+                .filter(Boolean)
+                .join("\\n"),
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error("Callback request failed");
+          }
+
+          form.classList.add("is-sent");
+          form.reset();
+        } catch (error) {
+          alert("Sorry, we could not send that request. Please call instead.");
+        } finally {
+          if (submitButton) {
+            submitButton.disabled = false;
+            submitButton.textContent = "Request a Call Back";
+          }
+        }
       });
     });
   </script>
