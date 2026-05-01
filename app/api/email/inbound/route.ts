@@ -14,83 +14,33 @@ type InboundEmailMatch = {
   slug: string;
 };
 
-function getString(value: unknown): string {
-  if (typeof value === "string") return value.trim();
+type ResendInboundPayload = {
+  type?: string;
+  data?: {
+    from?: string;
+    to?: string | string[];
+    subject?: string;
+    text?: string;
+    html?: string;
+  };
+};
 
-  if (value && typeof value === "object") {
-    const record = value as Record<string, unknown>;
-
-    return getString(record.email || record.address || record.text);
-  }
-
-  return "";
+function getString(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
 }
 
-function extractEmailAddress(value: unknown): string {
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const email = extractEmailAddress(item);
+function extractEmail(raw: unknown) {
+  if (!raw || typeof raw !== "string") return "";
 
-      if (email) return email;
-    }
+  const text = raw.trim();
+  const match = text.match(/<(.+?)>/);
 
-    return "";
-  }
+  if (match?.[1]) return match[1].trim().toLowerCase();
 
-  if (typeof value === "string") {
-    const text = value.trim();
-    const angleMatch = text.match(/<([^<>@\s]+@[^<>\s]+)>/);
-
-    if (angleMatch?.[1]) return angleMatch[1].toLowerCase();
-
-    const emailMatch = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
-
-    return emailMatch?.[0]?.toLowerCase() || "";
-  }
-
-  if (value && typeof value === "object") {
-    const record = value as Record<string, unknown>;
-
-    return extractEmailAddress(
-      record.email || record.address || record.text || record.value
-    );
-  }
-
-  return "";
+  return text.toLowerCase();
 }
 
-function normalizeEmail(value: unknown) {
-  return extractEmailAddress(value) || getString(value).toLowerCase();
-}
-
-function pickFirstString(...values: unknown[]) {
-  for (const value of values) {
-    const text = getString(value);
-
-    if (text) return text;
-  }
-
-  return "";
-}
-
-function getRecord(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-}
-
-function extractFromHtml(payload: Record<string, unknown>) {
-  const data = getRecord(payload.data);
-  const dataEmail = getRecord(data.email);
-  const html = pickFirstString(
-    data.html,
-    data.html_body,
-    dataEmail.html,
-    payload.html
-  );
-
-  if (!html) return "";
-
+function stripHtml(html: string) {
   return html
     .replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, "")
     .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "")
@@ -105,71 +55,25 @@ function extractFromHtml(payload: Record<string, unknown>) {
     .trim();
 }
 
-function extractTextBody(payload: Record<string, unknown>) {
-  const data = getRecord(payload.data);
-  const dataEmail = getRecord(data.email);
-  const content = getRecord(data.content);
+function extractBody(data: ResendInboundPayload["data"]) {
+  const textBody = data?.text?.trim();
+  const htmlBody = data?.html?.trim();
+  let body = textBody || "";
 
-  return (
-    pickFirstString(
-      data.text,
-      data.text_body,
-      dataEmail.text,
-      content.text,
-      payload.text
-    ) || extractFromHtml(payload)
-  );
+  if (!body && htmlBody) {
+    body = stripHtml(htmlBody);
+  }
+
+  return body || "(No message body)";
 }
 
-function extractInboundEmail(payload: Record<string, unknown>) {
-  const data = getRecord(payload.data);
-  const email =
-    payload.email && typeof payload.email === "object"
-      ? (payload.email as Record<string, unknown>)
-      : {};
-  const from = extractEmailAddress(
-    data.from ||
-    payload.from,
-  ) || extractEmailAddress(
-    getRecord(data.from).email ||
-      getRecord(data.from).address ||
-      getRecord(payload.from).email ||
-      getRecord(payload.from).address ||
-      payload.From ||
-      email.from ||
-      email.From ||
-      getRecord(email.headers).from
-  );
-  const to = extractEmailAddress(
-    data.to ||
-    payload.to,
-  ) || extractEmailAddress(
-    getRecord(data.to).email ||
-      getRecord(data.to).address ||
-      getRecord(payload.to).email ||
-      getRecord(payload.to).address ||
-      payload.To ||
-      email.to ||
-      email.To ||
-      getRecord(email.headers).to
-  );
-  const subject = pickFirstString(
-    data.subject,
-    payload.subject,
-    payload.Subject,
-    email.subject,
-    email.Subject
-  );
-
-  return {
-    from,
-    to,
-    subject,
-    body: extractTextBody(payload),
-  };
+function normalizeEmail(value: unknown) {
+  return extractEmail(value) || getString(value).toLowerCase();
 }
 
-async function findLeadByOutboundEmail(fromEmail: string): Promise<InboundEmailMatch | null> {
+async function findLeadByOutboundEmail(
+  fromEmail: string
+): Promise<InboundEmailMatch | null> {
   const normalizedFrom = normalizeEmail(fromEmail);
   const messages = await listRecentOutboundEmailMessages();
   const matchedMessage = messages.find(
@@ -188,7 +92,9 @@ async function findLeadByOutboundEmail(fromEmail: string): Promise<InboundEmailM
   };
 }
 
-async function findLeadByEmail(fromEmail: string): Promise<InboundEmailMatch | null> {
+async function findLeadByEmail(
+  fromEmail: string
+): Promise<InboundEmailMatch | null> {
   const normalizedFrom = normalizeEmail(fromEmail);
   const rows = await listLeadRows();
 
@@ -209,33 +115,38 @@ async function findLeadByEmail(fromEmail: string): Promise<InboundEmailMatch | n
 
 export async function POST(req: Request) {
   try {
-    const payload = (await req.json().catch(() => ({}))) as Record<
-      string,
-      unknown
-    >;
+    const payload = (await req.json().catch(() => ({}))) as ResendInboundPayload;
 
-    console.log("Inbound email FULL payload:", JSON.stringify(payload, null, 2));
-    console.log("Inbound email keys", Object.keys(payload));
-    console.log("Inbound email data keys", Object.keys(getRecord(payload.data)));
+    if (payload.type !== "email.received") {
+      return new Response("ok", { status: 200 });
+    }
 
-    const inbound = extractInboundEmail(payload);
+    const data = payload.data || {};
+    const from = extractEmail(data.from);
+    const toRaw = Array.isArray(data.to) ? data.to[0] : data.to;
+    const to = getString(toRaw);
+    const subject = getString(data.subject) || "(No subject)";
+    const body = extractBody(data);
 
-    if (!inbound.from) {
-      console.log("Inbound email ignored: missing sender", {
-        from: inbound.from,
-      });
-      return new Response("", { status: 200 });
+    console.log("Inbound email parsed:", {
+      from,
+      subject,
+      body,
+    });
+
+    if (!from) {
+      console.log("Inbound email ignored: missing sender");
+      return new Response("ok", { status: 200 });
     }
 
     const match =
-      (await findLeadByOutboundEmail(inbound.from)) ||
-      (await findLeadByEmail(inbound.from));
+      (await findLeadByOutboundEmail(from)) || (await findLeadByEmail(from));
 
     if (!match) {
       console.log("Inbound email ignored: no matching lead or outbound message", {
-        from: inbound.from,
+        from,
       });
-      return new Response("", { status: 200 });
+      return new Response("ok", { status: 200 });
     }
 
     await insertLeadMessage({
@@ -243,18 +154,18 @@ export async function POST(req: Request) {
       slug: match.slug,
       channel: "email",
       direction: "inbound",
-      toAddress: inbound.to,
-      fromAddress: inbound.from,
-      subject: inbound.subject,
-      body: inbound.body || "(No message body)",
+      toAddress: to,
+      fromAddress: from,
+      subject,
+      body,
       status: "received",
       provider: "resend",
     });
 
-    return new Response("", { status: 200 });
+    return new Response("ok", { status: 200 });
   } catch (error) {
     console.error("Inbound email webhook failed:", error);
 
-    return new Response("", { status: 200 });
+    return new Response("ok", { status: 200 });
   }
 }
