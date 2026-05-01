@@ -26,8 +26,41 @@ function getString(value: unknown): string {
   return "";
 }
 
+function extractEmailAddress(value: unknown): string {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const email = extractEmailAddress(item);
+
+      if (email) return email;
+    }
+
+    return "";
+  }
+
+  if (typeof value === "string") {
+    const text = value.trim();
+    const angleMatch = text.match(/<([^<>@\s]+@[^<>\s]+)>/);
+
+    if (angleMatch?.[1]) return angleMatch[1].toLowerCase();
+
+    const emailMatch = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+
+    return emailMatch?.[0]?.toLowerCase() || "";
+  }
+
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+
+    return extractEmailAddress(
+      record.email || record.address || record.text || record.value
+    );
+  }
+
+  return "";
+}
+
 function normalizeEmail(value: unknown) {
-  return getString(value).toLowerCase();
+  return extractEmailAddress(value) || getString(value).toLowerCase();
 }
 
 function stripHtml(value: string) {
@@ -43,6 +76,8 @@ function stripHtml(value: string) {
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
+    .replace(/&#x27;/g, "'")
+    .replace(/&#x2F;/g, "/")
     .trim();
 }
 
@@ -56,53 +91,70 @@ function pickFirstString(...values: unknown[]) {
   return "";
 }
 
+function getRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function extractTextBody(payload: Record<string, unknown>) {
+  const data = getRecord(payload.data);
+  const text = pickFirstString(
+    data.text,
+    data.reply_text,
+    payload.text,
+    payload.reply_text
+  );
+  const html = pickFirstString(data.html, payload.html);
+
+  return text || stripHtml(html);
+}
+
 function extractInboundEmail(payload: Record<string, unknown>) {
+  const data = getRecord(payload.data);
   const email =
     payload.email && typeof payload.email === "object"
       ? (payload.email as Record<string, unknown>)
       : {};
-  const from = pickFirstString(
+  const from = extractEmailAddress(
+    data.from ||
     payload.from,
-    payload.From,
-    email.from,
-    email.From,
-    (email.headers as Record<string, unknown> | undefined)?.from
+  ) || extractEmailAddress(
+    getRecord(data.from).email ||
+      getRecord(data.from).address ||
+      getRecord(payload.from).email ||
+      getRecord(payload.from).address ||
+      payload.From ||
+      email.from ||
+      email.From ||
+      getRecord(email.headers).from
   );
-  const to = pickFirstString(
+  const to = extractEmailAddress(
+    data.to ||
     payload.to,
-    payload.To,
-    email.to,
-    email.To,
-    (email.headers as Record<string, unknown> | undefined)?.to
+  ) || extractEmailAddress(
+    getRecord(data.to).email ||
+      getRecord(data.to).address ||
+      getRecord(payload.to).email ||
+      getRecord(payload.to).address ||
+      payload.To ||
+      email.to ||
+      email.To ||
+      getRecord(email.headers).to
   );
   const subject = pickFirstString(
+    data.subject,
     payload.subject,
     payload.Subject,
     email.subject,
     email.Subject
-  );
-  const text = pickFirstString(
-    payload.text,
-    payload.Text,
-    payload.textBody,
-    email.text,
-    email.Text,
-    email.textBody
-  );
-  const html = pickFirstString(
-    payload.html,
-    payload.Html,
-    payload.htmlBody,
-    email.html,
-    email.Html,
-    email.htmlBody
   );
 
   return {
     from,
     to,
     subject,
-    body: text || stripHtml(html),
+    body: extractTextBody(payload),
   };
 }
 
@@ -150,6 +202,9 @@ export async function POST(req: Request) {
       string,
       unknown
     >;
+
+    console.log("Inbound email payload:", JSON.stringify(payload, null, 2));
+
     const inbound = extractInboundEmail(payload);
 
     if (!inbound.from || !inbound.body) {
