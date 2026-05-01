@@ -1,0 +1,599 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { generateOfferEmail, getLeadUrl } from "../../lib/emailTemplate";
+import type { Lead, LeadStatus, WebsiteEvaluation } from "../../lib/leads";
+import { DeploySiteButton } from "./DeploySiteButton";
+import { EnrichButton } from "./EnrichButton";
+import { GenerateSiteButton } from "./GenerateSiteButton";
+
+type LeadWithGeneratedContent = Lead & {
+  headline?: string;
+  subheadline?: string;
+  problems?: string;
+  solution?: string;
+};
+
+const lifecycleActions: Array<{ status: LeadStatus; label: string }> = [
+  { status: "archived", label: "Archive" },
+  { status: "contacted", label: "Mark contacted" },
+];
+
+const statusLabels: Record<LeadStatus, string> = {
+  new: "New",
+  archived: "Archived",
+  contacted: "Contacted",
+};
+
+const qualityLabels: Record<WebsiteEvaluation["quality"], string> = {
+  none: "No website",
+  bad: "Bad website",
+  weak: "Weak website",
+  average: "Average website",
+  good: "Good website",
+  unknown: "Unknown",
+};
+
+function getStatusBadgeClass(status?: string) {
+  if (status === "new") return "bg-blue-500/15 text-blue-300";
+  if (status === "contacted") return "bg-cyan-500/15 text-cyan-300";
+  if (status === "archived") return "bg-slate-500/15 text-slate-300";
+  return "bg-white/10 text-slate-400";
+}
+
+function formatTimestamp(value?: string | null) {
+  if (!value) return "";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString();
+}
+
+function getQualityLabel(evaluation?: WebsiteEvaluation) {
+  if (!evaluation) return "Unknown";
+  if (evaluation.hasWebsite && evaluation.isWorking === false) {
+    return "Broken website";
+  }
+
+  return qualityLabels[evaluation.quality] || "Unknown";
+}
+
+function getQualityBadgeClass(evaluation?: WebsiteEvaluation) {
+  if (!evaluation) return "bg-white/10 text-slate-400";
+  if (!evaluation.hasWebsite) return "bg-red-500/15 text-red-300";
+  if (evaluation.isWorking === false) return "bg-red-500/15 text-red-300";
+  if (evaluation.quality === "bad") return "bg-red-500/15 text-red-300";
+  if (evaluation.quality === "weak") return "bg-yellow-500/15 text-yellow-300";
+  if (evaluation.quality === "average") return "bg-blue-500/15 text-blue-300";
+  if (evaluation.quality === "good") return "bg-green-500/15 text-green-300";
+  return "bg-white/10 text-slate-400";
+}
+
+function getRecommendationBadgeClass(recommendation?: string) {
+  if (recommendation === "target") return "bg-red-500/15 text-red-300";
+  if (recommendation === "maybe") return "bg-yellow-500/15 text-yellow-300";
+  if (recommendation === "skip") return "bg-green-500/15 text-green-300";
+  return "bg-white/10 text-slate-400";
+}
+
+function getReviewSource(lead: LeadWithGeneratedContent) {
+  const reviews = lead.reviews || [];
+
+  if (lead.reviewsSource === "google" && reviews.length > 0) {
+    return {
+      label: "Google reviews",
+      badgeClass: "bg-green-500/15 text-green-300",
+    };
+  }
+
+  if (reviews.length > 0) {
+    return {
+      label: "AI/fallback testimonials",
+      badgeClass: "bg-yellow-500/15 text-yellow-300",
+    };
+  }
+
+  return {
+    label: "None",
+    badgeClass: "bg-white/10 text-slate-400",
+  };
+}
+
+export default function LeadDetailClient({ slug }: { slug: string }) {
+  const [lead, setLead] = useState<LeadWithGeneratedContent | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [updatingStatus, setUpdatingStatus] = useState("");
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadLead() {
+      const res = await fetch(`/api/leads/${slug}`, {
+        cache: "no-store",
+      });
+
+      if (!active) return;
+
+      if (!res.ok) {
+        setLoading(false);
+        return;
+      }
+
+      const data = await res.json();
+
+      if (!active) return;
+
+      setLead(data.lead);
+      setLoading(false);
+    }
+
+    void loadLead();
+
+    return () => {
+      active = false;
+    };
+  }, [slug]);
+
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-slate-950 p-8 text-white">
+        Loading lead...
+      </main>
+    );
+  }
+
+  if (!lead) {
+    return (
+      <main className="min-h-screen bg-slate-950 p-8 text-white">
+        Lead not found.
+      </main>
+    );
+  }
+
+  const emailBody = generateOfferEmail(lead);
+  const subject = `Quick win for ${lead.businessName}`;
+  const handleLeadUpdated = (updatedLead: Lead) => {
+    setLead(updatedLead);
+  };
+  const handleLifecycleUpdate = async (status: LeadStatus) => {
+    if (!lead) return;
+
+    setUpdatingStatus(status);
+
+    try {
+      const res = await fetch(`/api/leads/${lead.slug || lead.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          status,
+          reviewNotes: lead.reviewNotes || "",
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to update lead");
+      }
+
+      setLead(data.lead);
+    } catch (error) {
+      console.error("Failed to update lead lifecycle:", error);
+      alert("Failed to update lead.");
+    } finally {
+      setUpdatingStatus("");
+    }
+  };
+  const generatedDescription =
+    lead.description || lead.solution || lead.subheadline || "";
+  const websiteEvaluation = lead.websiteEvaluation;
+  const reviewSource = getReviewSource(lead);
+  const reviewCount = lead.reviews?.length || 0;
+  const hasPageCopy =
+    Boolean(lead.headline) ||
+    Boolean(lead.subheadline) ||
+    Boolean(lead.problems) ||
+    Boolean(lead.solution);
+
+  const gmailUrl = `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(
+    lead.email || ""
+  )}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(emailBody)}`;
+
+  return (
+    <main className="min-h-screen bg-slate-950 text-white">
+      <div className="mx-auto max-w-5xl px-6 py-10">
+        <Link href="/" className="text-sm font-bold text-blue-400">
+          &larr; Back to leads
+        </Link>
+
+        <div className="mt-8">
+          <p className="mb-2 text-sm font-bold uppercase tracking-[0.2em] text-blue-400">
+            Lead Detail
+          </p>
+
+          <h1 className="text-4xl font-black tracking-tight">
+            {lead.businessName}
+          </h1>
+
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <span
+              className={`rounded-full px-3 py-1 text-xs font-bold ${getStatusBadgeClass(
+                lead.status
+              )}`}
+            >
+              {statusLabels[lead.status || "new"] || "New"}
+            </span>
+
+            {lifecycleActions
+              .filter((action) => action.status !== lead.status)
+              .map((action) => (
+                <button
+                  key={action.status}
+                  onClick={() => handleLifecycleUpdate(action.status)}
+                  disabled={Boolean(updatingStatus)}
+                  className="rounded-lg bg-slate-700 px-3 py-2 text-xs font-bold text-white hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {updatingStatus === action.status ? "Saving..." : action.label}
+                </button>
+              ))}
+          </div>
+        </div>
+
+        <div className="mt-8 grid gap-6 lg:grid-cols-2">
+          <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
+            <h2 className="mb-4 text-xl font-bold">Business Info</h2>
+
+            <div className="space-y-3 text-slate-300">
+              <p>
+                <strong className="text-white">Trade:</strong> {lead.trade || "-"}
+              </p>
+
+              <p>
+                <strong className="text-white">City:</strong> {lead.city || "-"}
+              </p>
+
+              <p>
+                <strong className="text-white">Phone:</strong>{" "}
+                {lead.phone || "Not found"}
+              </p>
+
+              <p>
+                <strong className="text-white">Email:</strong>{" "}
+                {lead.email ? (
+                  <a
+                    href={`mailto:${lead.email}`}
+                    className="text-blue-400 hover:text-blue-300"
+                  >
+                    {lead.email}
+                  </a>
+                ) : (
+                  <span className="text-slate-500">Not found yet</span>
+                )}
+              </p>
+
+              <p>
+                <strong className="text-white">Website:</strong>{" "}
+                {lead.website ? (
+                  <a
+                    href={lead.website}
+                    target="_blank"
+                    className="text-blue-400 hover:text-blue-300"
+                  >
+                    {lead.website}
+                  </a>
+                ) : (
+                  <span className="text-slate-500">Not found yet</span>
+                )}
+              </p>
+
+              <p>
+                <strong className="text-white">Contact Page:</strong>{" "}
+                {lead.contactPage ? (
+                  <a
+                    href={lead.contactPage}
+                    target="_blank"
+                    className="text-blue-400 hover:text-blue-300"
+                  >
+                    {lead.contactPage}
+                  </a>
+                ) : (
+                  <span className="text-slate-500">Not found yet</span>
+                )}
+              </p>
+
+              <p>
+                <strong className="text-white">Facebook:</strong>{" "}
+                {lead.facebook ? (
+                  <a
+                    href={lead.facebook}
+                    target="_blank"
+                    className="text-blue-400 hover:text-blue-300"
+                  >
+                    {lead.facebook}
+                  </a>
+                ) : (
+                  <span className="text-slate-500">Not found yet</span>
+                )}
+              </p>
+
+              <p>
+                <strong className="text-white">Instagram:</strong>{" "}
+                {lead.instagram ? (
+                  <a
+                    href={lead.instagram}
+                    target="_blank"
+                    className="text-blue-400 hover:text-blue-300"
+                  >
+                    {lead.instagram}
+                  </a>
+                ) : (
+                  <span className="text-slate-500">Not found yet</span>
+                )}
+              </p>
+
+              <p>
+                <strong className="text-white">Rating:</strong>{" "}
+                {lead.rating || "-"} from {lead.reviewCount || "0"} reviews
+              </p>
+
+              <p>
+                <strong className="text-white">Status:</strong>{" "}
+                {statusLabels[lead.status || "new"] || "New"}
+              </p>
+
+              {lead.contactedAt ? (
+                <p>
+                  <strong className="text-white">Contacted:</strong>{" "}
+                  {formatTimestamp(lead.contactedAt)}
+                </p>
+              ) : null}
+
+              {lead.archivedAt ? (
+                <p>
+                  <strong className="text-white">Archived:</strong>{" "}
+                  {formatTimestamp(lead.archivedAt)}
+                </p>
+              ) : null}
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
+            <h2 className="mb-4 text-xl font-bold">Generated Site</h2>
+
+            <p className="break-all text-slate-300">
+              <strong className="text-white">Live URL:</strong>{" "}
+              <a
+                href={getLeadUrl(lead)}
+                target="_blank"
+                className="text-blue-400"
+              >
+                {getLeadUrl(lead)}
+              </a>
+            </p>
+
+            <div className="mt-6 flex flex-wrap gap-3">
+              <a
+                href={getLeadUrl(lead)}
+                target="_blank"
+                className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-bold hover:bg-slate-600"
+              >
+                View Page
+              </a>
+
+              <EnrichButton lead={lead} onEnriched={handleLeadUpdated} />
+
+              <GenerateSiteButton lead={lead} onGenerated={handleLeadUpdated} />
+
+              <DeploySiteButton />
+            </div>
+          </section>
+        </div>
+
+        <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
+          <h2 className="mb-4 text-xl font-bold">Website Opportunity</h2>
+
+          {websiteEvaluation ? (
+            <div className="space-y-5">
+              <div className="flex flex-wrap items-center gap-3">
+                <span
+                  className={`rounded-full px-3 py-1 text-xs font-bold ${getQualityBadgeClass(
+                    websiteEvaluation
+                  )}`}
+                >
+                  {getQualityLabel(websiteEvaluation)}
+                </span>
+                <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-200">
+                  {websiteEvaluation.score}/100
+                </span>
+                <span
+                  className={`rounded-full px-3 py-1 text-xs font-bold ${getRecommendationBadgeClass(
+                    websiteEvaluation.recommendation
+                  )}`}
+                >
+                  {websiteEvaluation.recommendation}
+                </span>
+              </div>
+
+              <p className="text-slate-300">
+                {websiteEvaluation.summary || "No evaluation summary yet."}
+              </p>
+
+              <div className="grid gap-5 md:grid-cols-2">
+                <div>
+                  <h3 className="mb-2 font-bold text-white">Issues</h3>
+                  {websiteEvaluation.issues?.length ? (
+                    <ul className="list-disc space-y-1 pl-5 text-slate-300">
+                      {websiteEvaluation.issues.map((issue) => (
+                        <li key={issue}>{issue}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-slate-400">No issues listed.</p>
+                  )}
+                </div>
+
+                <div>
+                  <h3 className="mb-2 font-bold text-white">Positives</h3>
+                  {websiteEvaluation.positives?.length ? (
+                    <ul className="list-disc space-y-1 pl-5 text-slate-300">
+                      {websiteEvaluation.positives.map((positive) => (
+                        <li key={positive}>{positive}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-slate-400">No positives listed.</p>
+                  )}
+                </div>
+              </div>
+
+              <p className="text-sm text-slate-500">
+                Evaluated:{" "}
+                {websiteEvaluation.evaluatedAt
+                  ? formatTimestamp(websiteEvaluation.evaluatedAt)
+                  : "Not yet"}
+              </p>
+            </div>
+          ) : (
+            <p className="text-slate-400">
+              No website opportunity evaluation has been generated yet.
+            </p>
+          )}
+        </section>
+
+        <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
+          <h2 className="mb-4 text-xl font-bold">Email Offer</h2>
+
+          <textarea
+            readOnly
+            value={emailBody}
+            className="min-h-[320px] w-full rounded-xl border border-white/10 bg-slate-900 p-4 text-sm leading-6 text-slate-100 outline-none"
+          />
+
+          <div className="mt-4 flex flex-wrap gap-3">
+            <a
+              href={gmailUrl}
+              target="_blank"
+              className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-500"
+            >
+              Open Gmail
+            </a>
+
+            <a
+              href={`mailto:${lead.email || ""}?subject=${encodeURIComponent(
+                subject
+              )}&body=${encodeURIComponent(emailBody)}`}
+              className="rounded-lg bg-slate-700 px-5 py-3 text-sm font-bold text-white hover:bg-slate-600"
+            >
+              Open Mail App
+            </a>
+          </div>
+        </section>
+
+        <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
+          <h2 className="mb-4 text-xl font-bold">Generated Content</h2>
+
+          <div className="space-y-5">
+            <div>
+              <h3 className="mb-2 font-bold text-white">Description</h3>
+              <p className="text-slate-300">
+                {generatedDescription || "No description generated yet."}
+              </p>
+            </div>
+
+            {hasPageCopy ? (
+              <div>
+                <h3 className="mb-2 font-bold text-white">Page Copy</h3>
+                <div className="space-y-3 text-slate-300">
+                  {lead.headline ? (
+                    <p>
+                      <strong className="text-white">Headline:</strong>{" "}
+                      {lead.headline}
+                    </p>
+                  ) : null}
+
+                  {lead.subheadline ? (
+                    <p>
+                      <strong className="text-white">Subheadline:</strong>{" "}
+                      {lead.subheadline}
+                    </p>
+                  ) : null}
+
+                  {lead.problems ? (
+                    <p>
+                      <strong className="text-white">Problems:</strong>{" "}
+                      {lead.problems}
+                    </p>
+                  ) : null}
+
+                  {lead.solution ? (
+                    <p>
+                      <strong className="text-white">Solution:</strong>{" "}
+                      {lead.solution}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+
+            <div>
+              <h3 className="mb-2 font-bold text-white">Services</h3>
+
+              {lead.services?.length ? (
+                <ul className="list-disc space-y-1 pl-5 text-slate-300">
+                  {lead.services.map((service) => (
+                    <li key={service}>{service}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-slate-400">No services generated yet.</p>
+              )}
+            </div>
+
+            <div>
+              <div className="mb-3 flex flex-wrap items-center gap-3">
+                <h3 className="font-bold text-white">Reviews</h3>
+                <span
+                  className={`rounded-full px-3 py-1 text-xs font-bold ${reviewSource.badgeClass}`}
+                >
+                  {reviewSource.label}
+                </span>
+                <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-300">
+                  {reviewCount} {reviewCount === 1 ? "review" : "reviews"}
+                </span>
+              </div>
+
+              {lead.reviews?.length ? (
+                <div className="space-y-3">
+                  {lead.reviews.map((review, index) => (
+                    <div key={index} className="rounded-lg bg-slate-900 p-4">
+                      <p className="font-bold text-white">
+                        {review.author || review.name || "Local Customer"}
+                      </p>
+                      <p className="text-yellow-400">
+                        {"★".repeat(Number(review.rating) || 5)}
+                      </p>
+                      <p className="text-slate-300">{review.text}</p>
+                      {review.relativeTimeDescription ? (
+                        <p className="mt-2 text-xs text-slate-500">
+                          {review.relativeTimeDescription}
+                        </p>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-slate-400">No reviews generated yet.</p>
+              )}
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}
