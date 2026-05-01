@@ -2,9 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { generateOfferEmail, getLeadUrl } from "../../lib/emailTemplate";
+import { generateOfferEmail } from "../../lib/emailTemplate";
 import type { Lead, LeadStatus, WebsiteEvaluation } from "../../lib/leads";
-import { DeploySiteButton } from "./DeploySiteButton";
 import { EnrichButton } from "./EnrichButton";
 import { GenerateSiteButton } from "./GenerateSiteButton";
 
@@ -192,6 +191,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   };
   const generatedDescription =
     lead.description || lead.solution || lead.subheadline || "";
+  const generatedSiteUrl = lead.generatedSiteUrl || "";
   const websiteEvaluation = lead.websiteEvaluation;
   const reviewSource = getReviewSource(lead);
   const reviewCount = lead.reviews?.length || 0;
@@ -368,29 +368,37 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
 
             <p className="break-all text-slate-300">
               <strong className="text-white">Live URL:</strong>{" "}
-              <a
-                href={getLeadUrl(lead)}
-                target="_blank"
-                className="text-blue-400"
-              >
-                {getLeadUrl(lead)}
-              </a>
+              {generatedSiteUrl ? (
+                <a
+                  href={generatedSiteUrl}
+                  target="_blank"
+                  className="text-blue-400"
+                >
+                  {generatedSiteUrl}
+                </a>
+              ) : (
+                <span className="text-slate-500">Generate a site first</span>
+              )}
             </p>
 
             <div className="mt-6 flex flex-wrap gap-3">
-              <a
-                href={getLeadUrl(lead)}
-                target="_blank"
+              <button
+                onClick={() => {
+                  if (!generatedSiteUrl) {
+                    alert("Generate a site first.");
+                    return;
+                  }
+
+                  window.open(generatedSiteUrl, "_blank", "noopener,noreferrer");
+                }}
                 className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-bold hover:bg-slate-600"
               >
                 View Page
-              </a>
+              </button>
 
               <EnrichButton lead={lead} onEnriched={handleLeadUpdated} />
 
               <GenerateSiteButton lead={lead} onGenerated={handleLeadUpdated} />
-
-              <DeploySiteButton />
             </div>
           </section>
         </div>

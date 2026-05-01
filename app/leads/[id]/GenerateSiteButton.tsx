@@ -52,7 +52,7 @@ export function GenerateSiteButton({ lead, onGenerated }: Props) {
       disabled={loading}
       className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
     >
-      {loading ? "Generating..." : "Generate Site (AI)"}
+      {loading ? "Generating..." : "Generate / Update Site"}
     </button>
   );
 }

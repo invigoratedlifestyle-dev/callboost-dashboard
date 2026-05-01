@@ -51,7 +51,7 @@ export function EnrichButton({ lead, onEnriched }: Props) {
       disabled={loading}
       className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-bold text-white hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-60"
     >
-      {loading ? "Enriching..." : lead.website ? "Enrich Lead" : "Find Website"}
+      {loading ? "Finding..." : "Find Website"}
     </button>
   );
 }

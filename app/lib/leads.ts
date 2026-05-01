@@ -50,6 +50,7 @@ export type Lead = {
   reviewsSource?: "google" | "none";
   aiGeneratedAt?: string;
   enrichedAt?: string;
+  generatedSiteUrl?: string;
   websiteEvaluation?: WebsiteEvaluation;
 };
 
