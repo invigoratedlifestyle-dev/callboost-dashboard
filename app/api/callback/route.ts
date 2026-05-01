@@ -39,14 +39,23 @@ async function forwardToEmail(args: {
   const { error } = await resend.emails.send({
     from,
     to: args.to,
-    subject: `New callback request - ${args.businessName}`,
+    subject: `🔥 New Lead - ${args.businessName} (Call Now)`,
     text: [
-      "New callback request received:",
+      "New callback request",
       "",
       `Business: ${args.businessName}`,
+      "",
+      "Customer Details:",
       `Name: ${args.visitorName}`,
       `Phone: ${args.visitorPhone}`,
-      `Message: ${args.visitorMessage || "No message provided"}`,
+      `Click to call: tel:${args.visitorPhone}`,
+      "",
+      "Request:",
+      args.visitorMessage || "No message provided",
+      "",
+      "Call this customer as soon as possible.",
+      "",
+      "⚡ This customer is expecting a call back.",
     ].join("\n"),
   });
 
