@@ -6,6 +6,7 @@ import { generateOfferEmail } from "../../lib/emailTemplate";
 import type {
   CallbackRequest,
   Lead,
+  LeadMessage,
   LeadStatus,
   WebsiteEvaluation,
 } from "../../lib/leads";
@@ -18,6 +19,22 @@ type LeadWithGeneratedContent = Lead & {
   problems?: string;
   solution?: string;
 };
+
+type OutreachChannel = "sms" | "email";
+
+type TimelineItem =
+  | {
+      type: "message";
+      id: string;
+      createdAt: string;
+      message: LeadMessage;
+    }
+  | {
+      type: "callback";
+      id: string;
+      createdAt: string;
+      callback: CallbackRequest;
+    };
 
 const lifecycleActions: Array<{ status: LeadStatus; label: string }> = [
   { status: "archived", label: "Archive" },
@@ -108,12 +125,106 @@ function getReviewSource(lead: LeadWithGeneratedContent) {
   };
 }
 
+function getWebsiteOpportunityLine(lead: LeadWithGeneratedContent) {
+  const evaluation = lead.websiteEvaluation;
+
+  if (!evaluation || evaluation.quality === "none" || !evaluation.hasWebsite) {
+    return "I couldn't find a proper website for your business.";
+  }
+
+  if (evaluation.quality === "bad" || evaluation.quality === "weak") {
+    return "your current website could do more to turn visitors into calls.";
+  }
+
+  return "there may be a few quick wins to improve local enquiries.";
+}
+
+function getPreviewUrl(lead: LeadWithGeneratedContent) {
+  if (lead.generatedSiteUrl) return lead.generatedSiteUrl;
+
+  if (typeof window !== "undefined") {
+    return `${window.location.origin}/sites/${lead.slug || lead.id}`;
+  }
+
+  return "";
+}
+
+function buildSmsOffer(lead: LeadWithGeneratedContent) {
+  const previewUrl = getPreviewUrl(lead);
+
+  return [
+    `Hey ${lead.businessName}, I built a quick website preview for your ${lead.trade} business:`,
+    "",
+    previewUrl,
+    "",
+    "If you like it, I can set it up properly for $99 setup + $99/month.",
+    "",
+    "- Jamie",
+    "Reply STOP to opt out",
+  ].join("\n");
+}
+
+function buildEmailSubject(lead: LeadWithGeneratedContent) {
+  return `Quick website preview for ${lead.businessName}`;
+}
+
+function buildEmailOffer(lead: LeadWithGeneratedContent) {
+  const previewUrl = getPreviewUrl(lead);
+
+  return [
+    `Hey ${lead.businessName},`,
+    "",
+    `I built a quick website preview for your ${lead.trade} business here:`,
+    "",
+    previewUrl,
+    "",
+    `I noticed ${getWebsiteOpportunityLine(lead)}`,
+    "",
+    "If you like it, I can set it up properly for $99 setup + $99/month.",
+    "",
+    "- Jamie",
+  ].join("\n");
+}
+
+function getTimeline(messages: LeadMessage[], callbacks: CallbackRequest[]) {
+  return [
+    ...messages.map((message) => ({
+      type: "message" as const,
+      id: `message-${message.id || message.createdAt}`,
+      createdAt: message.createdAt,
+      message,
+    })),
+    ...callbacks.map((callback) => ({
+      type: "callback" as const,
+      id: `callback-${callback.id || callback.createdAt}`,
+      createdAt: callback.createdAt,
+      callback,
+    })),
+  ].sort((a, b) => {
+    const aTime = new Date(a.createdAt || "").getTime();
+    const bTime = new Date(b.createdAt || "").getTime();
+
+    return (Number.isFinite(bTime) ? bTime : 0) - (Number.isFinite(aTime) ? aTime : 0);
+  }) satisfies TimelineItem[];
+}
+
 export default function LeadDetailClient({ slug }: { slug: string }) {
   const [lead, setLead] = useState<LeadWithGeneratedContent | null>(null);
   const [callbacks, setCallbacks] = useState<CallbackRequest[]>([]);
+  const [messages, setMessages] = useState<LeadMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingStatus, setUpdatingStatus] = useState("");
   const [savingForwarding, setSavingForwarding] = useState(false);
+  const [outreachChannel, setOutreachChannel] =
+    useState<OutreachChannel>("sms");
+  const [smsTo, setSmsTo] = useState("");
+  const [smsBody, setSmsBody] = useState("");
+  const [emailTo, setEmailTo] = useState("");
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailOfferBody, setEmailOfferBody] = useState("");
+  const [sendingOffer, setSendingOffer] = useState("");
+  const [outreachNotice, setOutreachNotice] = useState("");
+  const [outreachError, setOutreachError] = useState("");
   const [callbackForwardingEnabled, setCallbackForwardingEnabled] =
     useState(false);
   const [callbackForwardToEmail, setCallbackForwardToEmail] = useState("");
@@ -138,13 +249,32 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
 
       if (!active) return;
 
-      setLead(data.lead);
+      const loadedLead = data.lead as LeadWithGeneratedContent;
+
+      setLead(loadedLead);
       setCallbacks(data.callbacks || []);
+      setSmsTo(loadedLead.phone || "");
+      setSmsBody(buildSmsOffer(loadedLead));
+      setEmailTo(loadedLead.email || "");
+      setEmailSubject(buildEmailSubject(loadedLead));
+      setEmailOfferBody(buildEmailOffer(loadedLead));
       setCallbackForwardingEnabled(
         Boolean(data.lead?.callbackForwardingEnabled)
       );
       setCallbackForwardToEmail(data.lead?.callbackForwardToEmail || "");
       setCallbackForwardToPhone(data.lead?.callbackForwardToPhone || "");
+
+      const messagesRes = await fetch(`/api/leads/${slug}/messages`, {
+        cache: "no-store",
+      });
+
+      if (messagesRes.ok && active) {
+        const messagesData = await messagesRes.json();
+
+        setMessages(messagesData.messages || []);
+        setCallbacks(messagesData.callbacks || data.callbacks || []);
+      }
+
       setLoading(false);
     }
 
@@ -237,6 +367,61 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       setUpdatingStatus("");
     }
   };
+  const handleSendOffer = async (channel: OutreachChannel) => {
+    if (!lead) return;
+
+    const payload =
+      channel === "sms"
+        ? {
+            channel,
+            to: smsTo,
+            body: smsBody,
+          }
+        : {
+            channel,
+            to: emailTo,
+            subject: emailSubject,
+            body: emailOfferBody,
+          };
+
+    setSendingOffer(channel);
+    setOutreachNotice("");
+    setOutreachError("");
+
+    try {
+      const res = await fetch(`/api/leads/${lead.slug || lead.id}/messages/send`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+
+      if (data.message) {
+        setMessages((current) => [data.message, ...current]);
+      }
+
+      if (data.lead) {
+        setLead(data.lead);
+      }
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to send offer");
+      }
+
+      setOutreachNotice(
+        channel === "sms" ? "SMS offer sent." : "Email offer sent."
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to send offer";
+
+      setOutreachError(message);
+    } finally {
+      setSendingOffer("");
+    }
+  };
   const generatedDescription =
     lead.description || lead.solution || lead.subheadline || "";
   const generatedSiteUrl = lead.generatedSiteUrl || "";
@@ -252,6 +437,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const gmailUrl = `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(
     lead.email || ""
   )}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(emailBody)}`;
+  const timeline = getTimeline(messages, callbacks);
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">
@@ -452,6 +638,228 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
         </div>
 
         <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-xl font-bold">Outreach</h2>
+
+            <div className="flex rounded-lg border border-white/10 bg-slate-900 p-1">
+              {(["sms", "email"] as OutreachChannel[]).map((channel) => (
+                <button
+                  key={channel}
+                  onClick={() => setOutreachChannel(channel)}
+                  className={`rounded-md px-4 py-2 text-sm font-bold ${
+                    outreachChannel === channel
+                      ? "bg-blue-600 text-white"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  {channel === "sms" ? "SMS" : "Email"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {outreachNotice ? (
+            <p className="mb-4 rounded-lg bg-green-500/10 px-4 py-3 text-sm font-bold text-green-300">
+              {outreachNotice}
+            </p>
+          ) : null}
+
+          {outreachError ? (
+            <p className="mb-4 rounded-lg bg-red-500/10 px-4 py-3 text-sm font-bold text-red-300">
+              {outreachError}
+            </p>
+          ) : null}
+
+          {outreachChannel === "sms" ? (
+            <div className="space-y-4">
+              <label className="grid gap-2 text-sm font-bold text-slate-300">
+                To
+                <input
+                  value={smsTo}
+                  onChange={(event) => setSmsTo(event.target.value)}
+                  className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none"
+                  placeholder="No phone found"
+                />
+              </label>
+
+              <label className="grid gap-2 text-sm font-bold text-slate-300">
+                Message
+                <textarea
+                  value={smsBody}
+                  onChange={(event) => setSmsBody(event.target.value)}
+                  className="min-h-[220px] rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm leading-6 text-white outline-none"
+                />
+              </label>
+
+              {!lead.phone ? (
+                <p className="text-sm text-slate-500">No phone found.</p>
+              ) : null}
+
+              <button
+                onClick={() => handleSendOffer("sms")}
+                disabled={Boolean(sendingOffer) || !smsTo || !smsBody}
+                className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {sendingOffer === "sms" ? "Sending..." : "Send SMS Offer"}
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <label className="grid gap-2 text-sm font-bold text-slate-300">
+                To
+                <input
+                  value={emailTo}
+                  onChange={(event) => setEmailTo(event.target.value)}
+                  className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none"
+                  placeholder="No email found yet"
+                />
+              </label>
+
+              <label className="grid gap-2 text-sm font-bold text-slate-300">
+                Subject
+                <input
+                  value={emailSubject}
+                  onChange={(event) => setEmailSubject(event.target.value)}
+                  className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none"
+                />
+              </label>
+
+              <label className="grid gap-2 text-sm font-bold text-slate-300">
+                Body
+                <textarea
+                  value={emailOfferBody}
+                  onChange={(event) => setEmailOfferBody(event.target.value)}
+                  className="min-h-[280px] rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm leading-6 text-white outline-none"
+                />
+              </label>
+
+              {!lead.email ? (
+                <p className="text-sm text-slate-500">No email found yet.</p>
+              ) : null}
+
+              <button
+                onClick={() => handleSendOffer("email")}
+                disabled={
+                  Boolean(sendingOffer) ||
+                  !emailTo ||
+                  !emailSubject ||
+                  !emailOfferBody
+                }
+                className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {sendingOffer === "email"
+                  ? "Sending..."
+                  : "Send Email Offer"}
+              </button>
+            </div>
+          )}
+        </section>
+
+        <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
+          <h2 className="mb-4 text-xl font-bold">Message History</h2>
+
+          {timeline.length ? (
+            <div className="space-y-3">
+              {timeline.map((item) =>
+                item.type === "message" ? (
+                  <div
+                    key={item.id}
+                    className="rounded-xl border border-white/10 bg-slate-900 p-4"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full bg-blue-500/15 px-3 py-1 text-xs font-bold uppercase text-blue-300">
+                          {item.message.channel}
+                        </span>
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-bold ${
+                            item.message.status === "sent"
+                              ? "bg-green-500/15 text-green-300"
+                              : item.message.status === "failed"
+                                ? "bg-red-500/15 text-red-300"
+                                : "bg-white/10 text-slate-400"
+                          }`}
+                        >
+                          {item.message.status === "sent"
+                            ? "Sent"
+                            : item.message.status === "failed"
+                              ? "Failed"
+                              : "Draft"}
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-slate-500">
+                        {formatTimestamp(item.message.createdAt)}
+                      </p>
+                    </div>
+
+                    <p className="mt-3 text-sm text-slate-400">
+                      To: {item.message.toAddress || "Unknown"}
+                    </p>
+
+                    {item.message.subject ? (
+                      <p className="mt-2 font-bold text-white">
+                        {item.message.subject}
+                      </p>
+                    ) : null}
+
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-300">
+                      {item.message.body}
+                    </p>
+
+                    {item.message.error ? (
+                      <p className="mt-3 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">
+                        {item.message.error}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div
+                    key={item.id}
+                    className="rounded-xl border border-white/10 bg-slate-900 p-4"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full bg-cyan-500/15 px-3 py-1 text-xs font-bold text-cyan-300">
+                          Callback
+                        </span>
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-bold ${
+                            item.callback.forwarded
+                              ? "bg-green-500/15 text-green-300"
+                              : "bg-white/10 text-slate-400"
+                          }`}
+                        >
+                          {item.callback.forwarded
+                            ? `Forwarded to ${item.callback.forwardedTo}`
+                            : "Saved"}
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-slate-500">
+                        {formatTimestamp(item.callback.createdAt)}
+                      </p>
+                    </div>
+
+                    <p className="mt-3 font-bold text-white">
+                      {item.callback.visitorName || "Unknown visitor"}
+                    </p>
+                    <p className="text-sm text-blue-300">
+                      {item.callback.visitorPhone || "No phone"}
+                    </p>
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-300">
+                      {item.callback.visitorMessage || "No message provided."}
+                    </p>
+                  </div>
+                )
+              )}
+            </div>
+          ) : (
+            <p className="text-slate-400">No messages or callbacks yet.</p>
+          )}
+        </section>
+
+        <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
           <h2 className="mb-4 text-xl font-bold">Callback Requests</h2>
 
           <div className="grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
@@ -498,7 +906,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
 
               <p className="mt-3 text-xs text-slate-500">
                 Email forwarding uses Resend when configured. Mobile forwarding
-                uses the configured SMS webhook.
+                uses Twilio.
               </p>
 
               <button

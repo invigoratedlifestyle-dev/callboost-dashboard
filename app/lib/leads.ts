@@ -37,6 +37,23 @@ export type CallbackRequest = {
   createdAt: string;
 };
 
+export type LeadMessage = {
+  id?: string;
+  leadId?: string | number | null;
+  slug: string;
+  channel: "sms" | "email";
+  direction: string;
+  toAddress: string;
+  fromAddress: string;
+  subject: string;
+  body: string;
+  status: "draft" | "sent" | "failed";
+  provider: string;
+  providerMessageId: string;
+  error: string;
+  createdAt: string;
+};
+
 export type Lead = {
   id: string;
   businessName: string;
