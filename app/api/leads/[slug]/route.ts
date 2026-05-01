@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import fs from "fs";
 import {
-  getLeadFilePath,
   isLifecycleStatus,
-  updateLeadStatus,
-  withLifecycleDefaults,
 } from "../../../lib/leadLifecycle";
+import {
+  getLeadBySlug,
+  updateLeadStatusBySlug,
+} from "../../../lib/supabase/leads";
 
 export async function GET(
   req: Request,
@@ -13,20 +13,25 @@ export async function GET(
 ) {
   const { slug } = await params;
 
-  const filePath = getLeadFilePath(slug);
+  try {
+    const lead = await getLeadBySlug(slug);
 
-  if (!fs.existsSync(filePath)) {
-    console.error("Lead JSON not found:", filePath);
+    if (!lead) {
+      return NextResponse.json({ error: "Lead not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({ lead });
+  } catch (error) {
+    console.error("Failed to load lead:", error);
 
     return NextResponse.json(
-      { error: "Lead not found", filePath },
-      { status: 404 }
+      {
+        error: "Failed to load lead",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 }
     );
   }
-
-  const lead = withLifecycleDefaults(JSON.parse(fs.readFileSync(filePath, "utf8")));
-
-  return NextResponse.json({ lead });
 }
 
 export async function PATCH(
@@ -43,11 +48,23 @@ export async function PATCH(
     return NextResponse.json({ error: "Invalid status" }, { status: 400 });
   }
 
-  const updatedLead = updateLeadStatus(slug, status, reviewNotes);
+  try {
+    const updatedLead = await updateLeadStatusBySlug(slug, status, reviewNotes);
 
-  if (!updatedLead) {
-    return NextResponse.json({ error: "Lead not found" }, { status: 404 });
+    if (!updatedLead) {
+      return NextResponse.json({ error: "Lead not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({ lead: updatedLead });
+  } catch (error) {
+    console.error("Failed to update lead:", error);
+
+    return NextResponse.json(
+      {
+        error: "Failed to update lead",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 }
+    );
   }
-
-  return NextResponse.json({ lead: updatedLead });
 }

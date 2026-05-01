@@ -1,6 +1,3 @@
-import fs from "fs";
-import path from "path";
-
 export const lifecycleStatuses = [
   "new",
   "archived",
@@ -16,25 +13,6 @@ export const lifecycleTimestampFields: Record<
   archived: "archivedAt",
   contacted: "contactedAt",
 };
-
-export const dataDir = path.join(process.cwd(), "data");
-export const businessesDir = path.join(dataDir, "businesses");
-export const ignoredLeadsDir = path.join(dataDir, "ignored-leads");
-
-// Vercel can read files bundled with the deployment. Runtime writes to this
-// project data directory are kept for local/demo use, but are not durable across
-// deployments and may be restricted depending on the hosting runtime.
-export function ensureBusinessesDir() {
-  if (!fs.existsSync(businessesDir)) {
-    fs.mkdirSync(businessesDir, { recursive: true });
-  }
-}
-
-export function ensureIgnoredLeadsDir() {
-  if (!fs.existsSync(ignoredLeadsDir)) {
-    fs.mkdirSync(ignoredLeadsDir, { recursive: true });
-  }
-}
 
 export type LeadRecord = Record<string, unknown>;
 
@@ -105,43 +83,4 @@ export function normalizeLeadIdentity(lead: LeadRecord) {
 
 export function shouldSkipExistingLead(existingLead: LeadRecord) {
   return Boolean(getLeadStatus(existingLead));
-}
-
-export function getLeadFilePath(slug: string) {
-  return path.join(businessesDir, `${slug}.json`);
-}
-
-export function updateLeadStatus(
-  slug: string,
-  status: LifecycleStatus,
-  reviewNotes?: string
-) {
-  ensureBusinessesDir();
-
-  const filePath = getLeadFilePath(slug);
-
-  if (!fs.existsSync(filePath)) {
-    return null;
-  }
-
-  const existingLead = JSON.parse(fs.readFileSync(filePath, "utf8"));
-  const now = new Date().toISOString();
-  const updatedLead = withLifecycleDefaults({
-    ...existingLead,
-    status,
-    reviewNotes:
-      typeof reviewNotes === "string"
-        ? reviewNotes
-        : typeof existingLead.reviewNotes === "string"
-          ? existingLead.reviewNotes
-          : "",
-  });
-
-  if (status !== "new") {
-    updatedLead[lifecycleTimestampFields[status]] = now;
-  }
-
-  fs.writeFileSync(filePath, JSON.stringify(updatedLead, null, 2));
-
-  return updatedLead;
 }

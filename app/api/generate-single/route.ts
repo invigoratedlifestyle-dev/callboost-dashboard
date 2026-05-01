@@ -1,13 +1,9 @@
 import { NextResponse } from "next/server";
-import fs from "fs";
 import path from "path";
 import { execFileSync } from "child_process";
 import OpenAI from "openai";
-import {
-  businessesDir,
-  ensureBusinessesDir,
-  withLifecycleDefaults,
-} from "../../lib/leadLifecycle";
+import { withLifecycleDefaults } from "../../lib/leadLifecycle";
+import { getLeadBySlug, updateLeadBySlug } from "../../lib/supabase/leads";
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -51,20 +47,11 @@ export async function POST(req: Request) {
 
     console.log("Generate single requested:", { slug });
 
-    ensureBusinessesDir();
+    const existingLead = await getLeadBySlug(slug);
 
-    const filePath = path.join(businessesDir, `${slug}.json`);
-
-    if (!fs.existsSync(filePath)) {
-      console.error("❌ File not found:", filePath);
-
-      return NextResponse.json(
-        { error: "Lead JSON not found" },
-        { status: 404 }
-      );
+    if (!existingLead) {
+      return NextResponse.json({ error: "Lead not found" }, { status: 404 });
     }
-
-    const existingLead = JSON.parse(fs.readFileSync(filePath, "utf8"));
 
     const prompt = `
 Generate local business website content.
@@ -116,8 +103,7 @@ Return ONLY valid JSON:
       aiGeneratedAt: new Date().toISOString(),
     });
 
-    fs.writeFileSync(filePath, JSON.stringify(updatedLead, null, 2));
-
+    const savedLead = await updateLeadBySlug(slug, updatedLead);
     const command = `node scripts/generate.js --slug ${slug}`;
 
     console.log("Generate single command:", command);
@@ -131,13 +117,16 @@ Return ONLY valid JSON:
 
     return NextResponse.json({
       success: true,
-      lead: updatedLead,
+      lead: savedLead,
     });
   } catch (error) {
     console.error("Generate single failed:", error);
 
     return NextResponse.json(
-      { error: "Failed to generate content" },
+      {
+        error: "Failed to generate content",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
       { status: 500 }
     );
   }

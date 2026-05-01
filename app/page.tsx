@@ -139,11 +139,22 @@ export default function DashboardPage() {
     setGenerating(true);
 
     try {
-      await fetch("/api/leads/generate", {
+      const res = await fetch("/api/leads/generate", {
         method: "POST",
       });
 
+      if (!res.ok) {
+        const result = await res.json().catch(() => ({}));
+
+        console.error("Generate leads failed:", result);
+        alert(result.message || result.error || "Lead generation failed");
+        return;
+      }
+
       await loadLeads();
+    } catch (error) {
+      console.error("Generate leads failed:", error);
+      alert("Lead generation failed");
     } finally {
       setGenerating(false);
     }

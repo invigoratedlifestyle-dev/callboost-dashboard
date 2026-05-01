@@ -1,12 +1,14 @@
 import { NextResponse } from "next/server";
-import fs from "fs";
-import path from "path";
 import {
   buildGoogleReviewFields,
   fetchGooglePlaceDetails,
   normalizeGoogleReviews,
 } from "../../lib/googleReviews";
-import { businessesDir, ensureBusinessesDir } from "../../lib/leadLifecycle";
+import {
+  getLeadBySlug,
+  insertLead,
+  updateLeadBySlug,
+} from "../../lib/supabase/leads";
 
 type GenerateRequest = {
   query?: string;
@@ -38,18 +40,6 @@ function slugify(value: string) {
     .replace(/&/g, "and")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
-}
-
-function readExistingLead(filePath: string): ExistingLead {
-  if (!fs.existsSync(filePath)) {
-    return {};
-  }
-
-  try {
-    return JSON.parse(fs.readFileSync(filePath, "utf8"));
-  } catch {
-    return {};
-  }
 }
 
 function getString(value: unknown) {
@@ -101,16 +91,17 @@ async function searchText(query: string, apiKey: string) {
 
 export async function POST(req: Request) {
   try {
-    const apiKey = process.env.GOOGLE_API_KEY;
+    const apiKey =
+      process.env.GOOGLE_PLACES_API_KEY ||
+      process.env.GOOGLE_API_KEY ||
+      process.env.GOOGLE_MAPS_API_KEY;
 
     if (!apiKey) {
       return NextResponse.json(
-        { error: "Missing GOOGLE_API_KEY" },
+        { error: "Missing GOOGLE_PLACES_API_KEY" },
         { status: 500 }
       );
     }
-
-    ensureBusinessesDir();
 
     let body: GenerateRequest = {};
 
@@ -141,8 +132,7 @@ export async function POST(req: Request) {
         continue;
       }
 
-      const filePath = path.join(businessesDir, `${slug}.json`);
-      const existingLead = readExistingLead(filePath);
+      const existingLead = ((await getLeadBySlug(slug)) || {}) as ExistingLead;
       const placeDetails = await getGooglePlaceDetailsForLead(place.id, apiKey);
       const googleReviews = normalizeGoogleReviews(placeDetails);
       const googleReviewFields = buildGoogleReviewFields({
@@ -153,11 +143,11 @@ export async function POST(req: Request) {
 
       const website = place.websiteUri || getString(existingLead.website);
       const phone = place.nationalPhoneNumber || getString(existingLead.phone);
-
       const lead = {
         ...existingLead,
         id: getString(existingLead.id) || slug,
         slug,
+        googlePlaceId: place.id,
         businessName,
         trade,
         city,
@@ -188,8 +178,11 @@ export async function POST(req: Request) {
 
       console.log("Saving lead:", { businessName, website });
 
-      fs.writeFileSync(filePath, JSON.stringify(lead, null, 2));
-      saved.push(lead);
+      const savedLead = existingLead.slug
+        ? await updateLeadBySlug(slug, lead)
+        : await insertLead(lead);
+
+      saved.push(savedLead);
     }
 
     return NextResponse.json({
@@ -201,7 +194,10 @@ export async function POST(req: Request) {
     console.error("Failed to generate leads:", error);
 
     return NextResponse.json(
-      { error: "Failed to generate leads" },
+      {
+        error: "Failed to generate leads",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
       { status: 500 }
     );
   }

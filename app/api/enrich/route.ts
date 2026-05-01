@@ -18,6 +18,12 @@ export async function POST(req: Request) {
     const message = error instanceof Error ? error.message : "Failed to enrich lead";
     const status = message === "Lead not found" ? 404 : 500;
 
-    return NextResponse.json({ error: message }, { status });
+    return NextResponse.json(
+      {
+        error: message,
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status }
+    );
   }
 }

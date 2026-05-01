@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
-import fs from "fs";
-import path from "path";
 import { enrichLead } from "../../../lib/enrichLead";
-import { businessesDir } from "../../../lib/leadLifecycle";
+import { listLeads } from "../../../lib/supabase/leads";
 
 function isPlaceholderEmail(email?: string) {
   const normalizedEmail = email?.trim().toLowerCase() || "";
@@ -39,27 +37,24 @@ function isActiveLead(lead: Record<string, unknown>) {
 
 export async function POST() {
   try {
-    if (!fs.existsSync(businessesDir)) {
-      return NextResponse.json({
-        success: true,
-        enrichedCount: 0,
-        failedCount: 0,
-      });
-    }
-
-    const files = fs
-      .readdirSync(businessesDir)
-      .filter((file) => file.endsWith(".json"));
+    const leads = await listLeads();
     let enrichedCount = 0;
     let failedCount = 0;
     let skippedArchivedCount = 0;
 
-    for (const file of files) {
-      const filePath = path.join(businessesDir, file);
-      const slug = path.basename(file, ".json");
+    for (const lead of leads) {
+      const slug =
+        typeof lead.slug === "string"
+          ? lead.slug
+          : typeof lead.id === "string"
+            ? lead.id
+            : "";
 
       try {
-        const lead = JSON.parse(fs.readFileSync(filePath, "utf8"));
+        if (!slug) {
+          failedCount += 1;
+          continue;
+        }
 
         if (!isActiveLead(lead)) {
           skippedArchivedCount += 1;
@@ -101,7 +96,10 @@ export async function POST() {
     console.error("Failed to enrich active leads:", error);
 
     return NextResponse.json(
-      { error: "Failed to enrich active leads" },
+      {
+        error: "Failed to enrich active leads",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
       { status: 500 }
     );
   }

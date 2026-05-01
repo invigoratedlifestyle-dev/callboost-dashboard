@@ -1,6 +1,4 @@
 import { NextResponse } from "next/server";
-import fs from "fs";
-import path from "path";
 import { enrichLead } from "../../../lib/enrichLead";
 import {
   buildGoogleReviewFields,
@@ -8,14 +6,13 @@ import {
   normalizeGoogleReviews,
 } from "../../../lib/googleReviews";
 import {
-  businessesDir,
-  ensureBusinessesDir,
-  ensureIgnoredLeadsDir,
-  ignoredLeadsDir,
   normalizeLeadIdentity,
-  shouldSkipExistingLead,
-  withLifecycleDefaults,
 } from "../../../lib/leadLifecycle";
+import {
+  duplicateLeadExists,
+  insertIgnoredLead,
+  insertLead,
+} from "../../../lib/supabase/leads";
 import {
   isValidTradeLead,
   type TradeValidationResult,
@@ -71,29 +68,11 @@ type GoogleTextSearchResponse = {
   };
 };
 
-type ExistingLead = Record<string, unknown>;
-
-type ExistingLeadValues = {
-  placeId: string;
-  businessName: string;
-  formattedAddress: string;
-  city: string;
-  trade: string;
-  phone: string;
-};
-
 type DedupeKeys = {
   placeKey: string;
   nameAddressKey: string;
   nameCityTradeKey: string;
   identityKey: string;
-};
-
-type ExistingDedupeKeys = {
-  placeKeys: Set<string>;
-  nameAddressKeys: Set<string>;
-  nameCityTradeKeys: Set<string>;
-  identityKeys: Set<string>;
 };
 
 function slugify(value: string) {
@@ -111,21 +90,6 @@ function normalizeForDedupe(value: string) {
     .replace(/[^a-z0-9]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-function getString(value: unknown) {
-  return typeof value === "string" ? value : "";
-}
-
-function getExistingLeadValues(lead: ExistingLead): ExistingLeadValues {
-  return {
-    placeId: getString(lead.googlePlaceId) || getString(lead.placeId),
-    businessName: getString(lead.businessName) || getString(lead.name),
-    formattedAddress: getString(lead.formattedAddress),
-    city: getString(lead.city),
-    trade: getString(lead.trade),
-    phone: getString(lead.phone),
-  };
 }
 
 function clampMaxLeads(value: unknown) {
@@ -209,179 +173,25 @@ function getPlaceDedupeKeys(
   };
 }
 
-function addDedupeKeysFromLead(lead: ExistingLead, keys: ExistingDedupeKeys) {
-  const existingLead = withLifecycleDefaults(lead);
-
-  if (!shouldSkipExistingLead(existingLead)) {
-    return;
-  }
-
-  const values = getExistingLeadValues(existingLead);
-  const identity = normalizeLeadIdentity({
-    googlePlaceId: values.placeId,
-    businessName: values.businessName,
-    phone: values.phone,
-    city: values.city,
-    trade: values.trade,
-  });
-
-  if (values.placeId) {
-    keys.placeKeys.add(`place:${values.placeId}`);
-  }
-
-  if (identity.googlePlaceId) {
-    keys.placeKeys.add(`place:${identity.googlePlaceId}`);
-  }
-
-  if (identity.identityKey) {
-    keys.identityKeys.add(identity.identityKey);
-  }
-
-  if (values.businessName && values.formattedAddress) {
-    keys.nameAddressKeys.add(
-      getNameAddressKey(values.businessName, values.formattedAddress)
-    );
-  }
-
-  if (values.businessName && values.city && values.trade) {
-    keys.nameCityTradeKeys.add(
-      getNameCityTradeKey(values.businessName, values.city, values.trade)
-    );
-  }
-}
-
-function readDedupeDirectory(dir: string, keys: ExistingDedupeKeys) {
-  if (!fs.existsSync(dir)) {
-    return;
-  }
-
-  const files = fs
-    .readdirSync(dir)
-    .filter((file) => file.endsWith(".json"));
-
-  for (const file of files) {
-    try {
-      const filePath = path.join(dir, file);
-      const lead = JSON.parse(fs.readFileSync(filePath, "utf8")) as ExistingLead;
-
-      addDedupeKeysFromLead(lead, keys);
-    } catch {
-      continue;
-    }
-  }
-}
-
-function getExistingDedupeKeys() {
-  const keys: ExistingDedupeKeys = {
-    placeKeys: new Set<string>(),
-    nameAddressKeys: new Set<string>(),
-    nameCityTradeKeys: new Set<string>(),
-    identityKeys: new Set<string>(),
-  };
-
-  readDedupeDirectory(businessesDir, keys);
-  readDedupeDirectory(ignoredLeadsDir, keys);
-
-  return keys;
-}
-
-function isExistingDuplicate(keys: DedupeKeys, existingKeys: ExistingDedupeKeys) {
-  if (keys.placeKey && existingKeys.placeKeys.has(keys.placeKey)) {
-    return "googlePlaceId";
-  }
-
-  if (
-    keys.nameAddressKey &&
-    existingKeys.nameAddressKeys.has(keys.nameAddressKey)
-  ) {
-    return "nameAddress";
-  }
-
-  if (
-    keys.nameCityTradeKey &&
-    existingKeys.nameCityTradeKeys.has(keys.nameCityTradeKey)
-  ) {
-    return "nameCityTrade";
-  }
-
-  if (
-    keys.identityKey &&
-    existingKeys.identityKeys.has(keys.identityKey)
-  ) {
-    return "identity";
-  }
-
-  return "";
-}
-
 function getUniqueSlug(baseSlug: string, placeId: string, index: number) {
   if (!baseSlug) {
     return placeId ? `lead-${placeId.slice(-6).toLowerCase()}` : `lead-${index}`;
   }
 
-  let slug = baseSlug;
-  const filePath = path.join(businessesDir, `${slug}.json`);
-
-  if (!fs.existsSync(filePath)) {
-    return slug;
-  }
-
-  const suffix = placeId
-    ? placeId.replace(/[^a-z0-9]/gi, "").slice(-6).toLowerCase()
-    : String(index + 1);
-
-  slug = `${baseSlug}-${suffix}`;
-
-  if (!fs.existsSync(path.join(businessesDir, `${slug}.json`))) {
-    return slug;
-  }
-
-  return `${baseSlug}-${index + 1}`;
+  return baseSlug;
 }
 
-function getUniqueSlugInDir(
-  dir: string,
-  baseSlug: string,
-  placeId: string,
-  index: number
-) {
-  if (!baseSlug) {
-    return placeId ? `lead-${placeId.slice(-6).toLowerCase()}` : `lead-${index}`;
-  }
-
-  if (!fs.existsSync(path.join(dir, `${baseSlug}.json`))) {
-    return baseSlug;
-  }
-
-  const suffix = placeId
-    ? placeId.replace(/[^a-z0-9]/gi, "").slice(-6).toLowerCase()
-    : String(index + 1);
-  const suffixedSlug = `${baseSlug}-${suffix}`;
-
-  if (!fs.existsSync(path.join(dir, `${suffixedSlug}.json`))) {
-    return suffixedSlug;
-  }
-
-  return `${baseSlug}-${index + 1}`;
-}
-
-function saveIgnoredLead(
+async function saveIgnoredLead(
   place: GooglePlace,
   city: string,
   trade: string,
   tradeValidation: TradeValidationResult,
   index: number
 ) {
-  ensureIgnoredLeadsDir();
-
   const name = getBusinessName(place);
-  const slug = getUniqueSlugInDir(
-    ignoredLeadsDir,
-    slugify(name),
-    place.id || "",
-    index
-  );
+  const slug = getUniqueSlug(slugify(name), place.id || "", index);
   const ignoredLead = {
+    slug,
     name,
     phone: place.nationalPhoneNumber || "",
     placeId: place.id || "",
@@ -392,10 +202,7 @@ function saveIgnoredLead(
     ignoredAt: new Date().toISOString(),
   };
 
-  fs.writeFileSync(
-    path.join(ignoredLeadsDir, `${slug}.json`),
-    JSON.stringify(ignoredLead, null, 2)
-  );
+  await insertIgnoredLead(ignoredLead);
 }
 
 async function textSearch(query: string, apiKey: string) {
@@ -431,7 +238,10 @@ async function textSearch(query: string, apiKey: string) {
 
 export async function POST(req: Request) {
   try {
-    const apiKey = process.env.GOOGLE_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
+    const apiKey =
+      process.env.GOOGLE_PLACES_API_KEY ||
+      process.env.GOOGLE_API_KEY ||
+      process.env.GOOGLE_MAPS_API_KEY;
 
     if (!apiKey) {
       return NextResponse.json(
@@ -439,9 +249,6 @@ export async function POST(req: Request) {
         { status: 500 }
       );
     }
-
-    ensureBusinessesDir();
-    ensureIgnoredLeadsDir();
 
     let body: GenerateRequest = {};
 
@@ -568,15 +375,23 @@ export async function POST(req: Request) {
     }
 
     const dedupedResults = dedupedPlaces.length;
-    const existingKeys = getExistingDedupeKeys();
     const newPlaces: GooglePlace[] = [];
 
     for (const place of dedupedPlaces) {
-      const keys = getPlaceDedupeKeys(place, city, trade);
-      const duplicateReason = isExistingDuplicate(keys, existingKeys);
       const businessName = getBusinessName(place);
+      const baseSlug = slugify(businessName);
+      const slug = getUniqueSlug(baseSlug, place.id || "", newPlaces.length);
+      const duplicateReason = await duplicateLeadExists({
+        slug,
+        googlePlaceId: place.id || "",
+        businessName,
+        formattedAddress: place.formattedAddress || "",
+        phone: place.nationalPhoneNumber || "",
+        city,
+        trade,
+      });
 
-      if (duplicateReason === "googlePlaceId") {
+      if (duplicateReason === "place_id" || duplicateReason === "ignored_place_id") {
         skippedDuplicates += 1;
         console.log("Duplicate skipped by googlePlaceId:", {
           googlePlaceId: place.id,
@@ -585,26 +400,16 @@ export async function POST(req: Request) {
         continue;
       }
 
-      if (duplicateReason === "nameAddress") {
+      if (duplicateReason === "slug" || duplicateReason === "ignored_slug") {
         skippedDuplicates += 1;
-        console.log("Duplicate skipped by name/address:", {
+        console.log("Duplicate skipped by slug:", {
+          slug,
           businessName,
-          formattedAddress: place.formattedAddress || "",
         });
         continue;
       }
 
-      if (duplicateReason === "nameCityTrade") {
-        skippedDuplicates += 1;
-        console.log("Duplicate skipped by name/city/trade:", {
-          businessName,
-          city,
-          trade,
-        });
-        continue;
-      }
-
-      if (duplicateReason === "identity") {
+      if (duplicateReason === "identity" || duplicateReason === "ignored_identity") {
         skippedDuplicates += 1;
         console.log("Duplicate skipped by name/phone/city/trade:", {
           businessName,
@@ -635,7 +440,7 @@ export async function POST(req: Request) {
           `Skipped wrong trade: ${businessName} | targetTrade: ${trade} | score: ${tradeValidation.score}`
         );
 
-        saveIgnoredLead(
+        await saveIgnoredLead(
           place,
           city,
           trade,
@@ -665,7 +470,6 @@ export async function POST(req: Request) {
 
       const baseSlug = slugify(businessName);
       const slug = getUniqueSlug(baseSlug, place.id || "", leads.length);
-      const filePath = path.join(businessesDir, `${slug}.json`);
       const now = new Date().toISOString();
       const placeDetails = await getGooglePlaceDetailsForLead(
         place.id || "",
@@ -719,7 +523,7 @@ export async function POST(req: Request) {
 
       console.log("Saving lead:", { businessName, website: lead.website });
 
-      fs.writeFileSync(filePath, JSON.stringify(lead, null, 2));
+      const savedLead = await insertLead(lead);
 
       if (enrich) {
         try {
@@ -734,7 +538,7 @@ export async function POST(req: Request) {
           leads.push(enrichmentResult.lead);
         } catch (error) {
           enrichmentFailed += 1;
-          leads.push(lead);
+          leads.push(savedLead);
 
           console.error("Generated lead enrichment failed:", {
             slug,
@@ -743,7 +547,7 @@ export async function POST(req: Request) {
         }
       } else {
         // TODO: Keep enrichment disabled only when requested by POST body.
-        leads.push(lead);
+        leads.push(savedLead);
       }
     }
 
@@ -777,7 +581,10 @@ export async function POST(req: Request) {
     console.error("Failed to generate leads:", error);
 
     return NextResponse.json(
-      { error: "Failed to generate leads" },
+      {
+        error: "Lead generation failed",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
       { status: 500 }
     );
   }

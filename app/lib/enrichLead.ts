@@ -1,12 +1,11 @@
-import fs from "fs";
-import path from "path";
 import OpenAI from "openai";
 import {
   buildGoogleReviewFields,
   fetchGooglePlaceDetails,
   normalizeGoogleReviews,
 } from "./googleReviews";
-import { businessesDir, ensureBusinessesDir, withLifecycleDefaults } from "./leadLifecycle";
+import { withLifecycleDefaults } from "./leadLifecycle";
+import { getLeadBySlug, updateLeadBySlug } from "./supabase/leads";
 const ignoredSearchDomains = [
   "google.com",
   "facebook.com",
@@ -193,27 +192,6 @@ function classifyWebsite(args: {
   }
 
   return { websiteStatus: "has_website", reasons };
-}
-
-function calculateLeadScore(args: {
-  websiteStatus: WebsiteStatus;
-  email: string;
-  phone: string;
-  socials: Record<string, string>;
-}) {
-  const baseScores: Record<WebsiteStatus, number> = {
-    no_website: 100,
-    weak_website: 75,
-    has_website: 25,
-  };
-  const hasSocials = Object.values(args.socials || {}).some(Boolean);
-  let score = baseScores[args.websiteStatus];
-
-  if (args.phone) score += 10;
-  if (args.email) score += 5;
-  if (hasSocials) score += 5;
-
-  return Math.max(0, Math.min(score, 100));
 }
 
 function getPriority(score: number) {
@@ -773,7 +751,10 @@ async function findWebsiteFromGoogleSearch(businessName?: string, city?: string)
 }
 
 async function findWebsiteFromPlacesApi(businessName?: string, city?: string) {
-  const apiKey = process.env.GOOGLE_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
+  const apiKey =
+    process.env.GOOGLE_PLACES_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.GOOGLE_MAPS_API_KEY;
   const query = `${businessName || ""} ${city || ""}`.trim();
 
   if (!apiKey || !query) {
@@ -825,7 +806,10 @@ async function getGoogleReviewFields(args: {
   businessName: string;
   placeId: string;
 }) {
-  const apiKey = process.env.GOOGLE_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
+  const apiKey =
+    process.env.GOOGLE_PLACES_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
+    process.env.GOOGLE_MAPS_API_KEY;
 
   if (!apiKey || !args.placeId) {
     return buildGoogleReviewFields({
@@ -853,19 +837,6 @@ async function getGoogleReviewFields(args: {
       reviews: [],
     });
   }
-}
-
-function readLead(filePath: string) {
-  try {
-    return JSON.parse(fs.readFileSync(filePath, "utf8")) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-}
-
-function writeLead(filePath: string, lead: Record<string, unknown>) {
-  ensureBusinessesDir();
-  fs.writeFileSync(filePath, JSON.stringify(lead, null, 2));
 }
 
 function logQualification(args: {
@@ -937,16 +908,10 @@ function buildQualifiedLead(args: {
 }
 
 export async function enrichLead(slug: string, providedWebsite?: string) {
-  const filePath = path.join(businessesDir, `${slug}.json`);
-
-  if (!fs.existsSync(filePath)) {
-    throw new Error("Lead not found");
-  }
-
-  const existingLead = readLead(filePath);
+  const existingLead = await getLeadBySlug(slug);
 
   if (!existingLead) {
-    throw new Error("Invalid lead data");
+    throw new Error("Lead not found");
   }
 
   let normalizedWebsite = normalizeUrl(getString(existingLead.website) || providedWebsite);
@@ -1002,8 +967,8 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
       homepageScrapeFailed: true,
     });
 
-    writeLead(filePath, updatedLead);
-    return { success: true, lead: updatedLead } satisfies EnrichLeadResult;
+    const savedLead = await updateLeadBySlug(slug, updatedLead);
+    return { success: true, lead: savedLead } satisfies EnrichLeadResult;
   }
 
   const badDomainDetected = isBadDomain(normalizedWebsite);
@@ -1036,8 +1001,8 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
       homepageScrapeFailed: false,
     });
 
-    writeLead(filePath, updatedLead);
-    return { success: true, lead: updatedLead } satisfies EnrichLeadResult;
+    const savedLead = await updateLeadBySlug(slug, updatedLead);
+    return { success: true, lead: savedLead } satisfies EnrichLeadResult;
   }
 
   let homeHtml = "";
@@ -1070,8 +1035,8 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
       homepageScrapeFailed: true,
     });
 
-    writeLead(filePath, updatedLead);
-    return { success: true, lead: updatedLead } satisfies EnrichLeadResult;
+    const savedLead = await updateLeadBySlug(slug, updatedLead);
+    return { success: true, lead: savedLead } satisfies EnrichLeadResult;
   }
 
   const contactPage = extractContactPage(homeHtml, normalizedWebsite);
@@ -1124,6 +1089,6 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
     homepageScrapeFailed: false,
   });
 
-  writeLead(filePath, updatedLead);
-  return { success: true, lead: updatedLead } satisfies EnrichLeadResult;
+  const savedLead = await updateLeadBySlug(slug, updatedLead);
+  return { success: true, lead: savedLead } satisfies EnrichLeadResult;
 }
