@@ -775,6 +775,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                           className={`rounded-full px-3 py-1 text-xs font-bold ${
                             item.message.status === "sent"
                               ? "bg-green-500/15 text-green-300"
+                              : item.message.status === "received"
+                                ? "bg-cyan-500/15 text-cyan-300"
                               : item.message.status === "failed"
                                 ? "bg-red-500/15 text-red-300"
                                 : "bg-white/10 text-slate-400"
@@ -782,6 +784,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                         >
                           {item.message.status === "sent"
                             ? "Sent"
+                            : item.message.status === "received"
+                              ? "Received"
                             : item.message.status === "failed"
                               ? "Failed"
                               : "Draft"}

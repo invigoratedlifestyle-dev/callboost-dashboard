@@ -22,6 +22,16 @@ type ResendInboundPayload = {
     subject?: string;
     text?: string;
     html?: string;
+    textBody?: string;
+    htmlBody?: string;
+    text_body?: string;
+    html_body?: string;
+    body?: unknown;
+    content?: unknown;
+    message?: unknown;
+    raw?: unknown;
+    attachments?: unknown;
+    headers?: unknown;
   };
 };
 
@@ -55,13 +65,92 @@ function stripHtml(html: string) {
     .trim();
 }
 
+function bodyTextFromValue(value: unknown): string {
+  if (typeof value === "string") return value.trim();
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const text = bodyTextFromValue(item);
+
+      if (text) return text;
+    }
+
+    return "";
+  }
+
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+
+    return (
+      bodyTextFromValue(record.text) ||
+      bodyTextFromValue(record.textBody) ||
+      bodyTextFromValue(record.text_body) ||
+      bodyTextFromValue(record.body) ||
+      bodyTextFromValue(record.content) ||
+      bodyTextFromValue(record.message) ||
+      bodyTextFromValue(record.value) ||
+      bodyTextFromValue(record.raw)
+    );
+  }
+
+  return "";
+}
+
+function htmlFromValue(value: unknown): string {
+  if (typeof value === "string") return value.trim();
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const html = htmlFromValue(item);
+
+      if (html) return html;
+    }
+
+    return "";
+  }
+
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+
+    return (
+      htmlFromValue(record.html) ||
+      htmlFromValue(record.htmlBody) ||
+      htmlFromValue(record.html_body)
+    );
+  }
+
+  return "";
+}
+
 function extractBody(data: ResendInboundPayload["data"]) {
-  const textBody = data?.text?.trim();
-  const htmlBody = data?.html?.trim();
+  const textBody =
+    data?.text?.trim() ||
+    data?.textBody?.trim() ||
+    data?.text_body?.trim() ||
+    bodyTextFromValue(data?.body) ||
+    bodyTextFromValue(data?.content) ||
+    bodyTextFromValue(data?.message) ||
+    bodyTextFromValue(data?.raw) ||
+    bodyTextFromValue(data?.attachments) ||
+    bodyTextFromValue(data?.headers);
+  const htmlBody =
+    data?.html?.trim() ||
+    data?.htmlBody?.trim() ||
+    data?.html_body?.trim() ||
+    htmlFromValue(data?.body) ||
+    htmlFromValue(data?.content) ||
+    htmlFromValue(data?.message) ||
+    htmlFromValue(data?.raw) ||
+    htmlFromValue(data?.attachments) ||
+    htmlFromValue(data?.headers);
   let body = textBody || "";
 
   if (!body && htmlBody) {
     body = stripHtml(htmlBody);
+  }
+
+  if (!body) {
+    console.log("No inbound email body field found");
   }
 
   return body || "(No message body)";
@@ -122,6 +211,10 @@ export async function POST(req: Request) {
     }
 
     const data = payload.data || {};
+    console.log("Inbound email payload keys:", Object.keys(payload || {}));
+    console.log("Inbound email data keys:", Object.keys(data || {}));
+    console.log("Inbound email data:", JSON.stringify(data || {}, null, 2));
+
     const from = extractEmail(data.from);
     const toRaw = Array.isArray(data.to) ? data.to[0] : data.to;
     const to = getString(toRaw);
