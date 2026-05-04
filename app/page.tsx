@@ -144,6 +144,58 @@ function getReplyPreview(notification: ReplyNotification) {
   return text.length > 90 ? `${text.slice(0, 87)}...` : text;
 }
 
+type AudioContextWindow = Window &
+  typeof globalThis & {
+    webkitAudioContext?: typeof AudioContext;
+  };
+
+function playFallbackBeep() {
+  if (typeof window === "undefined") return;
+
+  const AudioContextClass =
+    window.AudioContext || (window as AudioContextWindow).webkitAudioContext;
+
+  if (!AudioContextClass) return;
+
+  const audioContext = new AudioContextClass();
+  const oscillator = audioContext.createOscillator();
+  const gainNode = audioContext.createGain();
+
+  oscillator.type = "sine";
+  oscillator.frequency.value = 880;
+  gainNode.gain.value = 0.2;
+
+  oscillator.connect(gainNode);
+  gainNode.connect(audioContext.destination);
+  oscillator.onended = () => {
+    void audioContext.close().catch(() => {});
+  };
+
+  oscillator.start();
+  oscillator.stop(audioContext.currentTime + 0.15);
+}
+
+function playNotificationSound() {
+  if (typeof window === "undefined") return;
+
+  console.log("Playing notification sound");
+
+  const audio = new Audio("/sounds/notification.mp3");
+
+  audio.volume = 1.0;
+  audio.play().catch((err) => {
+    console.warn("Notification sound failed", err);
+    playFallbackBeep();
+  });
+}
+
+function getStoredSoundEnabled() {
+  return (
+    typeof window !== "undefined" &&
+    window.localStorage.getItem("callboost_sound_enabled") === "true"
+  );
+}
+
 export default function DashboardPage() {
   const [leads, setLeads] = useState<DashboardLead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -155,9 +207,10 @@ export default function DashboardPage() {
     ReplyNotification[]
   >([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(getStoredSoundEnabled);
   const prevNotificationIdsRef = useRef<Set<string>>(new Set());
   const isFirstNotificationLoadRef = useRef(true);
-  const notificationSoundRef = useRef<HTMLAudioElement | null>(null);
+  const soundEnabledRef = useRef(soundEnabled);
   const permissionRequestedRef = useRef(false);
   const actionRunning = generating || enriching;
 
@@ -190,7 +243,9 @@ export default function DashboardPage() {
       );
 
       if (!isFirstNotificationLoadRef.current && newestNotification) {
-        notificationSoundRef.current?.play().catch(() => {});
+        if (soundEnabledRef.current) {
+          playNotificationSound();
+        }
 
         if (
           typeof window !== "undefined" &&
@@ -211,6 +266,16 @@ export default function DashboardPage() {
       setReplyNotifications(notifications);
     } catch (error) {
       console.error("Failed to load reply notifications:", error);
+    }
+  }
+
+  function handleEnableSoundAlerts() {
+    playNotificationSound();
+    soundEnabledRef.current = true;
+    setSoundEnabled(true);
+
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("callboost_sound_enabled", "true");
     }
   }
 
@@ -313,8 +378,6 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    notificationSoundRef.current = new Audio("/sounds/notification.mp3");
-
     if (
       typeof window !== "undefined" &&
       "Notification" in window &&
@@ -411,6 +474,15 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex flex-wrap gap-3">
+            {!soundEnabled ? (
+              <button
+                onClick={handleEnableSoundAlerts}
+                className="rounded-lg bg-amber-500 px-5 py-3 text-sm font-bold text-slate-950 hover:bg-amber-400"
+              >
+                Enable sound alerts
+              </button>
+            ) : null}
+
             <div className="relative">
               <button
                 onClick={() => setNotificationsOpen((open) => !open)}
