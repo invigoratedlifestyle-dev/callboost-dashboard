@@ -249,13 +249,18 @@ export default function DashboardPage() {
   const loadLeads = useCallback(async (filter: LeadFilter) => {
     const url =
       filter === "all" ? "/api/leads" : `/api/leads?status=${filter}`;
+    console.log("Lead tab filter:", filter);
+
     const res = await fetch(url, {
       cache: "no-store",
     });
 
     const data = await res.json();
+    const fetchedLeads = data.leads || [];
 
-    setLeads(data.leads || []);
+    console.log("Fetched leads count:", fetchedLeads.length);
+
+    setLeads(fetchedLeads);
     setLoading(false);
   }, []);
 
