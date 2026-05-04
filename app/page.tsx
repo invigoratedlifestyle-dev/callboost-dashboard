@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Lead, LeadStatus, WebsiteEvaluation } from "./lib/leads";
 
 type LeadPriority = "high" | "medium" | "low";
@@ -155,6 +155,10 @@ export default function DashboardPage() {
     ReplyNotification[]
   >([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const prevNotificationIdsRef = useRef<Set<string>>(new Set());
+  const isFirstNotificationLoadRef = useRef(true);
+  const notificationSoundRef = useRef<HTMLAudioElement | null>(null);
+  const permissionRequestedRef = useRef(false);
   const actionRunning = generating || enriching;
 
   async function loadLeads() {
@@ -177,8 +181,34 @@ export default function DashboardPage() {
       if (!res.ok) return;
 
       const data = await res.json();
+      const notifications = (data.notifications || []) as ReplyNotification[];
+      const nextIds = new Set(
+        notifications.map((notification) => notification.id).filter(Boolean)
+      );
+      const newestNotification = notifications.find(
+        (notification) => !prevNotificationIdsRef.current.has(notification.id)
+      );
 
-      setReplyNotifications(data.notifications || []);
+      if (!isFirstNotificationLoadRef.current && newestNotification) {
+        notificationSoundRef.current?.play().catch(() => {});
+
+        if (
+          typeof window !== "undefined" &&
+          "Notification" in window &&
+          Notification.permission === "granted"
+        ) {
+          new Notification("New Lead Reply", {
+            body: `${newestNotification.business_name}: ${newestNotification.body.slice(
+              0,
+              80
+            )}`,
+          });
+        }
+      }
+
+      prevNotificationIdsRef.current = nextIds;
+      isFirstNotificationLoadRef.current = false;
+      setReplyNotifications(notifications);
     } catch (error) {
       console.error("Failed to load reply notifications:", error);
     }
@@ -280,6 +310,20 @@ export default function DashboardPage() {
     // Initial dashboard data load.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadLeads();
+  }, []);
+
+  useEffect(() => {
+    notificationSoundRef.current = new Audio("/sounds/notification.mp3");
+
+    if (
+      typeof window !== "undefined" &&
+      "Notification" in window &&
+      Notification.permission === "default" &&
+      !permissionRequestedRef.current
+    ) {
+      permissionRequestedRef.current = true;
+      void Notification.requestPermission();
+    }
   }, []);
 
   useEffect(() => {
