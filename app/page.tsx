@@ -149,44 +149,75 @@ type AudioContextWindow = Window &
     webkitAudioContext?: typeof AudioContext;
   };
 
-function playFallbackBeep() {
+function playMp3Fallback() {
   if (typeof window === "undefined") return;
-
-  const AudioContextClass =
-    window.AudioContext || (window as AudioContextWindow).webkitAudioContext;
-
-  if (!AudioContextClass) return;
-
-  const audioContext = new AudioContextClass();
-  const oscillator = audioContext.createOscillator();
-  const gainNode = audioContext.createGain();
-
-  oscillator.type = "sine";
-  oscillator.frequency.value = 880;
-  gainNode.gain.value = 0.2;
-
-  oscillator.connect(gainNode);
-  gainNode.connect(audioContext.destination);
-  oscillator.onended = () => {
-    void audioContext.close().catch(() => {});
-  };
-
-  oscillator.start();
-  oscillator.stop(audioContext.currentTime + 0.15);
-}
-
-function playNotificationSound() {
-  if (typeof window === "undefined") return;
-
-  console.log("Playing notification sound");
 
   const audio = new Audio("/sounds/notification.mp3");
 
   audio.volume = 1.0;
   audio.play().catch((err) => {
-    console.warn("Notification sound failed", err);
-    playFallbackBeep();
+    console.warn("Notification sound fallback failed", err);
   });
+}
+
+function playNotificationBeep() {
+  try {
+    if (typeof window === "undefined") return;
+
+    const AudioContextClass =
+      window.AudioContext || (window as AudioContextWindow).webkitAudioContext;
+
+    if (!AudioContextClass) {
+      playMp3Fallback();
+      return;
+    }
+
+    const ctx = new AudioContextClass();
+    const oscillator = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    oscillator.type = "square";
+    oscillator.frequency.setValueAtTime(880, ctx.currentTime);
+    gain.gain.setValueAtTime(0.4, ctx.currentTime);
+
+    oscillator.connect(gain);
+    gain.connect(ctx.destination);
+    oscillator.onended = () => {
+      void ctx.close().catch(() => {});
+    };
+
+    oscillator.start();
+    oscillator.stop(ctx.currentTime + 0.15);
+  } catch (err) {
+    console.warn("Beep failed", err);
+    playMp3Fallback();
+  }
+}
+
+function playDoubleBeep() {
+  console.log("Playing notification sound");
+  playNotificationBeep();
+  window.setTimeout(() => playNotificationBeep(), 180);
+}
+
+function playTripleBeep() {
+  console.log("Playing notification sound");
+  playNotificationBeep();
+  window.setTimeout(() => playNotificationBeep(), 150);
+  window.setTimeout(() => playNotificationBeep(), 300);
+}
+
+function isHotLeadReply(notification: ReplyNotification) {
+  return /\b(how much|price|quote|cost)\b/i.test(notification.body || "");
+}
+
+function playLeadReplySound(notification: ReplyNotification) {
+  if (isHotLeadReply(notification)) {
+    playTripleBeep();
+    return;
+  }
+
+  playDoubleBeep();
 }
 
 function getStoredSoundEnabled() {
@@ -244,7 +275,7 @@ export default function DashboardPage() {
 
       if (!isFirstNotificationLoadRef.current && newestNotification) {
         if (soundEnabledRef.current) {
-          playNotificationSound();
+          playLeadReplySound(newestNotification);
         }
 
         if (
@@ -270,7 +301,7 @@ export default function DashboardPage() {
   }
 
   function handleEnableSoundAlerts() {
-    playNotificationSound();
+    playDoubleBeep();
     soundEnabledRef.current = true;
     setSoundEnabled(true);
 
