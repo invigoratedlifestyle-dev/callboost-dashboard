@@ -24,6 +24,12 @@ export type LeadRow = {
   data?: LeadRecord | null;
   created_at?: string | null;
   updated_at?: string | null;
+  stripe_customer_id?: string | null;
+  stripe_checkout_session_id?: string | null;
+  stripe_subscription_id?: string | null;
+  payment_status?: string | null;
+  paid_at?: string | null;
+  client_started_at?: string | null;
 };
 
 function getString(value: unknown) {
@@ -74,6 +80,18 @@ export function rowToLead(row: LeadRow): LeadRecord {
     status,
     createdAt: getString(data.createdAt) || getString(row.created_at),
     updatedAt: getString(data.updatedAt) || getString(row.updated_at),
+    stripeCustomerId:
+      getString(row.stripe_customer_id) || getString(data.stripeCustomerId),
+    stripeCheckoutSessionId:
+      getString(row.stripe_checkout_session_id) ||
+      getString(data.stripeCheckoutSessionId),
+    stripeSubscriptionId:
+      getString(row.stripe_subscription_id) ||
+      getString(data.stripeSubscriptionId),
+    paymentStatus: getString(row.payment_status) || getString(data.paymentStatus),
+    paidAt: getString(row.paid_at) || getString(data.paidAt),
+    clientStartedAt:
+      getString(row.client_started_at) || getString(data.clientStartedAt),
   });
 }
 

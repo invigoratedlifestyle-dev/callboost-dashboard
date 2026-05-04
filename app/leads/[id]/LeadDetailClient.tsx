@@ -263,6 +263,10 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     email: "",
     website: "",
   });
+  const [creatingCheckout, setCreatingCheckout] = useState(false);
+  const [checkoutUrl, setCheckoutUrl] = useState("");
+  const [checkoutNotice, setCheckoutNotice] = useState("");
+  const [checkoutError, setCheckoutError] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -515,6 +519,51 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       alert("Failed to update lead.");
     } finally {
       setUpdatingStatus("");
+    }
+  };
+  const handleCreateCheckoutLink = async () => {
+    if (!lead) return;
+
+    setCreatingCheckout(true);
+    setCheckoutUrl("");
+    setCheckoutNotice("");
+    setCheckoutError("");
+
+    try {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          leadId: lead.id,
+          slug: lead.slug || slug,
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.url) {
+        throw new Error(data.error || "Failed to create checkout link");
+      }
+
+      setCheckoutUrl(data.url);
+
+      try {
+        await navigator.clipboard.writeText(data.url);
+        setCheckoutNotice("Checkout link copied to clipboard.");
+      } catch {
+        setCheckoutNotice("Checkout link created.");
+      }
+
+      window.open(data.url, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      setCheckoutError(
+        error instanceof Error
+          ? error.message
+          : "Failed to create checkout link"
+      );
+    } finally {
+      setCreatingCheckout(false);
     }
   };
   const handleSendOffer = async (channel: OutreachChannel) => {
@@ -879,7 +928,42 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
               <EnrichButton lead={lead} onEnriched={handleLeadUpdated} />
 
               <GenerateSiteButton lead={lead} onGenerated={handleLeadUpdated} />
+
+              <button
+                onClick={handleCreateCheckoutLink}
+                disabled={creatingCheckout}
+                className="rounded-lg bg-green-600 px-4 py-2 text-sm font-bold hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {creatingCheckout ? "Creating..." : "Create Checkout Link"}
+              </button>
             </div>
+
+            {checkoutUrl ? (
+              <div className="mt-4 rounded-xl border border-green-400/20 bg-green-500/10 p-4">
+                <p className="mb-2 text-sm font-bold text-green-300">
+                  Stripe Checkout URL
+                </p>
+                <a
+                  href={checkoutUrl}
+                  target="_blank"
+                  className="break-all text-sm text-blue-300 hover:text-blue-200"
+                >
+                  {checkoutUrl}
+                </a>
+              </div>
+            ) : null}
+
+            {checkoutNotice ? (
+              <p className="mt-3 text-sm font-bold text-green-300">
+                {checkoutNotice}
+              </p>
+            ) : null}
+
+            {checkoutError ? (
+              <p className="mt-3 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">
+                {checkoutError}
+              </p>
+            ) : null}
           </section>
         </div>
 

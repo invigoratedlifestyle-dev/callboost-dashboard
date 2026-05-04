@@ -88,6 +88,12 @@ export type Lead = {
   callbackForwardingEnabled?: boolean;
   callbackForwardToEmail?: string | null;
   callbackForwardToPhone?: string | null;
+  stripeCustomerId?: string | null;
+  stripeCheckoutSessionId?: string | null;
+  stripeSubscriptionId?: string | null;
+  paymentStatus?: string | null;
+  paidAt?: string | null;
+  clientStartedAt?: string | null;
 };
 
 export const leads: Lead[] = [

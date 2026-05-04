@@ -14,6 +14,7 @@ function isProtectedPath(pathname: string) {
   if (pathname === "/api/callback") return false;
   if (pathname === "/api/sms") return false;
   if (pathname === "/api/email/inbound") return false;
+  if (pathname === "/api/stripe/webhook") return false;
 
   return pathname.startsWith("/api/");
 }
