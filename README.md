@@ -7,9 +7,16 @@ Set these in `.env.local` for local development and in Vercel project settings b
 ```bash
 CALLBOOST_ADMIN_PASSWORD=your-secure-password
 CALLBOOST_SESSION_SECRET=random-long-secret
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_SETUP_PRICE_ID=price_...
+STRIPE_MONTHLY_PRICE_ID=price_...
+NEXT_PUBLIC_APP_URL=https://dashboard.callboost.co
 ```
 
 `CALLBOOST_ADMIN_PASSWORD` is required for dashboard login. `CALLBOOST_SESSION_SECRET` is used to sign the private admin session cookie.
+
+`STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` are server-only Stripe credentials. `STRIPE_SETUP_PRICE_ID` and `STRIPE_MONTHLY_PRICE_ID` point to the one-time setup fee and recurring monthly subscription prices. `NEXT_PUBLIC_APP_URL` is used to build Checkout success and cancel URLs.
 
 ## Getting Started
 
