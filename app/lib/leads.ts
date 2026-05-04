@@ -58,6 +58,7 @@ export type LeadMessage = {
 
 export type Lead = {
   id: string;
+  name?: string;
   businessName: string;
   slug: string;
   city: string;

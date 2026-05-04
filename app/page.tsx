@@ -624,7 +624,8 @@ export default function DashboardPage() {
                   </tr>
                 ) : visibleLeads.length ? (
                   visibleLeads.map((lead) => {
-                    const leadKey = `${lead.slug || lead.id || lead.businessName}-${
+                    const leadName = lead.name || lead.businessName || "";
+                    const leadKey = `${lead.slug || lead.id || leadName}-${
                       lead.city || "unknown"
                     }`;
                     const leadRoute = lead.slug || lead.id;
@@ -642,7 +643,7 @@ export default function DashboardPage() {
                         <td className="px-5 py-4">
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="text-sm font-bold text-white">
-                              {lead.businessName || "Unnamed business"}
+                              {leadName || "Unnamed business"}
                             </p>
                             {leadRoute && unreadLeadSlugs.has(leadRoute) ? (
                               <span className="rounded-full bg-cyan-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-cyan-300">

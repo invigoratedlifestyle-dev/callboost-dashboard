@@ -136,7 +136,7 @@ export async function POST(req: Request) {
 
     const lead = rowToLead(leadRow);
     const businessName =
-      getString(lead.businessName) || getString(lead.name) || slug;
+      getString(lead.name) || getString(lead.businessName) || slug;
     const callback = await insertCallbackRequest({
       leadId: leadRow.id || null,
       sourceSlug: slug,

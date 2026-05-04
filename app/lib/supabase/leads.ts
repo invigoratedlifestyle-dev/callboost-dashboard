@@ -47,6 +47,7 @@ export function rowToLead(row: LeadRow): LeadRecord {
   return withLifecycleDefaults({
     ...data,
     id: getString(data.id) || slug,
+    name: getString(row.name) || getString(data.name) || getString(data.businessName),
     slug,
     googlePlaceId: getString(data.googlePlaceId) || getString(row.place_id),
     placeId: getString(data.placeId) || getString(row.place_id),

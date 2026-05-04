@@ -192,12 +192,10 @@ type LeadLookupRow = {
   data?: Record<string, unknown> | null;
 };
 
-function getBusinessName(row?: LeadLookupRow | null) {
+function getLeadName(row?: LeadLookupRow | null) {
   if (!row) return "";
 
-  const data = row.data && typeof row.data === "object" ? row.data : {};
-
-  return getString(row.name) || getString(data.businessName) || getString(row.slug);
+  return getString(row.name);
 }
 
 export async function listUnreadReplyNotifications(limit = 20) {
@@ -267,7 +265,7 @@ export async function listUnreadReplyNotifications(limit = 20) {
       id: getString(message.id),
       lead_id: message.lead_id || lead?.id || null,
       lead_slug: leadSlug,
-      business_name: getBusinessName(lead) || leadSlug || "Unknown business",
+      business_name: getLeadName(lead) || leadSlug || "Unknown business",
       lead_status: getString(lead?.status) || "lead",
       channel: getChannel(message.channel),
       body: getString(message.body),

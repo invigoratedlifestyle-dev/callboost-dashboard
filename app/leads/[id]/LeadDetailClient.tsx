@@ -152,11 +152,16 @@ function getPreviewUrl(lead: LeadWithGeneratedContent) {
   return "";
 }
 
+function getLeadName(lead: LeadWithGeneratedContent) {
+  return lead.name || lead.businessName || "this business";
+}
+
 function buildSmsOffer(lead: LeadWithGeneratedContent) {
   const previewUrl = getPreviewUrl(lead);
+  const leadName = getLeadName(lead);
 
   return [
-    `Hey ${lead.businessName}, I built a quick website preview for your ${lead.trade} business:`,
+    `Hey ${leadName}, I built a quick website preview for your ${lead.trade} business:`,
     "",
     previewUrl,
     "",
@@ -168,14 +173,15 @@ function buildSmsOffer(lead: LeadWithGeneratedContent) {
 }
 
 function buildEmailSubject(lead: LeadWithGeneratedContent) {
-  return `Quick website preview for ${lead.businessName}`;
+  return `Quick website preview for ${getLeadName(lead)}`;
 }
 
 function buildEmailOffer(lead: LeadWithGeneratedContent) {
   const previewUrl = getPreviewUrl(lead);
+  const leadName = getLeadName(lead);
 
   return [
-    `Hey ${lead.businessName},`,
+    `Hey ${leadName},`,
     "",
     `I built a quick website preview for your ${lead.trade} business here:`,
     "",
@@ -367,7 +373,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   }
 
   const emailBody = generateOfferEmail(lead);
-  const subject = `Quick win for ${lead.businessName}`;
+  const leadName = getLeadName(lead);
+  const subject = `Quick win for ${leadName}`;
   const handleLeadUpdated = (updatedLead: Lead) => {
     setLead(updatedLead);
   };
@@ -595,7 +602,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
           </p>
 
           <h1 className="text-4xl font-black tracking-tight">
-            {lead.businessName}
+            {leadName}
           </h1>
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
