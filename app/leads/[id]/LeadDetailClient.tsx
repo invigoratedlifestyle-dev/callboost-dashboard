@@ -105,6 +105,21 @@ function getRecommendationBadgeClass(recommendation?: string) {
   return "bg-white/10 text-slate-400";
 }
 
+function getPaymentStatusBadgeClass(paymentStatus?: string | null) {
+  if (paymentStatus === "paid") return "bg-green-500/15 text-green-300";
+  if (paymentStatus === "payment_failed") return "bg-red-500/15 text-red-300";
+  if (paymentStatus === "cancelled") return "bg-slate-700 text-slate-300";
+  return "bg-white/10 text-slate-400";
+}
+
+function formatClientValue(value?: string | null) {
+  return value || "Not available";
+}
+
+function formatClientTimestamp(value?: string | null) {
+  return value ? formatTimestamp(value) : "Not available";
+}
+
 function getReviewSource(lead: LeadWithGeneratedContent) {
   const reviews = lead.reviews || [];
 
@@ -966,6 +981,63 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
             ) : null}
           </section>
         </div>
+
+        {lead.status === "client" ? (
+          <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
+            <h2 className="mb-4 text-xl font-bold">Client Details</h2>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                  Payment Status
+                </p>
+                <span
+                  className={`mt-2 inline-flex rounded-full px-3 py-1 text-xs font-bold ${getPaymentStatusBadgeClass(
+                    lead.paymentStatus
+                  )}`}
+                >
+                  {formatClientValue(lead.paymentStatus)}
+                </span>
+              </div>
+
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                  Client Since
+                </p>
+                <p className="mt-2 text-sm font-bold text-slate-200">
+                  {formatClientTimestamp(lead.clientStartedAt)}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                  Paid At
+                </p>
+                <p className="mt-2 text-sm font-bold text-slate-200">
+                  {formatClientTimestamp(lead.paidAt)}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                  Stripe Customer
+                </p>
+                <p className="mt-2 break-all text-sm font-bold text-slate-200">
+                  {formatClientValue(lead.stripeCustomerId)}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                  Stripe Subscription
+                </p>
+                <p className="mt-2 break-all text-sm font-bold text-slate-200">
+                  {formatClientValue(lead.stripeSubscriptionId)}
+                </p>
+              </div>
+            </div>
+          </section>
+        ) : null}
 
         <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
