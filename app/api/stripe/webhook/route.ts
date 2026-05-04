@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
+import { sendEmail, sendSms } from "../../../lib/outboundMessages";
 import { getStripe } from "../../../lib/stripe";
+import {
+  insertLeadMessage,
+  paymentFailedRecoveryMessageExists,
+} from "../../../lib/supabase/leadMessages";
 import { getSupabaseAdmin } from "../../../lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -33,6 +38,26 @@ function getInvoiceSubscriptionId(invoice: Stripe.Invoice) {
 
   return getStripeId(subscription);
 }
+
+function getString(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function getClientName(lead: PaymentRecoveryLeadRow) {
+  return getString(lead.name) || getString(lead.data?.businessName) || "there";
+}
+
+type PaymentRecoveryLeadRow = {
+  id?: string | number | null;
+  slug?: string | null;
+  name?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  status?: string | null;
+  stripe_customer_id?: string | null;
+  stripe_subscription_id?: string | null;
+  data?: Record<string, unknown> | null;
+};
 
 async function markCheckoutComplete(session: Stripe.Checkout.Session) {
   const leadId = session.metadata?.lead_id || "";
@@ -103,6 +128,242 @@ async function updatePaymentStatusByInvoice(
   }
 }
 
+async function findPaymentRecoveryLead(invoice: Stripe.Invoice) {
+  const supabase = getSupabaseAdmin();
+  const subscriptionId = getInvoiceSubscriptionId(invoice);
+  const customerId = getStripeId(invoice.customer);
+
+  async function queryBy(field: string, value: string) {
+    const { data, error } = await supabase
+      .from("leads")
+      .select(
+        "id, slug, name, phone, email, status, stripe_customer_id, stripe_subscription_id, data"
+      )
+      .eq(field, value)
+      .eq("status", "client")
+      .limit(1)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    return data as PaymentRecoveryLeadRow | null;
+  }
+
+  if (subscriptionId) {
+    const lead = await queryBy("stripe_subscription_id", subscriptionId);
+
+    if (lead) return lead;
+  }
+
+  if (customerId) {
+    return queryBy("stripe_customer_id", customerId);
+  }
+
+  return null;
+}
+
+async function saveRecoveryMessage(args: {
+  lead: PaymentRecoveryLeadRow;
+  channel: "sms" | "email";
+  to: string;
+  fromAddress: string;
+  subject?: string | null;
+  body: string;
+  status: "sent" | "failed";
+  provider: string;
+  providerMessageId?: string;
+  error?: string;
+  stripeEventId: string;
+  stripeInvoiceId: string;
+}) {
+  await insertLeadMessage({
+    leadId: args.lead.id || null,
+    slug: getString(args.lead.slug),
+    channel: args.channel,
+    direction: "outbound",
+    toAddress: args.to,
+    fromAddress: args.fromAddress,
+    subject: args.subject || null,
+    body: args.body,
+    status: args.status,
+    provider: args.provider,
+    providerMessageId: args.providerMessageId || "",
+    error: args.error || "",
+    metadata: {
+      reason: "payment_failed_recovery",
+      stripe_event_id: args.stripeEventId,
+      stripe_invoice_id: args.stripeInvoiceId,
+    },
+  });
+}
+
+async function sendPaymentFailedRecovery(args: {
+  invoice: Stripe.Invoice;
+  stripeEventId: string;
+}) {
+  const stripeInvoiceId = args.invoice.id || "";
+
+  if (!stripeInvoiceId) return;
+
+  try {
+    const lead = await findPaymentRecoveryLead(args.invoice);
+
+    if (!lead) {
+      console.log("PAYMENT_FAILED_RECOVERY_LEAD_NOT_FOUND", {
+        stripe_event_id: args.stripeEventId,
+        stripe_invoice_id: stripeInvoiceId,
+      });
+      return;
+    }
+
+    const alreadySent = await paymentFailedRecoveryMessageExists({
+      leadId: lead.id || null,
+      slug: getString(lead.slug),
+      stripeInvoiceId,
+    });
+
+    if (alreadySent) {
+      console.log("PAYMENT_FAILED_RECOVERY_ALREADY_SENT", {
+        lead_id: lead.id || null,
+        slug: lead.slug || "",
+        stripe_event_id: args.stripeEventId,
+        stripe_invoice_id: stripeInvoiceId,
+      });
+      return;
+    }
+
+    const name = getClientName(lead);
+    const smsBody = `Hi ${name}, just a quick heads up — your CallBoost website subscription payment didn’t go through. Please update your payment method so your website stays live.`;
+    const emailSubject = "Action needed: CallBoost payment failed";
+    const emailBody = [
+      `Hi ${name},`,
+      "",
+      "Just a quick heads up — your CallBoost website subscription payment didn’t go through.",
+      "",
+      "Please update your payment method so your website stays live.",
+      "",
+      "Thanks,",
+      "CallBoost",
+    ].join("\n");
+    const phone = getString(lead.phone);
+    const email = getString(lead.email);
+
+    if (phone) {
+      try {
+        const result = await sendSms({ to: phone, body: smsBody });
+
+        await saveRecoveryMessage({
+          lead,
+          channel: "sms",
+          to: phone,
+          fromAddress: result.from,
+          body: smsBody,
+          status: "sent",
+          provider: "twilio",
+          providerMessageId: result.providerMessageId,
+          stripeEventId: args.stripeEventId,
+          stripeInvoiceId,
+        });
+
+        console.log("PAYMENT_FAILED_RECOVERY_SMS_SENT", {
+          lead_id: lead.id || null,
+          slug: lead.slug || "",
+          stripe_event_id: args.stripeEventId,
+          stripe_invoice_id: stripeInvoiceId,
+        });
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Unknown SMS send error";
+
+        console.error("PAYMENT_FAILED_RECOVERY_SEND_FAILED", {
+          channel: "sms",
+          lead_id: lead.id || null,
+          slug: lead.slug || "",
+          stripe_event_id: args.stripeEventId,
+          stripe_invoice_id: stripeInvoiceId,
+          error: message,
+        });
+
+        await saveRecoveryMessage({
+          lead,
+          channel: "sms",
+          to: phone,
+          fromAddress: "",
+          body: smsBody,
+          status: "failed",
+          provider: "twilio",
+          error: message,
+          stripeEventId: args.stripeEventId,
+          stripeInvoiceId,
+        });
+      }
+    }
+
+    if (email) {
+      try {
+        const result = await sendEmail({
+          to: email,
+          subject: emailSubject,
+          body: emailBody,
+        });
+
+        await saveRecoveryMessage({
+          lead,
+          channel: "email",
+          to: email,
+          fromAddress: result.from,
+          subject: emailSubject,
+          body: emailBody,
+          status: "sent",
+          provider: "resend",
+          providerMessageId: result.providerMessageId,
+          stripeEventId: args.stripeEventId,
+          stripeInvoiceId,
+        });
+
+        console.log("PAYMENT_FAILED_RECOVERY_EMAIL_SENT", {
+          lead_id: lead.id || null,
+          slug: lead.slug || "",
+          stripe_event_id: args.stripeEventId,
+          stripe_invoice_id: stripeInvoiceId,
+        });
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Unknown email send error";
+
+        console.error("PAYMENT_FAILED_RECOVERY_SEND_FAILED", {
+          channel: "email",
+          lead_id: lead.id || null,
+          slug: lead.slug || "",
+          stripe_event_id: args.stripeEventId,
+          stripe_invoice_id: stripeInvoiceId,
+          error: message,
+        });
+
+        await saveRecoveryMessage({
+          lead,
+          channel: "email",
+          to: email,
+          fromAddress: "",
+          subject: emailSubject,
+          body: emailBody,
+          status: "failed",
+          provider: "resend",
+          error: message,
+          stripeEventId: args.stripeEventId,
+          stripeInvoiceId,
+        });
+      }
+    }
+  } catch (error) {
+    console.error("PAYMENT_FAILED_RECOVERY_SEND_FAILED", {
+      stripe_event_id: args.stripeEventId,
+      stripe_invoice_id: stripeInvoiceId,
+      error: error instanceof Error ? error.message : "Unknown recovery error",
+    });
+  }
+}
+
 async function updatePaymentStatusBySubscription(
   subscription: Stripe.Subscription,
   paymentStatus: string
@@ -156,10 +417,13 @@ export async function POST(req: Request) {
     }
 
     if (event.type === "invoice.payment_failed") {
-      await updatePaymentStatusByInvoice(
-        event.data.object as Stripe.Invoice,
-        "payment_failed"
-      );
+      const invoice = event.data.object as Stripe.Invoice;
+
+      await updatePaymentStatusByInvoice(invoice, "payment_failed");
+      await sendPaymentFailedRecovery({
+        invoice,
+        stripeEventId: event.id,
+      });
     }
 
     if (event.type === "customer.subscription.deleted") {

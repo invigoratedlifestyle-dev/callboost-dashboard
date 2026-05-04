@@ -18,6 +18,7 @@ export type LeadMessageRow = {
   provider?: string | null;
   provider_message_id?: string | null;
   error?: string | null;
+  metadata?: Record<string, unknown> | null;
   created_at?: string | null;
   read_at?: string | null;
 };
@@ -36,6 +37,7 @@ export type LeadMessage = {
   provider: string;
   providerMessageId: string;
   error: string;
+  metadata: Record<string, unknown>;
   createdAt: string;
   readAt: string;
 };
@@ -87,6 +89,7 @@ export function rowToLeadMessage(row: LeadMessageRow): LeadMessage {
     provider: getString(row.provider),
     providerMessageId: getString(row.provider_message_id),
     error: getString(row.error),
+    metadata: row.metadata && typeof row.metadata === "object" ? row.metadata : {},
     createdAt: getString(row.created_at),
     readAt: getString(row.read_at),
   };
@@ -105,6 +108,7 @@ export async function insertLeadMessage(args: {
   provider?: string | null;
   providerMessageId?: string | null;
   error?: string | null;
+  metadata?: Record<string, unknown> | null;
 }) {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
@@ -122,6 +126,7 @@ export async function insertLeadMessage(args: {
       provider: args.provider || null,
       provider_message_id: args.providerMessageId || null,
       error: args.error || null,
+      metadata: args.metadata || {},
     })
     .select("*")
     .single();
@@ -129,6 +134,33 @@ export async function insertLeadMessage(args: {
   if (error) throw error;
 
   return rowToLeadMessage(data as LeadMessageRow);
+}
+
+export async function paymentFailedRecoveryMessageExists(args: {
+  leadId?: string | number | null;
+  slug: string;
+  stripeInvoiceId: string;
+}) {
+  const supabase = getSupabaseAdmin();
+  let query = supabase
+    .from("lead_messages")
+    .select("id")
+    .eq("direction", "outbound")
+    .eq("metadata->>reason", "payment_failed_recovery")
+    .eq("metadata->>stripe_invoice_id", args.stripeInvoiceId)
+    .limit(1);
+
+  if (args.leadId) {
+    query = query.eq("lead_id", args.leadId);
+  } else {
+    query = query.eq("slug", args.slug);
+  }
+
+  const { data, error } = await query;
+
+  if (error) throw error;
+
+  return Boolean(data?.length);
 }
 
 export async function listLeadMessages(args: {
