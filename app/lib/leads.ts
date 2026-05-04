@@ -52,6 +52,7 @@ export type LeadMessage = {
   providerMessageId: string;
   error: string;
   createdAt: string;
+  readAt: string;
 };
 
 export type Lead = {

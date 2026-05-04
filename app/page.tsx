@@ -15,6 +15,17 @@ type DashboardLead = Lead & {
   websiteEvaluation?: WebsiteEvaluation;
 };
 
+type ReplyNotification = {
+  id: string;
+  lead_id: string | number | null;
+  lead_slug: string;
+  business_name: string;
+  channel: "sms" | "email";
+  body: string;
+  subject: string;
+  created_at: string;
+};
+
 const lifecycleActions: Array<{ status: LeadStatus; label: string }> = [
   { status: "archived", label: "Archive" },
   { status: "contacted", label: "Mark contacted" },
@@ -115,6 +126,24 @@ function isPlaceholderEmail(email: string) {
   );
 }
 
+function formatNotificationTime(value?: string) {
+  if (!value) return "";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString();
+}
+
+function getReplyPreview(notification: ReplyNotification) {
+  const text = notification.body || notification.subject || "New reply";
+
+  return text.length > 90 ? `${text.slice(0, 87)}...` : text;
+}
+
 export default function DashboardPage() {
   const [leads, setLeads] = useState<DashboardLead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -122,6 +151,10 @@ export default function DashboardPage() {
   const [enriching, setEnriching] = useState(false);
   const [activeFilter, setActiveFilter] = useState<LeadFilter>("active");
   const [updatingLead, setUpdatingLead] = useState("");
+  const [replyNotifications, setReplyNotifications] = useState<
+    ReplyNotification[]
+  >([]);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const actionRunning = generating || enriching;
 
   async function loadLeads() {
@@ -133,6 +166,22 @@ export default function DashboardPage() {
 
     setLeads(data.leads || []);
     setLoading(false);
+  }
+
+  async function loadReplyNotifications() {
+    try {
+      const res = await fetch("/api/notifications/replies", {
+        cache: "no-store",
+      });
+
+      if (!res.ok) return;
+
+      const data = await res.json();
+
+      setReplyNotifications(data.notifications || []);
+    } catch (error) {
+      console.error("Failed to load reply notifications:", error);
+    }
   }
 
   async function handleGenerateLeads() {
@@ -233,6 +282,28 @@ export default function DashboardPage() {
     loadLeads();
   }, []);
 
+  useEffect(() => {
+    // Initial notification load plus light polling for new replies.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadReplyNotifications();
+
+    const interval = window.setInterval(() => {
+      void loadReplyNotifications();
+    }, 25000);
+
+    return () => window.clearInterval(interval);
+  }, []);
+
+  const unreadLeadSlugs = useMemo(
+    () =>
+      new Set(
+        replyNotifications
+          .map((notification) => notification.lead_slug)
+          .filter(Boolean)
+      ),
+    [replyNotifications]
+  );
+
   const visibleLeads = useMemo(() => {
     const filteredLeads = leads.filter((lead) => {
       const status = lead.status || "new";
@@ -296,6 +367,64 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex flex-wrap gap-3">
+            <div className="relative">
+              <button
+                onClick={() => setNotificationsOpen((open) => !open)}
+                className="relative rounded-lg bg-white/10 px-5 py-3 text-sm font-bold text-slate-200 hover:bg-white/15"
+              >
+                Replies
+                {replyNotifications.length > 0 ? (
+                  <span className="ml-2 rounded-full bg-red-500 px-2 py-0.5 text-xs text-white">
+                    {replyNotifications.length}
+                  </span>
+                ) : null}
+              </button>
+
+              {notificationsOpen ? (
+                <div className="absolute right-0 z-20 mt-2 w-[min(22rem,calc(100vw-3rem))] rounded-xl border border-white/10 bg-slate-900 p-3 shadow-2xl">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <p className="text-sm font-bold text-white">
+                      Unread replies
+                    </p>
+                    <span className="text-xs text-slate-500">
+                      {replyNotifications.length}
+                    </span>
+                  </div>
+
+                  {replyNotifications.length ? (
+                    <div className="max-h-96 space-y-2 overflow-y-auto">
+                      {replyNotifications.map((notification) => (
+                        <Link
+                          key={notification.id}
+                          href={`/leads/${notification.lead_slug}`}
+                          className="block rounded-lg border border-white/10 bg-white/5 p-3 hover:bg-white/10"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="min-w-0 truncate text-sm font-bold text-white">
+                              {notification.business_name}
+                            </p>
+                            <span className="rounded-full bg-blue-500/15 px-2 py-0.5 text-[10px] font-bold uppercase text-blue-300">
+                              {notification.channel}
+                            </span>
+                          </div>
+                          <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-300">
+                            {getReplyPreview(notification)}
+                          </p>
+                          <p className="mt-2 text-[11px] text-slate-500">
+                            {formatNotificationTime(notification.created_at)}
+                          </p>
+                        </Link>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="rounded-lg bg-white/5 p-3 text-sm text-slate-400">
+                      No unread replies.
+                    </p>
+                  )}
+                </div>
+              ) : null}
+            </div>
+
             <button
               onClick={handleGenerateLeads}
               disabled={actionRunning}
@@ -411,9 +540,16 @@ export default function DashboardPage() {
                     return (
                       <tr key={leadKey} className="border-b border-white/10">
                         <td className="px-5 py-4">
-                          <p className="text-sm font-bold text-white">
-                            {lead.businessName || "Unnamed business"}
-                          </p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm font-bold text-white">
+                              {lead.businessName || "Unnamed business"}
+                            </p>
+                            {leadRoute && unreadLeadSlugs.has(leadRoute) ? (
+                              <span className="rounded-full bg-cyan-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-cyan-300">
+                                New reply
+                              </span>
+                            ) : null}
+                          </div>
                           <p className="mt-1 text-xs text-slate-400">
                             {lead.trade || "Unknown trade"} - {lead.city || "Unknown city"}
                           </p>

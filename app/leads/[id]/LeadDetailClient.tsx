@@ -315,6 +315,38 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     };
   }, [slug]);
 
+  useEffect(() => {
+    let active = true;
+
+    async function markRepliesRead() {
+      try {
+        const res = await fetch(`/api/leads/${slug}/messages/read`, {
+          method: "POST",
+        });
+
+        if (!res.ok || !active) return;
+
+        const now = new Date().toISOString();
+
+        setMessages((currentMessages) =>
+          currentMessages.map((message) =>
+            message.direction === "inbound" && !message.readAt
+              ? { ...message, readAt: now }
+              : message
+          )
+        );
+      } catch (error) {
+        console.error("Failed to mark replies read:", error);
+      }
+    }
+
+    void markRepliesRead();
+
+    return () => {
+      active = false;
+    };
+  }, [slug]);
+
   if (loading) {
     return (
       <main className="min-h-screen bg-slate-950 p-8 text-white">

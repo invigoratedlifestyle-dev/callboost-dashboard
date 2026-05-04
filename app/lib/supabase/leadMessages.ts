@@ -19,6 +19,7 @@ export type LeadMessageRow = {
   provider_message_id?: string | null;
   error?: string | null;
   created_at?: string | null;
+  read_at?: string | null;
 };
 
 export type LeadMessage = {
@@ -36,6 +37,18 @@ export type LeadMessage = {
   providerMessageId: string;
   error: string;
   createdAt: string;
+  readAt: string;
+};
+
+export type UnreadReplyNotification = {
+  id: string;
+  lead_id: string | number | null;
+  lead_slug: string;
+  business_name: string;
+  channel: LeadMessageChannel;
+  body: string;
+  subject: string;
+  created_at: string;
 };
 
 function getString(value: unknown) {
@@ -74,6 +87,7 @@ export function rowToLeadMessage(row: LeadMessageRow): LeadMessage {
     providerMessageId: getString(row.provider_message_id),
     error: getString(row.error),
     createdAt: getString(row.created_at),
+    readAt: getString(row.read_at),
   };
 }
 
@@ -167,4 +181,120 @@ export async function listRecentOutboundEmailMessages(limit = 1000) {
   if (error) throw error;
 
   return (data || []).map((row) => rowToLeadMessage(row as LeadMessageRow));
+}
+
+type LeadLookupRow = {
+  id?: string | number | null;
+  slug?: string | null;
+  name?: string | null;
+  data?: Record<string, unknown> | null;
+};
+
+function getBusinessName(row?: LeadLookupRow | null) {
+  if (!row) return "";
+
+  const data = row.data && typeof row.data === "object" ? row.data : {};
+
+  return getString(row.name) || getString(data.businessName) || getString(row.slug);
+}
+
+export async function listUnreadReplyNotifications(limit = 20) {
+  const supabase = getSupabaseAdmin();
+  const { data: messages, error } = await supabase
+    .from("lead_messages")
+    .select("id, lead_id, slug, channel, body, subject, created_at")
+    .eq("direction", "inbound")
+    .is("read_at", null)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+
+  const messageRows = (messages || []) as LeadMessageRow[];
+  const leadIds = Array.from(
+    new Set(
+      messageRows
+        .map((message) => message.lead_id)
+        .filter((leadId): leadId is string | number => Boolean(leadId))
+        .map((leadId) => String(leadId))
+    )
+  );
+  const slugs = Array.from(
+    new Set(messageRows.map((message) => getString(message.slug)).filter(Boolean))
+  );
+  const leadRows: LeadLookupRow[] = [];
+
+  if (leadIds.length) {
+    const { data, error: leadsError } = await supabase
+      .from("leads")
+      .select("id, slug, name, data")
+      .in("id", leadIds);
+
+    if (leadsError) throw leadsError;
+    leadRows.push(...((data || []) as LeadLookupRow[]));
+  }
+
+  if (slugs.length) {
+    const { data, error: leadsError } = await supabase
+      .from("leads")
+      .select("id, slug, name, data")
+      .in("slug", slugs);
+
+    if (leadsError) throw leadsError;
+    leadRows.push(...((data || []) as LeadLookupRow[]));
+  }
+
+  const leadsById = new Map(
+    leadRows
+      .filter((lead) => lead.id !== null && lead.id !== undefined)
+      .map((lead) => [String(lead.id), lead])
+  );
+  const leadsBySlug = new Map(
+    leadRows.filter((lead) => lead.slug).map((lead) => [getString(lead.slug), lead])
+  );
+
+  return messageRows.map((message): UnreadReplyNotification => {
+    const leadById =
+      message.lead_id !== null && message.lead_id !== undefined
+        ? leadsById.get(String(message.lead_id))
+        : null;
+    const lead = leadById || leadsBySlug.get(getString(message.slug)) || null;
+    const leadSlug = getString(lead?.slug) || getString(message.slug);
+
+    return {
+      id: getString(message.id),
+      lead_id: message.lead_id || lead?.id || null,
+      lead_slug: leadSlug,
+      business_name: getBusinessName(lead) || leadSlug || "Unknown business",
+      channel: getChannel(message.channel),
+      body: getString(message.body),
+      subject: getString(message.subject),
+      created_at: getString(message.created_at),
+    };
+  });
+}
+
+export async function markLeadInboundMessagesRead(args: {
+  leadId?: string | number | null;
+  slug: string;
+}) {
+  const supabase = getSupabaseAdmin();
+  const now = new Date().toISOString();
+  let query = supabase
+    .from("lead_messages")
+    .update({ read_at: now })
+    .eq("direction", "inbound")
+    .is("read_at", null);
+
+  if (args.leadId) {
+    query = query.eq("lead_id", args.leadId);
+  } else {
+    query = query.eq("slug", args.slug);
+  }
+
+  const { data, error } = await query.select("id");
+
+  if (error) throw error;
+
+  return data?.length || 0;
 }
