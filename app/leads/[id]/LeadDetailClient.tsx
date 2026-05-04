@@ -282,6 +282,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const [checkoutUrl, setCheckoutUrl] = useState("");
   const [checkoutNotice, setCheckoutNotice] = useState("");
   const [checkoutError, setCheckoutError] = useState("");
+  const [openingPortal, setOpeningPortal] = useState(false);
+  const [portalError, setPortalError] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -579,6 +581,40 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       );
     } finally {
       setCreatingCheckout(false);
+    }
+  };
+  const handleOpenBillingPortal = async () => {
+    if (!lead) return;
+
+    setOpeningPortal(true);
+    setPortalError("");
+
+    try {
+      const res = await fetch("/api/stripe/portal", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          leadId: lead.id,
+          slug: lead.slug || slug,
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.url) {
+        throw new Error(data.error || "Failed to open billing portal");
+      }
+
+      window.open(data.url, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      setPortalError(
+        error instanceof Error
+          ? error.message
+          : "Failed to open billing portal"
+      );
+    } finally {
+      setOpeningPortal(false);
     }
   };
   const handleSendOffer = async (channel: OutreachChannel) => {
@@ -1036,6 +1072,24 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 </p>
               </div>
             </div>
+
+            {lead.status === "client" && lead.stripeCustomerId ? (
+              <div className="mt-5">
+                <button
+                  onClick={handleOpenBillingPortal}
+                  disabled={openingPortal}
+                  className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {openingPortal ? "Opening..." : "Open Billing Portal"}
+                </button>
+
+                {portalError ? (
+                  <p className="mt-3 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">
+                    {portalError}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
           </section>
         ) : null}
 

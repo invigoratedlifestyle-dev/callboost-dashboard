@@ -232,10 +232,24 @@ async function sendPaymentFailedRecovery(args: {
       return;
     }
 
+    let portalUrl = null;
+
+    try {
+      if (lead?.stripe_customer_id) {
+        const session = await getStripe().billingPortal.sessions.create({
+          customer: lead.stripe_customer_id,
+          return_url: `${process.env.NEXT_PUBLIC_APP_URL}/success`,
+        });
+        portalUrl = session.url;
+      }
+    } catch (err) {
+      console.error("PORTAL_LINK_FAILED", err);
+    }
+
     const name = getClientName(lead);
-    const smsBody = `Hi ${name}, just a quick heads up — your CallBoost website subscription payment didn’t go through. Please update your payment method so your website stays live.`;
+    let smsBody = `Hi ${name}, just a quick heads up — your CallBoost website subscription payment didn’t go through. Please update your payment method so your website stays live.`;
     const emailSubject = "Action needed: CallBoost payment failed";
-    const emailBody = [
+    let emailBody = [
       `Hi ${name},`,
       "",
       "Just a quick heads up — your CallBoost website subscription payment didn’t go through.",
@@ -245,6 +259,12 @@ async function sendPaymentFailedRecovery(args: {
       "Thanks,",
       "CallBoost",
     ].join("\n");
+
+    if (portalUrl) {
+      smsBody += `\n\nUpdate your payment method here: ${portalUrl}`;
+      emailBody += `\n\nUpdate your payment method here: ${portalUrl}`;
+    }
+
     const phone = getString(lead.phone);
     const email = getString(lead.email);
 
