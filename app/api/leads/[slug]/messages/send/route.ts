@@ -5,8 +5,8 @@ import { insertLeadMessage } from "../../../../../lib/supabase/leadMessages";
 import {
   getLeadRowBySlug,
   rowToLead,
-  updateLeadBySlug,
 } from "../../../../../lib/supabase/leads";
+import { getSupabaseAdmin } from "../../../../../lib/supabase/server";
 
 type Channel = "sms" | "email";
 
@@ -78,6 +78,21 @@ async function sendEmail(args: {
     from,
     providerMessageId: data?.id || "",
   };
+}
+
+async function autoMarkLeadContacted(leadId: string | number) {
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase
+    .from("leads")
+    .update({ status: "contacted" })
+    .eq("id", leadId)
+    .eq("status", "lead");
+
+  if (error) {
+    console.warn("LEAD_AUTO_CONTACTED_UPDATE_FAILED", error);
+  }
+
+  return !error;
 }
 
 export async function POST(
@@ -180,15 +195,19 @@ export async function POST(
 
     let updatedLead = lead;
 
-    if (status === "sent" && lead.status !== "client") {
-      updatedLead = await updateLeadBySlug(slug, {
-        ...lead,
-        status: "contacted",
-        contactedAt:
-          typeof lead.contactedAt === "string" && lead.contactedAt
-            ? lead.contactedAt
-            : new Date().toISOString(),
-      });
+    if (status === "sent" && lead.status === "lead" && leadRow.id) {
+      const statusUpdated = await autoMarkLeadContacted(leadRow.id);
+
+      if (statusUpdated) {
+        updatedLead = {
+          ...lead,
+          status: "contacted",
+          contactedAt:
+            typeof lead.contactedAt === "string" && lead.contactedAt
+              ? lead.contactedAt
+              : new Date().toISOString(),
+        };
+      }
     }
 
     return NextResponse.json(
