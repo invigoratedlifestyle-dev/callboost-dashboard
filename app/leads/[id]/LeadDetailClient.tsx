@@ -208,6 +208,23 @@ function getTimeline(messages: LeadMessage[], callbacks: CallbackRequest[]) {
   }) satisfies TimelineItem[];
 }
 
+function normalizeWebsite(value: string) {
+  const trimmed = value.trim();
+
+  if (!trimmed) return "";
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+
+  return `https://${trimmed}`;
+}
+
+function normalizeEmail(value: string) {
+  return value.trim();
+}
+
+function normalizePhone(value: string) {
+  return value.trim();
+}
+
 export default function LeadDetailClient({ slug }: { slug: string }) {
   const [lead, setLead] = useState<LeadWithGeneratedContent | null>(null);
   const [callbacks, setCallbacks] = useState<CallbackRequest[]>([]);
@@ -229,6 +246,14 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     useState(false);
   const [callbackForwardToEmail, setCallbackForwardToEmail] = useState("");
   const [callbackForwardToPhone, setCallbackForwardToPhone] = useState("");
+  const [isEditingContact, setIsEditingContact] = useState(false);
+  const [savingContact, setSavingContact] = useState(false);
+  const [contactError, setContactError] = useState("");
+  const [contactDraft, setContactDraft] = useState({
+    phone: "",
+    email: "",
+    website: "",
+  });
 
   useEffect(() => {
     let active = true;
@@ -253,6 +278,11 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
 
       setLead(loadedLead);
       setCallbacks(data.callbacks || []);
+      setContactDraft({
+        phone: loadedLead.phone || "",
+        email: loadedLead.email || "",
+        website: loadedLead.website || "",
+      });
       setSmsTo(loadedLead.phone || "");
       setSmsBody(buildSmsOffer(loadedLead));
       setEmailTo(loadedLead.email || "");
@@ -305,6 +335,83 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const subject = `Quick win for ${lead.businessName}`;
   const handleLeadUpdated = (updatedLead: Lead) => {
     setLead(updatedLead);
+  };
+  const handleStartContactEdit = () => {
+    if (!lead) return;
+
+    setContactDraft({
+      phone: lead.phone || "",
+      email: lead.email || "",
+      website: lead.website || "",
+    });
+    setContactError("");
+    setIsEditingContact(true);
+  };
+  const handleCancelContactEdit = () => {
+    if (lead) {
+      setContactDraft({
+        phone: lead.phone || "",
+        email: lead.email || "",
+        website: lead.website || "",
+      });
+    }
+
+    setContactError("");
+    setIsEditingContact(false);
+  };
+  const handleSaveContactEdit = async () => {
+    if (!lead) return;
+
+    const nextPhone = normalizePhone(contactDraft.phone);
+    const nextEmail = normalizeEmail(contactDraft.email);
+    const nextWebsite = normalizeWebsite(contactDraft.website);
+
+    if (nextEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) {
+      setContactError("Email looks invalid.");
+      return;
+    }
+
+    setSavingContact(true);
+    setContactError("");
+
+    try {
+      const res = await fetch(`/api/leads/${lead.slug || lead.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          phone: nextPhone,
+          email: nextEmail,
+          website: nextWebsite,
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to update contact fields");
+      }
+
+      const updatedLead = data.lead as LeadWithGeneratedContent;
+
+      setLead(updatedLead);
+      setContactDraft({
+        phone: updatedLead.phone || "",
+        email: updatedLead.email || "",
+        website: updatedLead.website || "",
+      });
+      setSmsTo(updatedLead.phone || "");
+      setEmailTo(updatedLead.email || "");
+      setIsEditingContact(false);
+    } catch (error) {
+      setContactError(
+        error instanceof Error
+          ? error.message
+          : "Failed to update contact fields"
+      );
+    } finally {
+      setSavingContact(false);
+    }
   };
   const handleSaveForwarding = async () => {
     if (!lead) return;
@@ -476,12 +583,55 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                   {updatingStatus === action.status ? "Saving..." : action.label}
                 </button>
               ))}
+
+            <button
+              onClick={handleStartContactEdit}
+              disabled={isEditingContact}
+              className="rounded-lg bg-slate-700 px-3 py-2 text-xs font-bold text-white hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Edit
+            </button>
           </div>
         </div>
 
         <div className="mt-8 grid gap-6 lg:grid-cols-2">
           <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
-            <h2 className="mb-4 text-xl font-bold">Business Info</h2>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-xl font-bold">Business Info</h2>
+
+              {isEditingContact ? (
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={handleSaveContactEdit}
+                    disabled={savingContact}
+                    className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {savingContact ? "Saving..." : "Save"}
+                  </button>
+
+                  <button
+                    onClick={handleCancelContactEdit}
+                    disabled={savingContact}
+                    className="rounded-lg bg-slate-700 px-3 py-2 text-xs font-bold text-white hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={handleStartContactEdit}
+                  className="rounded-lg bg-slate-700 px-3 py-2 text-xs font-bold text-white hover:bg-slate-600"
+                >
+                  Edit
+                </button>
+              )}
+            </div>
+
+            {contactError ? (
+              <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm font-bold text-red-300">
+                {contactError}
+              </p>
+            ) : null}
 
             <div className="space-y-3 text-slate-300">
               <p>
@@ -492,39 +642,85 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 <strong className="text-white">City:</strong> {lead.city || "-"}
               </p>
 
-              <p>
+              <div>
                 <strong className="text-white">Phone:</strong>{" "}
-                {lead.phone || "Not found"}
-              </p>
+                {isEditingContact ? (
+                  <input
+                    value={contactDraft.phone}
+                    onChange={(event) =>
+                      setContactDraft((current) => ({
+                        ...current,
+                        phone: event.target.value,
+                      }))
+                    }
+                    className="mt-2 w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none"
+                    placeholder="0400 000 000"
+                  />
+                ) : (
+                  lead.phone || "Not found"
+                )}
+              </div>
 
-              <p>
+              <div>
                 <strong className="text-white">Email:</strong>{" "}
-                {lead.email ? (
-                  <a
-                    href={`mailto:${lead.email}`}
-                    className="text-blue-400 hover:text-blue-300"
-                  >
-                    {lead.email}
-                  </a>
+                {isEditingContact ? (
+                  <input
+                    value={contactDraft.email}
+                    onChange={(event) =>
+                      setContactDraft((current) => ({
+                        ...current,
+                        email: event.target.value,
+                      }))
+                    }
+                    className="mt-2 w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none"
+                    placeholder="name@example.com"
+                  />
                 ) : (
-                  <span className="text-slate-500">Not found yet</span>
+                  <>
+                    {lead.email ? (
+                      <a
+                        href={`mailto:${lead.email}`}
+                        className="text-blue-400 hover:text-blue-300"
+                      >
+                        {lead.email}
+                      </a>
+                    ) : (
+                      <span className="text-slate-500">Not found yet</span>
+                    )}
+                  </>
                 )}
-              </p>
+              </div>
 
-              <p>
+              <div>
                 <strong className="text-white">Website:</strong>{" "}
-                {lead.website ? (
-                  <a
-                    href={lead.website}
-                    target="_blank"
-                    className="text-blue-400 hover:text-blue-300"
-                  >
-                    {lead.website}
-                  </a>
+                {isEditingContact ? (
+                  <input
+                    value={contactDraft.website}
+                    onChange={(event) =>
+                      setContactDraft((current) => ({
+                        ...current,
+                        website: event.target.value,
+                      }))
+                    }
+                    className="mt-2 w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none"
+                    placeholder="https://example.com"
+                  />
                 ) : (
-                  <span className="text-slate-500">Not found yet</span>
+                  <>
+                    {lead.website ? (
+                      <a
+                        href={lead.website}
+                        target="_blank"
+                        className="text-blue-400 hover:text-blue-300"
+                      >
+                        {lead.website}
+                      </a>
+                    ) : (
+                      <span className="text-slate-500">Not found yet</span>
+                    )}
+                  </>
                 )}
-              </p>
+              </div>
 
               <p>
                 <strong className="text-white">Contact Page:</strong>{" "}

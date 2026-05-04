@@ -16,6 +16,10 @@ function getNullableString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function hasOwn(body: Record<string, unknown>, field: string) {
+  return Object.prototype.hasOwnProperty.call(body, field);
+}
+
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ slug: string }> }
@@ -54,7 +58,7 @@ export async function PATCH(
   { params }: { params: Promise<{ slug: string }> }
 ) {
   const { slug } = await params;
-  const body = await req.json().catch(() => ({}));
+  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   const status = body.status;
   const reviewNotes =
     typeof body.reviewNotes === "string" ? body.reviewNotes : undefined;
@@ -75,23 +79,53 @@ export async function PATCH(
         return NextResponse.json({ error: "Lead not found" }, { status: 404 });
       }
 
-      updatedLead = await updateLeadBySlug(slug, {
-        ...existingLead,
-        callbackForwardingEnabled:
+      const nextLead = { ...existingLead };
+
+      if (hasOwn(body, "phone") && typeof body.phone === "string") {
+        nextLead.phone = body.phone;
+      }
+
+      if (hasOwn(body, "email") && typeof body.email === "string") {
+        nextLead.email = body.email;
+      }
+
+      if (hasOwn(body, "website") && typeof body.website === "string") {
+        nextLead.website = body.website;
+      }
+
+      if (hasOwn(body, "callbackForwardingEnabled")) {
+        nextLead.callbackForwardingEnabled =
           body.callbackForwardingEnabled === true ||
-          body.callbackForwardingEnabled === "true",
-        callbackForwardToEmail: getNullableString(body.callbackForwardToEmail),
-        callbackForwardToPhone: getNullableString(body.callbackForwardToPhone),
-      });
+          body.callbackForwardingEnabled === "true";
+      }
+
+      if (hasOwn(body, "callbackForwardToEmail")) {
+        nextLead.callbackForwardToEmail = getNullableString(
+          body.callbackForwardToEmail
+        );
+      }
+
+      if (hasOwn(body, "callbackForwardToPhone")) {
+        nextLead.callbackForwardToPhone = getNullableString(
+          body.callbackForwardToPhone
+        );
+      }
+
+      try {
+        updatedLead = await updateLeadBySlug(slug, nextLead);
+      } catch (error) {
+        console.error("LEAD_UPDATE_ERROR", error);
+        throw error;
+      }
     }
 
     if (!updatedLead) {
       return NextResponse.json({ error: "Lead not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ lead: updatedLead });
+    return NextResponse.json({ ok: true, lead: updatedLead });
   } catch (error) {
-    console.error("Failed to update lead:", error);
+    console.error("LEAD_PATCH_FATAL", error);
 
     return NextResponse.json(
       {
