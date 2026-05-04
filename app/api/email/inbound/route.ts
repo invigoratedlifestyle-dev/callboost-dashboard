@@ -1,3 +1,4 @@
+import { Resend } from "resend";
 import {
   insertLeadMessage,
   listRecentOutboundEmailMessages,
@@ -22,6 +23,9 @@ type ResendInboundPayload = {
     subject?: string;
     text?: string;
     html?: string;
+    email_id?: string;
+    emailId?: string;
+    id?: string;
     textBody?: string;
     htmlBody?: string;
     text_body?: string;
@@ -33,6 +37,14 @@ type ResendInboundPayload = {
     attachments?: unknown;
     headers?: unknown;
   };
+};
+
+type FullInboundEmail = {
+  from?: string | null;
+  to?: string[] | string | null;
+  subject?: string | null;
+  text?: string | null;
+  html?: string | null;
 };
 
 function getString(value: unknown) {
@@ -156,6 +168,69 @@ function extractBody(data: ResendInboundPayload["data"]) {
   return body || "(No message body)";
 }
 
+function getBodyFromEmail(email: FullInboundEmail | null) {
+  const textBody = email?.text?.trim();
+  const htmlBody = email?.html?.trim();
+
+  if (textBody) return textBody;
+  if (htmlBody) return stripHtml(htmlBody);
+
+  return "";
+}
+
+async function fetchInboundEmailContent(
+  emailId: string
+): Promise<FullInboundEmail | null> {
+  const apiKey = process.env.RESEND_API_KEY;
+
+  if (!apiKey) {
+    console.log("Inbound email content fetch skipped: missing RESEND_API_KEY");
+    return null;
+  }
+
+  try {
+    const resend = new Resend(apiKey);
+    const result = await resend.emails.receiving.get(emailId);
+
+    if (result.error) {
+      throw new Error(result.error.message);
+    }
+
+    if (result.data) {
+      return result.data as FullInboundEmail;
+    }
+  } catch (sdkError) {
+    console.error("Resend SDK inbound email fetch failed:", sdkError);
+  }
+
+  try {
+    const response = await fetch(
+      `https://api.resend.com/emails/receiving/${encodeURIComponent(emailId)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      const details = await response.text().catch(() => "");
+      throw new Error(details || `HTTP ${response.status}`);
+    }
+
+    const json = (await response.json()) as
+      | FullInboundEmail
+      | { data?: FullInboundEmail };
+    const wrapped = json as { data?: FullInboundEmail };
+
+    return wrapped.data || (json as FullInboundEmail);
+  } catch (fetchError) {
+    console.error("Resend API inbound email fetch failed:", fetchError);
+  }
+
+  return null;
+}
+
 function normalizeEmail(value: unknown) {
   return extractEmail(value) || getString(value).toLowerCase();
 }
@@ -205,28 +280,31 @@ async function findLeadByEmail(
 export async function POST(req: Request) {
   try {
     const payload = (await req.json().catch(() => ({}))) as ResendInboundPayload;
-    console.log("RESEND_INBOUND_PAYLOAD", JSON.stringify(payload, null, 2));
-    console.log("RESEND_INBOUND_DATA_KEYS", Object.keys(payload?.data || {}));
 
     if (payload.type !== "email.received") {
       return new Response("ok", { status: 200 });
     }
 
     const data = payload.data || {};
-    console.log("Inbound email payload keys:", Object.keys(payload || {}));
-    console.log("Inbound email data keys:", Object.keys(data || {}));
-    console.log("Inbound email data:", JSON.stringify(data || {}, null, 2));
-
-    const from = extractEmail(data.from);
-    const toRaw = Array.isArray(data.to) ? data.to[0] : data.to;
+    const emailId = getString(data.email_id || data.emailId || data.id);
+    const fullEmail = emailId ? await fetchInboundEmailContent(emailId) : null;
+    const from = extractEmail(data.from || fullEmail?.from);
+    const toValue = data.to || fullEmail?.to;
+    const toRaw = Array.isArray(toValue) ? toValue[0] : toValue;
     const to = getString(toRaw);
-    const subject = getString(data.subject) || "(No subject)";
-    const body = extractBody(data);
+    const subject = getString(data.subject || fullEmail?.subject) || "(No subject)";
+    const fetchedBody = getBodyFromEmail(fullEmail);
+    const body = fetchedBody || extractBody(data);
+
+    if (!fetchedBody && body === "(No message body)") {
+      console.log("No inbound email body field found", { emailId });
+    }
 
     console.log("Inbound email parsed:", {
       from,
       subject,
-      body,
+      hasBody: body !== "(No message body)",
+      emailId,
     });
 
     if (!from) {
