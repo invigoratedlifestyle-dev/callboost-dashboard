@@ -1,8 +1,8 @@
 export const lifecycleStatuses = [
   "lead",
   "contacted",
-  "interested",
   "client",
+  "archived",
 ] as const;
 
 export type LifecycleStatus = (typeof lifecycleStatuses)[number];
@@ -12,8 +12,8 @@ export const lifecycleTimestampFields: Record<
   string
 > = {
   contacted: "contactedAt",
-  interested: "interestedAt",
   client: "clientAt",
+  archived: "archivedAt",
 };
 
 export type LeadRecord = Record<string, unknown>;
@@ -30,7 +30,15 @@ export function getLeadStatus(lead: LeadRecord): LifecycleStatus {
     return lead.status;
   }
 
-  if (lead.status === "new" || lead.status === "archived") {
+  if (lead.status === "new") {
+    return "lead";
+  }
+
+  if (lead.status === "interested") {
+    return "contacted";
+  }
+
+  if (lead.status === null || lead.status === undefined || lead.status === "") {
     return "lead";
   }
 
@@ -54,9 +62,8 @@ export function withLifecycleDefaults<T extends LeadRecord>(lead: T): T {
     ...currentLead,
     status: getLeadStatus(lead),
     contactedAt: typeof lead.contactedAt === "string" ? lead.contactedAt : null,
-    interestedAt:
-      typeof lead.interestedAt === "string" ? lead.interestedAt : null,
     clientAt: typeof lead.clientAt === "string" ? lead.clientAt : null,
+    archivedAt: typeof lead.archivedAt === "string" ? lead.archivedAt : null,
     reviewNotes:
       typeof lead.reviewNotes === "string" ? lead.reviewNotes : "",
   };

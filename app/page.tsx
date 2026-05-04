@@ -31,8 +31,8 @@ const leadFilters: Array<{ value: LeadFilter; label: string }> = [
   { value: "all", label: "All" },
   { value: "lead", label: "Leads" },
   { value: "contacted", label: "Contacted" },
-  { value: "interested", label: "Interested" },
   { value: "client", label: "Clients" },
+  { value: "archived", label: "Archived" },
 ];
 
 const qualityLabels: Record<WebsiteEvaluation["quality"], string> = {
@@ -47,16 +47,16 @@ const qualityLabels: Record<WebsiteEvaluation["quality"], string> = {
 const statusLabels: Record<LeadStatus, string> = {
   lead: "Lead",
   contacted: "Contacted",
-  interested: "Interested",
   client: "Client",
+  archived: "Archived",
 };
 
 const filterTitles: Record<LeadFilter, string> = {
   all: "All Leads",
   lead: "Leads",
   contacted: "Contacted Leads",
-  interested: "Interested Leads",
   client: "Clients",
+  archived: "Archived Leads",
 };
 
 function getQualityBadgeClass(evaluation?: WebsiteEvaluation) {
@@ -112,8 +112,8 @@ function getMainIssue(lead: DashboardLead) {
 function getStatusBadgeClass(status?: string) {
   if (status === "lead") return "bg-blue-500/15 text-blue-300";
   if (status === "contacted") return "bg-slate-500/15 text-slate-300";
-  if (status === "interested") return "bg-yellow-500/15 text-yellow-300";
   if (status === "client") return "bg-green-500/15 text-green-300";
+  if (status === "archived") return "bg-slate-700 text-slate-300";
   return "bg-white/10 text-slate-400";
 }
 

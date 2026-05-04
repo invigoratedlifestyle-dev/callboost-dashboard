@@ -1,9 +1,10 @@
-alter table public.leads
-add column if not exists status text default 'lead';
+update public.leads
+set status = 'lead'
+where status is null;
 
 update public.leads
 set status = 'lead'
-where status is null or status = '' or status = 'new';
+where status = 'new' or status = '';
 
 update public.leads
 set status = 'contacted'

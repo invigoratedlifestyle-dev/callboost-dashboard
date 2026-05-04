@@ -127,11 +127,19 @@ export async function listLeads() {
 
 export async function listLeadsByStatus(status: LifecycleStatus) {
   const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
+
+  let query = supabase
     .from("leads")
     .select("*")
-    .eq("status", status)
     .order("created_at", { ascending: false });
+
+  if (status === "lead") {
+    query = query.or("status.eq.lead,status.is.null");
+  } else {
+    query = query.eq("status", status);
+  }
+
+  const { data, error } = await query;
 
   if (error) throw error;
 
@@ -215,12 +223,12 @@ export async function updateLeadStatusBySlug(
     updatedLead.contactedAt = now;
   }
 
-  if (status === "interested") {
-    updatedLead.interestedAt = now;
-  }
-
   if (status === "client") {
     updatedLead.clientAt = now;
+  }
+
+  if (status === "archived") {
+    updatedLead.archivedAt = now;
   }
 
   return updateLeadBySlug(slug, updatedLead);

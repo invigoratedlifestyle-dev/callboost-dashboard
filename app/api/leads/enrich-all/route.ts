@@ -32,7 +32,7 @@ function needsEnrichment(lead: Record<string, unknown>) {
 function isActiveLead(lead: Record<string, unknown>) {
   const status = typeof lead.status === "string" ? lead.status : "lead";
 
-  return status === "lead" || status === "contacted" || status === "interested";
+  return status === "lead" || status === "contacted";
 }
 
 export async function POST() {

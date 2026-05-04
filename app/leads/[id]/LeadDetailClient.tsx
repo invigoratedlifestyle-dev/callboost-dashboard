@@ -37,17 +37,16 @@ type TimelineItem =
     };
 
 const statusOptions: Array<{ status: LeadStatus; label: string }> = [
-  { status: "lead", label: "Lead" },
-  { status: "contacted", label: "Contacted" },
-  { status: "interested", label: "Interested" },
-  { status: "client", label: "Client" },
+  { status: "contacted", label: "Mark Contacted" },
+  { status: "client", label: "Mark Client" },
+  { status: "archived", label: "Archive" },
 ];
 
 const statusLabels: Record<LeadStatus, string> = {
   lead: "Lead",
   contacted: "Contacted",
-  interested: "Interested",
   client: "Client",
+  archived: "Archived",
 };
 
 const qualityLabels: Record<WebsiteEvaluation["quality"], string> = {
@@ -62,8 +61,8 @@ const qualityLabels: Record<WebsiteEvaluation["quality"], string> = {
 function getStatusBadgeClass(status?: string) {
   if (status === "lead") return "bg-blue-500/15 text-blue-300";
   if (status === "contacted") return "bg-slate-500/15 text-slate-300";
-  if (status === "interested") return "bg-yellow-500/15 text-yellow-300";
   if (status === "client") return "bg-green-500/15 text-green-300";
+  if (status === "archived") return "bg-slate-700 text-slate-300";
   return "bg-white/10 text-slate-400";
 }
 
@@ -608,22 +607,18 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
               {statusLabels[lead.status || "lead"] || "Lead"}
             </span>
 
-            <select
-              value={lead.status || "lead"}
-              onChange={(event) =>
-                handleStatusChange(event.target.value as LeadStatus)
-              }
-              disabled={Boolean(updatingStatus)}
-              className="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-xs font-bold text-white outline-none disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {statusOptions.map((option) => (
-                <option key={option.status} value={option.status}>
-                  {updatingStatus === option.status
-                    ? "Saving..."
-                    : option.label}
-                </option>
+            {statusOptions
+              .filter((option) => option.status !== lead.status)
+              .map((option) => (
+                <button
+                  key={option.status}
+                  onClick={() => handleStatusChange(option.status)}
+                  disabled={Boolean(updatingStatus)}
+                  className="rounded-lg bg-slate-700 px-3 py-2 text-xs font-bold text-white hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {updatingStatus === option.status ? "Saving..." : option.label}
+                </button>
               ))}
-            </select>
 
             <button
               onClick={handleStartContactEdit}
@@ -825,17 +820,17 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 </p>
               ) : null}
 
-              {lead.interestedAt ? (
-                <p>
-                  <strong className="text-white">Interested:</strong>{" "}
-                  {formatTimestamp(lead.interestedAt)}
-                </p>
-              ) : null}
-
               {lead.clientAt ? (
                 <p>
                   <strong className="text-white">Client:</strong>{" "}
                   {formatTimestamp(lead.clientAt)}
+                </p>
+              ) : null}
+
+              {lead.archivedAt ? (
+                <p>
+                  <strong className="text-white">Archived:</strong>{" "}
+                  {formatTimestamp(lead.archivedAt)}
                 </p>
               ) : null}
             </div>
