@@ -205,6 +205,8 @@ async function findLeadByEmail(
 export async function POST(req: Request) {
   try {
     const payload = (await req.json().catch(() => ({}))) as ResendInboundPayload;
+    console.log("RESEND_INBOUND_PAYLOAD", JSON.stringify(payload, null, 2));
+    console.log("RESEND_INBOUND_DATA_KEYS", Object.keys(payload?.data || {}));
 
     if (payload.type !== "email.received") {
       return new Response("ok", { status: 200 });
