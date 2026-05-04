@@ -30,9 +30,9 @@ function needsEnrichment(lead: Record<string, unknown>) {
 }
 
 function isActiveLead(lead: Record<string, unknown>) {
-  const status = typeof lead.status === "string" ? lead.status : "new";
+  const status = typeof lead.status === "string" ? lead.status : "lead";
 
-  return status === "new" || status === "contacted";
+  return status === "lead" || status === "contacted" || status === "interested";
 }
 
 export async function POST() {
@@ -40,7 +40,7 @@ export async function POST() {
     const leads = await listLeads();
     let enrichedCount = 0;
     let failedCount = 0;
-    let skippedArchivedCount = 0;
+    let skippedInactiveCount = 0;
 
     for (const lead of leads) {
       const slug =
@@ -57,10 +57,10 @@ export async function POST() {
         }
 
         if (!isActiveLead(lead)) {
-          skippedArchivedCount += 1;
+          skippedInactiveCount += 1;
           console.log("Enrich active skipped inactive lead:", {
             slug,
-            status: lead.status || "new",
+            status: lead.status || "lead",
           });
           continue;
         }
@@ -90,7 +90,7 @@ export async function POST() {
       success: true,
       enrichedCount,
       failedCount,
-      skippedArchivedCount,
+      skippedInactiveCount,
     });
   } catch (error) {
     console.error("Failed to enrich active leads:", error);

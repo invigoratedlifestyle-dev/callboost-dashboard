@@ -1,17 +1,19 @@
 export const lifecycleStatuses = [
-  "new",
-  "archived",
+  "lead",
   "contacted",
+  "interested",
+  "client",
 ] as const;
 
 export type LifecycleStatus = (typeof lifecycleStatuses)[number];
 
 export const lifecycleTimestampFields: Record<
-  Exclude<LifecycleStatus, "new">,
+  Exclude<LifecycleStatus, "lead">,
   string
 > = {
-  archived: "archivedAt",
   contacted: "contactedAt",
+  interested: "interestedAt",
+  client: "clientAt",
 };
 
 export type LeadRecord = Record<string, unknown>;
@@ -24,7 +26,15 @@ export function isLifecycleStatus(status: unknown): status is LifecycleStatus {
 }
 
 export function getLeadStatus(lead: LeadRecord): LifecycleStatus {
-  return isLifecycleStatus(lead.status) ? lead.status : "new";
+  if (isLifecycleStatus(lead.status)) {
+    return lead.status;
+  }
+
+  if (lead.status === "new" || lead.status === "archived") {
+    return "lead";
+  }
+
+  return "lead";
 }
 
 export function withLifecycleDefaults<T extends LeadRecord>(lead: T): T {
@@ -43,8 +53,10 @@ export function withLifecycleDefaults<T extends LeadRecord>(lead: T): T {
   return {
     ...currentLead,
     status: getLeadStatus(lead),
-    archivedAt: typeof lead.archivedAt === "string" ? lead.archivedAt : null,
     contactedAt: typeof lead.contactedAt === "string" ? lead.contactedAt : null,
+    interestedAt:
+      typeof lead.interestedAt === "string" ? lead.interestedAt : null,
+    clientAt: typeof lead.clientAt === "string" ? lead.clientAt : null,
     reviewNotes:
       typeof lead.reviewNotes === "string" ? lead.reviewNotes : "",
   };

@@ -45,6 +45,7 @@ export type UnreadReplyNotification = {
   lead_id: string | number | null;
   lead_slug: string;
   business_name: string;
+  lead_status: string;
   channel: LeadMessageChannel;
   body: string;
   subject: string;
@@ -187,6 +188,7 @@ type LeadLookupRow = {
   id?: string | number | null;
   slug?: string | null;
   name?: string | null;
+  status?: string | null;
   data?: Record<string, unknown> | null;
 };
 
@@ -227,7 +229,7 @@ export async function listUnreadReplyNotifications(limit = 20) {
   if (leadIds.length) {
     const { data, error: leadsError } = await supabase
       .from("leads")
-      .select("id, slug, name, data")
+      .select("id, slug, name, status, data")
       .in("id", leadIds);
 
     if (leadsError) throw leadsError;
@@ -237,7 +239,7 @@ export async function listUnreadReplyNotifications(limit = 20) {
   if (slugs.length) {
     const { data, error: leadsError } = await supabase
       .from("leads")
-      .select("id, slug, name, data")
+      .select("id, slug, name, status, data")
       .in("slug", slugs);
 
     if (leadsError) throw leadsError;
@@ -266,6 +268,7 @@ export async function listUnreadReplyNotifications(limit = 20) {
       lead_id: message.lead_id || lead?.id || null,
       lead_slug: leadSlug,
       business_name: getBusinessName(lead) || leadSlug || "Unknown business",
+      lead_status: getString(lead?.status) || "lead",
       channel: getChannel(message.channel),
       body: getString(message.body),
       subject: getString(message.subject),

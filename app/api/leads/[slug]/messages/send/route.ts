@@ -180,7 +180,7 @@ export async function POST(
 
     let updatedLead = lead;
 
-    if (status === "sent" && lead.status !== "archived") {
+    if (status === "sent" && lead.status !== "client") {
       updatedLead = await updateLeadBySlug(slug, {
         ...lead,
         status: "contacted",

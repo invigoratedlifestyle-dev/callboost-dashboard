@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Lead, LeadStatus, WebsiteEvaluation } from "./lib/leads";
 
 type LeadPriority = "high" | "medium" | "low";
 type WebsiteStatus = "no_website" | "weak_website" | "has_website";
-type LeadFilter = "active" | "archived" | "all";
+type LeadFilter = "all" | LeadStatus;
 type DashboardLead = Lead & {
   priority?: LeadPriority;
   leadScore?: number;
@@ -20,21 +20,19 @@ type ReplyNotification = {
   lead_id: string | number | null;
   lead_slug: string;
   business_name: string;
+  lead_status: LeadStatus;
   channel: "sms" | "email";
   body: string;
   subject: string;
   created_at: string;
 };
 
-const lifecycleActions: Array<{ status: LeadStatus; label: string }> = [
-  { status: "archived", label: "Archive" },
-  { status: "contacted", label: "Mark contacted" },
-];
-
 const leadFilters: Array<{ value: LeadFilter; label: string }> = [
-  { value: "active", label: "Active" },
-  { value: "archived", label: "Archived" },
   { value: "all", label: "All" },
+  { value: "lead", label: "Leads" },
+  { value: "contacted", label: "Contacted" },
+  { value: "interested", label: "Interested" },
+  { value: "client", label: "Clients" },
 ];
 
 const qualityLabels: Record<WebsiteEvaluation["quality"], string> = {
@@ -47,15 +45,18 @@ const qualityLabels: Record<WebsiteEvaluation["quality"], string> = {
 };
 
 const statusLabels: Record<LeadStatus, string> = {
-  new: "New",
-  archived: "Archived",
+  lead: "Lead",
   contacted: "Contacted",
+  interested: "Interested",
+  client: "Client",
 };
 
 const filterTitles: Record<LeadFilter, string> = {
-  active: "Active Leads",
-  archived: "Archived Leads",
   all: "All Leads",
+  lead: "Leads",
+  contacted: "Contacted Leads",
+  interested: "Interested Leads",
+  client: "Clients",
 };
 
 function getQualityBadgeClass(evaluation?: WebsiteEvaluation) {
@@ -109,9 +110,10 @@ function getMainIssue(lead: DashboardLead) {
 }
 
 function getStatusBadgeClass(status?: string) {
-  if (status === "new") return "bg-blue-500/15 text-blue-300";
-  if (status === "contacted") return "bg-cyan-500/15 text-cyan-300";
-  if (status === "archived") return "bg-slate-500/15 text-slate-300";
+  if (status === "lead") return "bg-blue-500/15 text-blue-300";
+  if (status === "contacted") return "bg-slate-500/15 text-slate-300";
+  if (status === "interested") return "bg-yellow-500/15 text-yellow-300";
+  if (status === "client") return "bg-green-500/15 text-green-300";
   return "bg-white/10 text-slate-400";
 }
 
@@ -232,8 +234,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [enriching, setEnriching] = useState(false);
-  const [activeFilter, setActiveFilter] = useState<LeadFilter>("active");
-  const [updatingLead, setUpdatingLead] = useState("");
+  const [activeFilter, setActiveFilter] = useState<LeadFilter>("all");
   const [replyNotifications, setReplyNotifications] = useState<
     ReplyNotification[]
   >([]);
@@ -245,8 +246,10 @@ export default function DashboardPage() {
   const permissionRequestedRef = useRef(false);
   const actionRunning = generating || enriching;
 
-  async function loadLeads() {
-    const res = await fetch("/api/leads", {
+  const loadLeads = useCallback(async (filter: LeadFilter) => {
+    const url =
+      filter === "all" ? "/api/leads" : `/api/leads?status=${filter}`;
+    const res = await fetch(url, {
       cache: "no-store",
     });
 
@@ -254,7 +257,7 @@ export default function DashboardPage() {
 
     setLeads(data.leads || []);
     setLoading(false);
-  }
+  }, []);
 
   async function loadReplyNotifications() {
     try {
@@ -326,7 +329,7 @@ export default function DashboardPage() {
         return;
       }
 
-      await loadLeads();
+      await loadLeads(activeFilter);
     } catch (error) {
       console.error("Generate leads failed:", error);
       alert("Lead generation failed");
@@ -346,7 +349,7 @@ export default function DashboardPage() {
 
       console.log("Enrich Active result:", result);
 
-      await loadLeads();
+      await loadLeads(activeFilter);
     } finally {
       setEnriching(false);
     }
@@ -360,53 +363,11 @@ export default function DashboardPage() {
     window.location.href = "/login";
   }
 
-  async function updateLeadLifecycle(
-    lead: DashboardLead,
-    status: LeadStatus
-  ) {
-    const slug = lead.slug || lead.id;
-
-    if (!slug) return;
-
-    setUpdatingLead(`${slug}:${status}`);
-
-    try {
-      const res = await fetch(`/api/leads/${slug}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          status,
-          reviewNotes: lead.reviewNotes || "",
-        }),
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to update lead");
-      }
-
-      setLeads((currentLeads) =>
-        currentLeads.map((currentLead) =>
-          (currentLead.slug || currentLead.id) === slug
-            ? data.lead
-            : currentLead
-        )
-      );
-    } catch (error) {
-      console.error("Failed to update lead lifecycle:", error);
-      alert("Failed to update lead.");
-    } finally {
-      setUpdatingLead("");
-    }
-  }
-
   useEffect(() => {
     // Initial dashboard data load.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadLeads();
-  }, []);
+    loadLeads(activeFilter);
+  }, [activeFilter, loadLeads]);
 
   useEffect(() => {
     if (
@@ -443,33 +404,13 @@ export default function DashboardPage() {
   );
 
   const visibleLeads = useMemo(() => {
-    const filteredLeads = leads.filter((lead) => {
-      const status = lead.status || "new";
-
-      if (activeFilter === "all") {
-        return true;
-      }
-
-      if (activeFilter === "archived") {
-        return status === "archived";
-      }
-
-      return status === "new" || status === "contacted";
-    });
-
-    return [...filteredLeads].sort((a, b) => {
+    return [...leads].sort((a, b) => {
       return (getOpportunityScore(b) || 0) - (getOpportunityScore(a) || 0);
     });
-  }, [activeFilter, leads]);
+  }, [leads]);
 
   const summaryCounts = useMemo(() => {
-    const activeLeads = leads.filter((lead) => {
-      const status = lead.status || "new";
-
-      return status === "new" || status === "contacted";
-    });
-
-    return activeLeads.reduce(
+    return leads.reduce(
       (counts, lead) => {
         const score =
           typeof lead.websiteEvaluation?.score === "number"
@@ -552,6 +493,13 @@ export default function DashboardPage() {
                             </p>
                             <span className="rounded-full bg-blue-500/15 px-2 py-0.5 text-[10px] font-bold uppercase text-blue-300">
                               {notification.channel}
+                            </span>
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${getStatusBadgeClass(
+                                notification.lead_status
+                              )}`}
+                            >
+                              {statusLabels[notification.lead_status] || "Lead"}
                             </span>
                           </div>
                           <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-300">
@@ -760,7 +708,7 @@ export default function DashboardPage() {
                               lead.status
                             )}`}
                           >
-                            {statusLabels[lead.status || "new"] || "New"}
+                            {statusLabels[lead.status || "lead"] || "Lead"}
                           </span>
                         </td>
 
@@ -779,26 +727,6 @@ export default function DashboardPage() {
                               </span>
                             )}
 
-                            {lifecycleActions
-                              .filter((action) => action.status !== lead.status)
-                              .map((action) => {
-                                const updating =
-                                  updatingLead ===
-                                  `${lead.slug || lead.id}:${action.status}`;
-
-                                return (
-                                  <button
-                                    key={action.status}
-                                    onClick={() =>
-                                      updateLeadLifecycle(lead, action.status)
-                                    }
-                                    disabled={Boolean(updatingLead)}
-                                    className="rounded-lg bg-slate-700 px-3 py-2 text-xs font-bold text-white hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
-                                  >
-                                    {updating ? "Saving..." : action.label}
-                                  </button>
-                                );
-                              })}
                           </div>
                         </td>
                       </tr>

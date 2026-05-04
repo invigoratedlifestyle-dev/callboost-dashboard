@@ -36,15 +36,18 @@ type TimelineItem =
       callback: CallbackRequest;
     };
 
-const lifecycleActions: Array<{ status: LeadStatus; label: string }> = [
-  { status: "archived", label: "Archive" },
-  { status: "contacted", label: "Mark contacted" },
+const statusOptions: Array<{ status: LeadStatus; label: string }> = [
+  { status: "lead", label: "Lead" },
+  { status: "contacted", label: "Contacted" },
+  { status: "interested", label: "Interested" },
+  { status: "client", label: "Client" },
 ];
 
 const statusLabels: Record<LeadStatus, string> = {
-  new: "New",
-  archived: "Archived",
+  lead: "Lead",
   contacted: "Contacted",
+  interested: "Interested",
+  client: "Client",
 };
 
 const qualityLabels: Record<WebsiteEvaluation["quality"], string> = {
@@ -57,9 +60,10 @@ const qualityLabels: Record<WebsiteEvaluation["quality"], string> = {
 };
 
 function getStatusBadgeClass(status?: string) {
-  if (status === "new") return "bg-blue-500/15 text-blue-300";
-  if (status === "contacted") return "bg-cyan-500/15 text-cyan-300";
-  if (status === "archived") return "bg-slate-500/15 text-slate-300";
+  if (status === "lead") return "bg-blue-500/15 text-blue-300";
+  if (status === "contacted") return "bg-slate-500/15 text-slate-300";
+  if (status === "interested") return "bg-yellow-500/15 text-yellow-300";
+  if (status === "client") return "bg-green-500/15 text-green-300";
   return "bg-white/10 text-slate-400";
 }
 
@@ -476,8 +480,9 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       setSavingForwarding(false);
     }
   };
-  const handleLifecycleUpdate = async (status: LeadStatus) => {
+  const handleStatusChange = async (status: LeadStatus) => {
     if (!lead) return;
+    if (status === lead.status) return;
 
     setUpdatingStatus(status);
 
@@ -500,7 +505,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
 
       setLead(data.lead);
     } catch (error) {
-      console.error("Failed to update lead lifecycle:", error);
+      console.error("Failed to update lead status:", error);
       alert("Failed to update lead.");
     } finally {
       setUpdatingStatus("");
@@ -600,21 +605,25 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 lead.status
               )}`}
             >
-              {statusLabels[lead.status || "new"] || "New"}
+              {statusLabels[lead.status || "lead"] || "Lead"}
             </span>
 
-            {lifecycleActions
-              .filter((action) => action.status !== lead.status)
-              .map((action) => (
-                <button
-                  key={action.status}
-                  onClick={() => handleLifecycleUpdate(action.status)}
-                  disabled={Boolean(updatingStatus)}
-                  className="rounded-lg bg-slate-700 px-3 py-2 text-xs font-bold text-white hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {updatingStatus === action.status ? "Saving..." : action.label}
-                </button>
+            <select
+              value={lead.status || "lead"}
+              onChange={(event) =>
+                handleStatusChange(event.target.value as LeadStatus)
+              }
+              disabled={Boolean(updatingStatus)}
+              className="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-xs font-bold text-white outline-none disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {statusOptions.map((option) => (
+                <option key={option.status} value={option.status}>
+                  {updatingStatus === option.status
+                    ? "Saving..."
+                    : option.label}
+                </option>
               ))}
+            </select>
 
             <button
               onClick={handleStartContactEdit}
@@ -806,7 +815,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
 
               <p>
                 <strong className="text-white">Status:</strong>{" "}
-                {statusLabels[lead.status || "new"] || "New"}
+                {statusLabels[lead.status || "lead"] || "Lead"}
               </p>
 
               {lead.contactedAt ? (
@@ -816,10 +825,17 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 </p>
               ) : null}
 
-              {lead.archivedAt ? (
+              {lead.interestedAt ? (
                 <p>
-                  <strong className="text-white">Archived:</strong>{" "}
-                  {formatTimestamp(lead.archivedAt)}
+                  <strong className="text-white">Interested:</strong>{" "}
+                  {formatTimestamp(lead.interestedAt)}
+                </p>
+              ) : null}
+
+              {lead.clientAt ? (
+                <p>
+                  <strong className="text-white">Client:</strong>{" "}
+                  {formatTimestamp(lead.clientAt)}
                 </p>
               ) : null}
             </div>

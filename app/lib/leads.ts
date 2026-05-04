@@ -1,7 +1,8 @@
 export type LeadStatus =
-  | "new"
-  | "archived"
-  | "contacted";
+  | "lead"
+  | "contacted"
+  | "interested"
+  | "client";
 
 export type LeadReview = {
   name?: string;
@@ -70,8 +71,9 @@ export type Lead = {
   facebook?: string;
   instagram?: string;
   status: LeadStatus;
-  archivedAt?: string | null;
   contactedAt?: string | null;
+  interestedAt?: string | null;
+  clientAt?: string | null;
   reviewNotes?: string;
 
   description?: string;
@@ -102,9 +104,10 @@ export const leads: Lead[] = [
     contactPage: "",
     facebook: "",
     instagram: "",
-    status: "new",
-    archivedAt: null,
+    status: "lead",
     contactedAt: null,
+    interestedAt: null,
+    clientAt: null,
     reviewNotes: "",
 
     description: "",

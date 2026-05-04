@@ -125,6 +125,19 @@ export async function listLeads() {
   return rows.map((row) => rowToLead(row as LeadRow));
 }
 
+export async function listLeadsByStatus(status: LifecycleStatus) {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("leads")
+    .select("*")
+    .eq("status", status)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+
+  return (data || []).map((row) => rowToLead(row as LeadRow));
+}
+
 export async function getLeadRowBySlug(slug: string) {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
@@ -202,8 +215,12 @@ export async function updateLeadStatusBySlug(
     updatedLead.contactedAt = now;
   }
 
-  if (status === "archived") {
-    updatedLead.archivedAt = now;
+  if (status === "interested") {
+    updatedLead.interestedAt = now;
+  }
+
+  if (status === "client") {
+    updatedLead.clientAt = now;
   }
 
   return updateLeadBySlug(slug, updatedLead);
