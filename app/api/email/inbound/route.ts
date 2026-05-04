@@ -26,6 +26,7 @@ type ResendInboundPayload = {
     email_id?: string;
     emailId?: string;
     id?: string;
+    message_id?: string;
     textBody?: string;
     htmlBody?: string;
     text_body?: string;
@@ -64,8 +65,10 @@ function extractEmail(raw: unknown) {
 
 function stripHtml(html: string) {
   return html
-    .replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi, "")
-    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n")
     .replace(/<[^>]+>/g, "")
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
@@ -77,128 +80,33 @@ function stripHtml(html: string) {
     .trim();
 }
 
-function bodyTextFromValue(value: unknown): string {
-  if (typeof value === "string") return value.trim();
-
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const text = bodyTextFromValue(item);
-
-      if (text) return text;
-    }
-
-    return "";
-  }
-
-  if (value && typeof value === "object") {
-    const record = value as Record<string, unknown>;
-
-    return (
-      bodyTextFromValue(record.text) ||
-      bodyTextFromValue(record.textBody) ||
-      bodyTextFromValue(record.text_body) ||
-      bodyTextFromValue(record.body) ||
-      bodyTextFromValue(record.content) ||
-      bodyTextFromValue(record.message) ||
-      bodyTextFromValue(record.value) ||
-      bodyTextFromValue(record.raw)
-    );
-  }
-
-  return "";
-}
-
-function htmlFromValue(value: unknown): string {
-  if (typeof value === "string") return value.trim();
-
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const html = htmlFromValue(item);
-
-      if (html) return html;
-    }
-
-    return "";
-  }
-
-  if (value && typeof value === "object") {
-    const record = value as Record<string, unknown>;
-
-    return (
-      htmlFromValue(record.html) ||
-      htmlFromValue(record.htmlBody) ||
-      htmlFromValue(record.html_body)
-    );
-  }
-
-  return "";
-}
-
-function extractBody(data: ResendInboundPayload["data"]) {
-  const textBody =
-    data?.text?.trim() ||
-    data?.textBody?.trim() ||
-    data?.text_body?.trim() ||
-    bodyTextFromValue(data?.body) ||
-    bodyTextFromValue(data?.content) ||
-    bodyTextFromValue(data?.message) ||
-    bodyTextFromValue(data?.raw) ||
-    bodyTextFromValue(data?.attachments) ||
-    bodyTextFromValue(data?.headers);
-  const htmlBody =
-    data?.html?.trim() ||
-    data?.htmlBody?.trim() ||
-    data?.html_body?.trim() ||
-    htmlFromValue(data?.body) ||
-    htmlFromValue(data?.content) ||
-    htmlFromValue(data?.message) ||
-    htmlFromValue(data?.raw) ||
-    htmlFromValue(data?.attachments) ||
-    htmlFromValue(data?.headers);
-  let body = textBody || "";
-
-  if (!body && htmlBody) {
-    body = stripHtml(htmlBody);
-  }
-
-  if (!body) {
-    console.log("No inbound email body field found");
-  }
-
-  return body || "(No message body)";
-}
-
-function getBodyFromEmail(email: FullInboundEmail | null) {
-  const textBody = email?.text?.trim();
-  const htmlBody = email?.html?.trim();
-
-  if (textBody) return textBody;
-  if (htmlBody) return stripHtml(htmlBody);
-
-  return "";
+function cleanReplyBody(body: string) {
+  return body
+    .split(/\nOn .*wrote:/i)[0]
+    .split(/\nFrom:/i)[0]
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 async function fetchInboundEmailContent(
   emailId: string
-): Promise<FullInboundEmail | null> {
+): Promise<{ fullEmail: FullInboundEmail | null; fullEmailError: unknown }> {
   const apiKey = process.env.RESEND_API_KEY;
 
   if (!apiKey) {
-    console.log("Inbound email content fetch skipped: missing RESEND_API_KEY");
-    return null;
+    const error = "Missing RESEND_API_KEY";
+    console.error("Inbound email content fetch skipped:", error);
+    return { fullEmail: null, fullEmailError: error };
   }
 
   try {
     const resend = new Resend(apiKey);
     const result = await resend.emails.receiving.get(emailId);
 
-    if (result.error) {
-      throw new Error(result.error.message);
-    }
-
-    if (result.data) {
-      return result.data as FullInboundEmail;
-    }
+    return {
+      fullEmail: result.data ? (result.data as FullInboundEmail) : null,
+      fullEmailError: result.error || null,
+    };
   } catch (sdkError) {
     console.error("Resend SDK inbound email fetch failed:", sdkError);
   }
@@ -223,12 +131,14 @@ async function fetchInboundEmailContent(
       | { data?: FullInboundEmail };
     const wrapped = json as { data?: FullInboundEmail };
 
-    return wrapped.data || (json as FullInboundEmail);
+    return {
+      fullEmail: wrapped.data || (json as FullInboundEmail),
+      fullEmailError: null,
+    };
   } catch (fetchError) {
     console.error("Resend API inbound email fetch failed:", fetchError);
+    return { fullEmail: null, fullEmailError: fetchError };
   }
-
-  return null;
 }
 
 function normalizeEmail(value: unknown) {
@@ -287,16 +197,34 @@ export async function POST(req: Request) {
 
     const data = payload.data || {};
     const emailId = getString(data.email_id || data.emailId || data.id);
-    const fullEmail = emailId ? await fetchInboundEmailContent(emailId) : null;
+    console.log("Fetching full inbound email from Resend:", emailId);
+
+    const { fullEmail, fullEmailError } = emailId
+      ? await fetchInboundEmailContent(emailId)
+      : {
+          fullEmail: null,
+          fullEmailError: "Missing email_id",
+        };
+
+    console.log("RESEND_FULL_EMAIL_RESULT", {
+      error: fullEmailError,
+      keys: fullEmail ? Object.keys(fullEmail) : [],
+      hasText: Boolean(fullEmail?.text),
+      hasHtml: Boolean(fullEmail?.html),
+      textPreview: fullEmail?.text?.slice(0, 200),
+      htmlPreview: fullEmail?.html?.slice(0, 200),
+    });
+
     const from = extractEmail(data.from || fullEmail?.from);
     const toValue = data.to || fullEmail?.to;
     const toRaw = Array.isArray(toValue) ? toValue[0] : toValue;
     const to = getString(toRaw);
     const subject = getString(data.subject || fullEmail?.subject) || "(No subject)";
-    const fetchedBody = getBodyFromEmail(fullEmail);
-    const body = fetchedBody || extractBody(data);
+    const rawBody =
+      fullEmail?.text?.trim() || stripHtml(fullEmail?.html || "") || "";
+    const body = cleanReplyBody(rawBody) || "(No message body)";
 
-    if (!fetchedBody && body === "(No message body)") {
+    if (body === "(No message body)") {
       console.log("No inbound email body field found", { emailId });
     }
 
@@ -333,6 +261,7 @@ export async function POST(req: Request) {
       body,
       status: "received",
       provider: "resend",
+      providerMessageId: getString(data.message_id || emailId),
     });
 
     return new Response("ok", { status: 200 });
