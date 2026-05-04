@@ -13,6 +13,8 @@ type DashboardLead = Lead & {
   websiteStatus?: WebsiteStatus;
   websiteStatusReasons?: string[];
   websiteEvaluation?: WebsiteEvaluation;
+  payment_status?: string | null;
+  client_started_at?: string | null;
 };
 
 type ReplyNotification = {
@@ -115,6 +117,45 @@ function getStatusBadgeClass(status?: string) {
   if (status === "client") return "bg-green-500/15 text-green-300";
   if (status === "archived") return "bg-slate-700 text-slate-300";
   return "bg-white/10 text-slate-400";
+}
+
+function getPaymentStatus(lead: DashboardLead) {
+  return lead.paymentStatus || lead.payment_status || "";
+}
+
+function getClientStartedAt(lead: DashboardLead) {
+  return lead.clientStartedAt || lead.client_started_at || "";
+}
+
+function getPaymentStatusLabel(lead: DashboardLead) {
+  const paymentStatus = getPaymentStatus(lead);
+
+  if (paymentStatus === "paid") return "Paid";
+  if (paymentStatus === "payment_failed") return "Payment Failed";
+  if (paymentStatus === "cancelled") return "Cancelled";
+  if (lead.status === "client" && !paymentStatus) return "Pending";
+
+  return "";
+}
+
+function getPaymentStatusBadgeClass(lead: DashboardLead) {
+  const paymentStatus = getPaymentStatus(lead);
+
+  if (paymentStatus === "paid") return "bg-green-500 text-white";
+  if (paymentStatus === "payment_failed") return "bg-red-500 text-white";
+  if (paymentStatus === "cancelled") return "bg-slate-600 text-white";
+  if (lead.status === "client" && !paymentStatus) {
+    return "bg-amber-500 text-slate-950";
+  }
+
+  return "bg-white/10 text-slate-400";
+}
+
+function getClientStartedTime(lead: DashboardLead) {
+  const value = getClientStartedAt(lead);
+  const time = new Date(value || "").getTime();
+
+  return Number.isFinite(time) ? time : 0;
 }
 
 function isPlaceholderEmail(email: string) {
@@ -231,6 +272,7 @@ function getStoredSoundEnabled() {
 
 export default function DashboardPage() {
   const [leads, setLeads] = useState<DashboardLead[]>([]);
+  const [clientRevenueLeads, setClientRevenueLeads] = useState<DashboardLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [enriching, setEnriching] = useState(false);
@@ -262,6 +304,18 @@ export default function DashboardPage() {
 
     setLeads(fetchedLeads);
     setLoading(false);
+  }, []);
+
+  const loadClientRevenueLeads = useCallback(async () => {
+    const res = await fetch("/api/leads?status=client", {
+      cache: "no-store",
+    });
+
+    if (!res.ok) return;
+
+    const data = await res.json();
+
+    setClientRevenueLeads(data.leads || []);
   }, []);
 
   async function loadReplyNotifications() {
@@ -335,6 +389,7 @@ export default function DashboardPage() {
       }
 
       await loadLeads(activeFilter);
+      await loadClientRevenueLeads();
     } catch (error) {
       console.error("Generate leads failed:", error);
       alert("Lead generation failed");
@@ -355,6 +410,7 @@ export default function DashboardPage() {
       console.log("Enrich Active result:", result);
 
       await loadLeads(activeFilter);
+      await loadClientRevenueLeads();
     } finally {
       setEnriching(false);
     }
@@ -373,6 +429,12 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadLeads(activeFilter);
   }, [activeFilter, loadLeads]);
+
+  useEffect(() => {
+    // Initial revenue snapshot for the dashboard summary.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadClientRevenueLeads();
+  }, [loadClientRevenueLeads]);
 
   useEffect(() => {
     if (
@@ -410,9 +472,24 @@ export default function DashboardPage() {
 
   const visibleLeads = useMemo(() => {
     return [...leads].sort((a, b) => {
+      if (activeFilter === "client") {
+        return getClientStartedTime(b) - getClientStartedTime(a);
+      }
+
       return (getOpportunityScore(b) || 0) - (getOpportunityScore(a) || 0);
     });
-  }, [leads]);
+  }, [activeFilter, leads]);
+
+  const revenueSummary = useMemo(() => {
+    const payingClients = clientRevenueLeads.filter(
+      (lead) => lead.status === "client" && getPaymentStatus(lead) === "paid"
+    );
+
+    return {
+      activeClients: payingClients.length,
+      mrr: payingClients.length * 99,
+    };
+  }, [clientRevenueLeads]);
 
   const summaryCounts = useMemo(() => {
     return leads.reduce(
@@ -551,7 +628,19 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="rounded-xl border border-green-400/20 bg-green-500/10 px-4 py-3">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-green-300">
+              MRR
+            </p>
+            <p className="mt-1 text-2xl font-black">
+              ${revenueSummary.mrr.toLocaleString()}
+            </p>
+            <p className="mt-1 text-xs font-bold text-green-200/80">
+              Active Clients: {revenueSummary.activeClients}
+            </p>
+          </div>
+
           <div className="rounded-xl border border-red-400/15 bg-red-500/10 px-4 py-3">
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-red-300">
               High
@@ -610,6 +699,7 @@ export default function DashboardPage() {
                   <th className="px-5 py-4">Opportunity</th>
                   <th className="px-5 py-4">Contact</th>
                   <th className="px-5 py-4">Rating</th>
+                  <th className="px-5 py-4">Payment</th>
                   <th className="px-5 py-4">Status</th>
                   <th className="px-5 py-4">Action</th>
                 </tr>
@@ -618,7 +708,7 @@ export default function DashboardPage() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td className="px-5 py-6 text-slate-400" colSpan={6}>
+                    <td className="px-5 py-6 text-slate-400" colSpan={7}>
                       Loading leads...
                     </td>
                   </tr>
@@ -633,13 +723,21 @@ export default function DashboardPage() {
                     const opportunityLabel = getOpportunityLabel(opportunityScore);
                     const qualityLabel = getQualityLabel(lead.websiteEvaluation);
                     const mainIssue = getMainIssue(lead);
+                    const paymentStatusLabel = getPaymentStatusLabel(lead);
                     const validEmail =
                       lead.email && !isPlaceholderEmail(lead.email)
                         ? lead.email
                         : "";
 
                     return (
-                      <tr key={leadKey} className="border-b border-white/10">
+                      <tr
+                        key={leadKey}
+                        className={`border-b ${
+                          getPaymentStatus(lead) === "payment_failed"
+                            ? "border-red-400/30 bg-red-500/10"
+                            : "border-white/10"
+                        }`}
+                      >
                         <td className="px-5 py-4">
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="text-sm font-bold text-white">
@@ -709,6 +807,20 @@ export default function DashboardPage() {
                         </td>
 
                         <td className="px-5 py-4">
+                          {paymentStatusLabel ? (
+                            <span
+                              className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-bold ${getPaymentStatusBadgeClass(
+                                lead
+                              )}`}
+                            >
+                              {paymentStatusLabel}
+                            </span>
+                          ) : (
+                            <span className="text-sm text-slate-500">-</span>
+                          )}
+                        </td>
+
+                        <td className="px-5 py-4">
                           <span
                             className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-bold ${getStatusBadgeClass(
                               lead.status
@@ -740,7 +852,7 @@ export default function DashboardPage() {
                   })
                 ) : (
                   <tr>
-                    <td className="px-5 py-6 text-slate-400" colSpan={6}>
+                    <td className="px-5 py-6 text-slate-400" colSpan={7}>
                       No leads found for this view.
                     </td>
                   </tr>
