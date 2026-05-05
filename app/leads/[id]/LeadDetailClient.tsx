@@ -9,7 +9,19 @@ import type {
   LeadStatus,
   WebsiteEvaluation,
 } from "../../lib/leads";
-import { appendOptOut } from "../../lib/smsOptOut";
+import {
+  buildInterestedReplyEmail,
+  buildInterestedReplyEmailSubject,
+  buildInterestedReplySms,
+  buildOpportunityEmail,
+  buildOpportunityEmailSubject,
+  buildOpportunitySms,
+  buildPaymentEmail,
+  buildPaymentEmailSubject,
+  buildPaymentSms,
+  getLeadName,
+  type InterestedReplyPersonalization,
+} from "../../lib/outreachCopy";
 import { EnrichButton } from "./EnrichButton";
 import { GenerateSiteButton } from "./GenerateSiteButton";
 
@@ -148,39 +160,6 @@ function getReviewSource(lead: LeadWithGeneratedContent) {
   };
 }
 
-function getWebsiteOpportunityIssue(lead: LeadWithGeneratedContent) {
-  const evaluation = lead.websiteEvaluation;
-  const isBrokenOrUnreachable =
-    evaluation?.isWorking === false ||
-    evaluation?.issues?.some((issue) =>
-      /broken|unreachable|failed to load|could not be loaded/i.test(issue)
-    );
-
-  if (isBrokenOrUnreachable) {
-    return "I couldn’t get your site to load on mobile";
-  }
-
-  const explicitIssue = lead.websiteOpportunity?.issue?.trim();
-
-  if (explicitIssue) return explicitIssue;
-
-  const firstEvaluationIssue = lead.websiteEvaluation?.issues?.find((issue) =>
-    issue.trim()
-  );
-
-  if (firstEvaluationIssue) return firstEvaluationIssue.trim();
-
-  const opportunitySummary = lead.websiteOpportunity?.summary?.trim();
-
-  if (opportunitySummary) return opportunitySummary;
-
-  const evaluationSummary = lead.websiteEvaluation?.summary?.trim();
-
-  if (evaluationSummary) return evaluationSummary;
-
-  return "";
-}
-
 function getPreviewUrl(lead: LeadWithGeneratedContent) {
   if (lead.generatedSiteUrl) return lead.generatedSiteUrl;
 
@@ -189,112 +168,6 @@ function getPreviewUrl(lead: LeadWithGeneratedContent) {
   }
 
   return "";
-}
-
-function getLeadName(lead: LeadWithGeneratedContent) {
-  return lead.name || lead.businessName || "this business";
-}
-
-function buildOpportunitySms(lead: LeadWithGeneratedContent) {
-  const previewUrl = getPreviewUrl(lead);
-  const leadName = getLeadName(lead);
-  const issue =
-    getWebsiteOpportunityIssue(lead) ||
-    "a couple of things that might be costing you calls";
-
-  if (!previewUrl) {
-    return appendOptOut([
-      `Hey ${leadName}, I had a quick look and noticed ${issue}.`,
-      "",
-      "I made a cleaner preview and can send it through if you want to take a look.",
-      "",
-      "It’s designed to make it easier for people to call quickly from mobile. Want me to set this up properly for you?",
-      "",
-      "- Jamie",
-    ].join("\n"));
-  }
-
-  return appendOptOut([
-    `Hey ${leadName}, I had a quick look and noticed ${issue}. I made a cleaner preview here: ${previewUrl}`,
-    "",
-    "It’s designed to make it easier for people to call quickly from mobile. Want me to set this up properly for you?",
-    "",
-    "- Jamie",
-  ].join("\n"));
-}
-
-function buildOpportunityEmailSubject(lead: LeadWithGeneratedContent) {
-  return `Quick website preview for ${getLeadName(lead)}`;
-}
-
-function buildOpportunityEmail(lead: LeadWithGeneratedContent) {
-  const previewUrl = getPreviewUrl(lead);
-  const leadName = getLeadName(lead);
-  const issue =
-    getWebsiteOpportunityIssue(lead) ||
-    "A few improvements could make it easier for customers to call you.";
-
-  const lines = [
-    `Hey ${leadName},`,
-    "",
-    "I had a quick look at your website and noticed something that might be costing you calls:",
-    "",
-    `- ${issue}`,
-    "",
-  ];
-
-  if (previewUrl) {
-    lines.push("I made a cleaner preview here:", previewUrl, "");
-  } else {
-    lines.push("I can send through a preview if you want to take a look.", "");
-  }
-
-  lines.push(
-    "It’s designed to make it easier for people to call you quickly from mobile.",
-    "",
-    "Want me to set this up properly for you?",
-    "",
-    "Thanks,",
-    "Jamie"
-  );
-
-  return lines.join("\n");
-}
-
-function buildCloseSms() {
-  return appendOptOut([
-    "Glad you like it 👍 I handle everything — setup, hosting, updates and small changes — for $99 setup + $99/month.",
-    "",
-    "Want me to set it up and send the payment link?",
-  ].join("\n"));
-}
-
-function buildCloseEmailSubject() {
-  return "Website preview setup";
-}
-
-function buildCloseEmail() {
-  return [
-    "Glad you like it 👍",
-    "",
-    "I handle everything — setup, hosting, updates, and small changes — for $99 setup + $99/month.",
-    "",
-    "I can get it live for you and send through the payment link to start.",
-    "",
-    "Want me to set it up?",
-    "",
-    "Thanks,",
-    "Jamie",
-  ].join("\n");
-}
-
-function buildPaymentSms(paymentLink: string) {
-  return appendOptOut([
-    "Perfect — here’s the secure payment link to get started:",
-    paymentLink,
-    "",
-    "Once that’s done, I’ll get everything set up and live for you.",
-  ].join("\n"));
 }
 
 function getAppUrl() {
@@ -316,21 +189,14 @@ function getBrandedPaymentUrl(lead: LeadWithGeneratedContent) {
   return appUrl && leadSlug ? `${appUrl}/pay/${encodeURIComponent(leadSlug)}` : "";
 }
 
-function buildPaymentEmailSubject() {
-  return "Payment link to get started";
-}
-
-function buildPaymentEmail(paymentLink: string) {
-  return [
-    "Perfect — here’s the secure payment link to get started:",
-    "",
-    paymentLink,
-    "",
-    "Once that’s done, I’ll get everything set up and live for you.",
-    "",
-    "Thanks,",
-    "Jamie",
-  ].join("\n");
+function getInterestedReplyPersonalization(
+  lead: LeadWithGeneratedContent
+): InterestedReplyPersonalization {
+  return {
+    businessName: lead.businessName,
+    previewUrl: getPreviewUrl(lead),
+    trade: lead.trade,
+  };
 }
 
 function looksLikeInterestedReply(message?: LeadMessage | null) {
@@ -480,12 +346,12 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
         website: loadedLead.website || "",
       });
       setSmsTo(loadedLead.phone || "");
-      setSmsBody(buildOpportunitySms(loadedLead));
+      setSmsBody(buildOpportunitySms(loadedLead, getPreviewUrl(loadedLead)));
       setSmsBodyEdited(false);
       setEmailTo(loadedLead.email || "");
       setEmailSubject(buildOpportunityEmailSubject(loadedLead));
       setEmailSubjectEdited(false);
-      setEmailOfferBody(buildOpportunityEmail(loadedLead));
+      setEmailOfferBody(buildOpportunityEmail(loadedLead, getPreviewUrl(loadedLead)));
       setEmailBodyEdited(false);
       setCallbackForwardingEnabled(
         Boolean(data.lead?.callbackForwardingEnabled)
@@ -569,7 +435,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     setLead(nextLead);
 
     if (!smsBodyEdited) {
-      setSmsBody(buildOpportunitySms(nextLead));
+      setSmsBody(buildOpportunitySms(nextLead, getPreviewUrl(nextLead)));
     }
 
     if (!emailSubjectEdited) {
@@ -577,7 +443,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     }
 
     if (!emailBodyEdited) {
-      setEmailOfferBody(buildOpportunityEmail(nextLead));
+      setEmailOfferBody(buildOpportunityEmail(nextLead, getPreviewUrl(nextLead)));
     }
   };
   const handleOutreachChannelChange = (channel: OutreachChannel) => {
@@ -586,7 +452,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     if (!lead) return;
 
     if (channel === "sms" && !smsBodyEdited) {
-      setSmsBody(buildOpportunitySms(lead));
+      setSmsBody(buildOpportunitySms(lead, getPreviewUrl(lead)));
     }
 
     if (channel === "email") {
@@ -595,7 +461,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       }
 
       if (!emailBodyEdited) {
-        setEmailOfferBody(buildOpportunityEmail(lead));
+        setEmailOfferBody(buildOpportunityEmail(lead, getPreviewUrl(lead)));
       }
     }
   };
@@ -987,10 +853,13 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     setCloseReplyError("");
 
     try {
+      const personalization = getInterestedReplyPersonalization(lead);
       const copyText =
         channel === "sms"
-          ? buildCloseSms()
-          : `${buildCloseEmailSubject()}\n\n${buildCloseEmail()}`;
+          ? buildInterestedReplySms(personalization)
+          : `${buildInterestedReplyEmailSubject(
+              personalization
+            )}\n\n${buildInterestedReplyEmail(personalization)}`;
 
       await navigator.clipboard.writeText(copyText);
       setCloseReplyNotice(
@@ -1006,14 +875,20 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     setOutreachChannel(channel);
 
     if (channel === "sms") {
-      setSmsBody(buildCloseSms());
+      setSmsBody(
+        buildInterestedReplySms(getInterestedReplyPersonalization(lead))
+      );
       setSmsBodyEdited(true);
       setCloseReplyNotice("Close SMS loaded into composer.");
       return;
     }
 
-    setEmailSubject(buildCloseEmailSubject());
-    setEmailOfferBody(buildCloseEmail());
+    setEmailSubject(
+      buildInterestedReplyEmailSubject(getInterestedReplyPersonalization(lead))
+    );
+    setEmailOfferBody(
+      buildInterestedReplyEmail(getInterestedReplyPersonalization(lead))
+    );
     setEmailSubjectEdited(true);
     setEmailBodyEdited(true);
     setCloseReplyNotice("Close email loaded into composer.");
