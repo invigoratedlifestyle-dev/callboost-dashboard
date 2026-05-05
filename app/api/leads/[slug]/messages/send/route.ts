@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import Twilio from "twilio";
+import { appendOptOut } from "../../../../../lib/smsOptOut";
 import { insertLeadMessage } from "../../../../../lib/supabase/leadMessages";
 import {
   getLeadRowBySlug,
@@ -107,6 +108,8 @@ export async function POST(
     const to = getString(body.to);
     const subject = getString(body.subject);
     const messageBody = getString(body.body);
+    const outboundBody =
+      channel === "sms" ? appendOptOut(messageBody) : messageBody;
 
     if (!isChannel(channel)) {
       return NextResponse.json({ error: "Invalid channel" }, { status: 400 });
@@ -131,7 +134,7 @@ export async function POST(
       );
     }
 
-    if (!messageBody) {
+    if (!outboundBody) {
       return NextResponse.json(
         { error: "Message body is required" },
         { status: 400 }
@@ -160,14 +163,14 @@ export async function POST(
 
     try {
       if (channel === "sms") {
-        const result = await sendSms({ to, body: messageBody });
+        const result = await sendSms({ to, body: outboundBody });
         fromAddress = result.from;
         providerMessageId = result.providerMessageId;
       } else {
         const result = await sendEmail({
           to,
           subject,
-          body: messageBody,
+          body: outboundBody,
         });
         fromAddress = result.from;
         providerMessageId = result.providerMessageId;
@@ -186,7 +189,7 @@ export async function POST(
       toAddress: to,
       fromAddress,
       subject: channel === "email" ? subject : null,
-      body: messageBody,
+      body: outboundBody,
       status,
       provider,
       providerMessageId,

@@ -1,6 +1,7 @@
 import "server-only";
 import { Resend } from "resend";
 import Twilio from "twilio";
+import { appendOptOut } from "./smsOptOut";
 
 function getResendClient() {
   const apiKey = process.env.RESEND_API_KEY;
@@ -24,7 +25,7 @@ export async function sendSms(args: { to: string; body: string }) {
   }
 
   const result = await twilio.messages.create({
-    body: args.body,
+    body: appendOptOut(args.body),
     from,
     to: args.to,
   });

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { sendEmail, sendSms } from "../../../../lib/outboundMessages";
+import { appendOptOut } from "../../../../lib/smsOptOut";
 import {
   insertLeadMessage,
   listLeadMessages,
@@ -104,7 +105,10 @@ export async function POST(
     const channel = leadPhone ? "sms" : "email";
     const to = channel === "sms" ? leadPhone : leadEmail;
     const subject = channel === "email" ? "Quick follow-up from CallBoost" : "";
-    const messageBody = buildFollowUpBody(stage, leadName);
+    const messageBody =
+      channel === "sms"
+        ? appendOptOut(buildFollowUpBody(stage, leadName))
+        : buildFollowUpBody(stage, leadName);
 
     if (!to) {
       return NextResponse.json(
