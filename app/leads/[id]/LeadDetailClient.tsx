@@ -9,6 +9,7 @@ import type {
   LeadStatus,
   WebsiteEvaluation,
 } from "../../lib/leads";
+import { appendOptOut } from "../../lib/smsOptOut";
 import { EnrichButton } from "./EnrichButton";
 import { GenerateSiteButton } from "./GenerateSiteButton";
 
@@ -202,7 +203,7 @@ function buildOpportunitySms(lead: LeadWithGeneratedContent) {
     "a couple of things that might be costing you calls";
 
   if (!previewUrl) {
-    return [
+    return appendOptOut([
       `Hey ${leadName}, I had a quick look and noticed ${issue}.`,
       "",
       "I made a cleaner preview and can send it through if you want to take a look.",
@@ -210,16 +211,16 @@ function buildOpportunitySms(lead: LeadWithGeneratedContent) {
       "It’s designed to make it easier for people to call quickly from mobile. Want me to set this up properly for you?",
       "",
       "- Jamie",
-    ].join("\n");
+    ].join("\n"));
   }
 
-  return [
+  return appendOptOut([
     `Hey ${leadName}, I had a quick look and noticed ${issue}. I made a cleaner preview here: ${previewUrl}`,
     "",
     "It’s designed to make it easier for people to call quickly from mobile. Want me to set this up properly for you?",
     "",
     "- Jamie",
-  ].join("\n");
+  ].join("\n"));
 }
 
 function buildOpportunityEmailSubject(lead: LeadWithGeneratedContent) {
@@ -261,11 +262,11 @@ function buildOpportunityEmail(lead: LeadWithGeneratedContent) {
 }
 
 function buildCloseSms() {
-  return [
+  return appendOptOut([
     "Glad you like it 👍 I handle everything — setup, hosting, updates and small changes — for $99 setup + $99/month.",
     "",
     "Want me to set it up and send the payment link?",
-  ].join("\n");
+  ].join("\n"));
 }
 
 function buildCloseEmailSubject() {
@@ -288,12 +289,31 @@ function buildCloseEmail() {
 }
 
 function buildPaymentSms(paymentLink: string) {
-  return [
+  return appendOptOut([
     "Perfect — here’s the secure payment link to get started:",
     paymentLink,
     "",
     "Once that’s done, I’ll get everything set up and live for you.",
-  ].join("\n");
+  ].join("\n"));
+}
+
+function getAppUrl() {
+  if (process.env.NEXT_PUBLIC_APP_URL) {
+    return process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, "");
+  }
+
+  if (typeof window !== "undefined") {
+    return window.location.origin;
+  }
+
+  return "";
+}
+
+function getBrandedPaymentUrl(lead: LeadWithGeneratedContent) {
+  const appUrl = getAppUrl();
+  const leadSlug = lead.slug || lead.id;
+
+  return appUrl && leadSlug ? `${appUrl}/pay/${encodeURIComponent(leadSlug)}` : "";
 }
 
 function buildPaymentEmailSubject() {
@@ -795,10 +815,10 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       setCheckoutUrl(data.url);
 
       try {
-        await navigator.clipboard.writeText(data.url);
-        setCheckoutNotice("Checkout link copied to clipboard.");
+        await navigator.clipboard.writeText(getBrandedPaymentUrl(lead) || data.url);
+        setCheckoutNotice("Payment link copied to clipboard.");
       } catch {
-        setCheckoutNotice("Checkout link created.");
+        setCheckoutNotice("Payment link created.");
       }
 
       window.open(data.url, "_blank", "noopener,noreferrer");
@@ -1035,7 +1055,9 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     }
   };
   const handleCopyPaymentReply = async (channel: OutreachChannel) => {
-    if (!checkoutUrl) return;
+    const paymentLink = getBrandedPaymentUrl(lead);
+
+    if (!checkoutUrl || !paymentLink) return;
 
     setPaymentReplyNotice("");
     setPaymentReplyError("");
@@ -1043,8 +1065,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     try {
       const copyText =
         channel === "sms"
-          ? buildPaymentSms(checkoutUrl)
-          : `${buildPaymentEmailSubject()}\n\n${buildPaymentEmail(checkoutUrl)}`;
+          ? buildPaymentSms(paymentLink)
+          : `${buildPaymentEmailSubject()}\n\n${buildPaymentEmail(paymentLink)}`;
 
       await navigator.clipboard.writeText(copyText);
       setPaymentReplyNotice(
@@ -1055,21 +1077,23 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     }
   };
   const handleUsePaymentReply = (channel: OutreachChannel) => {
-    if (!checkoutUrl) return;
+    const paymentLink = getBrandedPaymentUrl(lead);
+
+    if (!checkoutUrl || !paymentLink) return;
 
     setPaymentReplyNotice("");
     setPaymentReplyError("");
     setOutreachChannel(channel);
 
     if (channel === "sms") {
-      setSmsBody(buildPaymentSms(checkoutUrl));
+      setSmsBody(buildPaymentSms(paymentLink));
       setSmsBodyEdited(true);
       setPaymentReplyNotice("Payment SMS loaded into composer.");
       return;
     }
 
     setEmailSubject(buildPaymentEmailSubject());
-    setEmailOfferBody(buildPaymentEmail(checkoutUrl));
+    setEmailOfferBody(buildPaymentEmail(paymentLink));
     setEmailSubjectEdited(true);
     setEmailBodyEdited(true);
     setPaymentReplyNotice("Payment email loaded into composer.");
@@ -1098,6 +1122,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const mayBeReadyForPaymentLink =
     looksLikePaymentReadyReply(latestInboundMessage);
   const hasPaymentLink = Boolean(checkoutUrl);
+  const brandedPaymentUrl = hasPaymentLink ? getBrandedPaymentUrl(lead) : "";
   const hasReplyAfterLastOutbound =
     latestInboundMessageTime > latestOutboundMessageTime;
   const canShowFollowUpActions = lead.status === "contacted";
@@ -1410,14 +1435,14 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
             {checkoutUrl ? (
               <div className="mt-4 rounded-xl border border-green-400/20 bg-green-500/10 p-4">
                 <p className="mb-2 text-sm font-bold text-green-300">
-                  Stripe Checkout URL
+                  Payment Link URL
                 </p>
                 <a
-                  href={checkoutUrl}
+                  href={brandedPaymentUrl || checkoutUrl}
                   target="_blank"
                   className="break-all text-sm text-blue-300 hover:text-blue-200"
                 >
-                  {checkoutUrl}
+                  {brandedPaymentUrl || checkoutUrl}
                 </a>
               </div>
             ) : null}
@@ -1647,13 +1672,13 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
             </p>
           ) : null}
 
-          {checkoutUrl ? (
+          {brandedPaymentUrl ? (
             <a
-              href={checkoutUrl}
+              href={brandedPaymentUrl}
               target="_blank"
               className="mb-4 block break-all text-sm text-blue-300 hover:text-blue-200"
             >
-              {checkoutUrl}
+              {brandedPaymentUrl}
             </a>
           ) : null}
 
