@@ -9,6 +9,15 @@ import {
   normalizeLeadIdentity,
 } from "../../../lib/leadLifecycle";
 import {
+  buildLocalSearchQuery,
+  getCityTarget,
+  type CityTarget,
+} from "../../../lib/leadTargeting/cities";
+import {
+  getTradeTarget,
+  type TradeTarget,
+} from "../../../lib/leadTargeting/trades";
+import {
   duplicateLeadExists,
   insertIgnoredLead,
   insertLead,
@@ -25,7 +34,10 @@ const ENRICH_AFTER_GENERATE = true;
 
 type GenerateRequest = {
   trade?: string;
+  tradeKey?: string;
   city?: string;
+  cityKey?: string;
+  limit?: number;
   maxLeads?: number;
   enrich?: boolean;
 };
@@ -49,6 +61,7 @@ type GooglePlace = {
   userRatingCount?: number;
   websiteUri?: string;
   nationalPhoneNumber?: string;
+  internationalPhoneNumber?: string;
   types?: string[];
   searchQueryFoundFrom?: string;
 };
@@ -104,31 +117,10 @@ function clampMaxLeads(value: unknown) {
   return Math.max(1, Math.min(Math.floor(fallback), 200));
 }
 
-function buildSearchQueries(trade: string, city: string): string[] {
-  const normalizedTrade = trade.trim().toLowerCase();
-
-  if (normalizedTrade === "plumber" || normalizedTrade === "plumbing") {
-    return [
-      `${trade} ${city}`,
-      `emergency ${trade} ${city}`,
-      `blocked drain ${city}`,
-      `hot water plumber ${city}`,
-      `gas plumber ${city}`,
-      `bathroom plumber ${city}`,
-      `commercial plumber ${city}`,
-      `residential plumber ${city}`,
-      `leaking tap plumber ${city}`,
-      `toilet repair plumber ${city}`,
-    ];
-  }
-
-  return [
-    `${trade} ${city}`,
-    `emergency ${trade} ${city}`,
-    `best ${trade} ${city}`,
-    `local ${trade} ${city}`,
-    `${trade} near ${city}`,
-  ];
+function buildSearchQueries(tradeTarget: TradeTarget, cityTarget: CityTarget) {
+  return tradeTarget.googleQueryTerms.map((term) =>
+    buildLocalSearchQuery(term, cityTarget)
+  );
 }
 
 function getBusinessName(place: GooglePlace) {
@@ -212,20 +204,83 @@ async function saveIgnoredLead(
   await insertIgnoredLead(ignoredLead);
 }
 
-function isValidLocation(place: GooglePlace) {
+const AU_STATE_MARKERS = [
+  "australia",
+  "tasmania",
+  "tas",
+  "victoria",
+  "vic",
+  "new south wales",
+  "nsw",
+  "queensland",
+  "qld",
+  "south australia",
+  "sa",
+  "western australia",
+  "wa",
+  "australian capital territory",
+  "act",
+  "northern territory",
+  "nt",
+];
+
+function getOutOfRegionReason(place: GooglePlace) {
   const formattedAddress = (place.formattedAddress || "").toLowerCase();
-  const hasTasmania =
-    formattedAddress.includes("tasmania") ||
-    /\btas\b/i.test(place.formattedAddress || "");
-  const hasAustralia = formattedAddress.includes("australia");
-  const hasAuCountryCode = (place.addressComponents || []).some((component) => {
+  const hasFormattedAddress = Boolean(formattedAddress);
+  const hasAustralianAddressMarker = AU_STATE_MARKERS.some((marker) =>
+    new RegExp(`\\b${marker.replace(/\s+/g, "\\s+")}\\b`, "i").test(
+      formattedAddress
+    )
+  );
+  const countryComponents = (place.addressComponents || []).filter((component) =>
+    (component.types || []).includes("country")
+  );
+  const hasCountryComponents = countryComponents.length > 0;
+  const hasAuCountryCode = countryComponents.some((component) => {
     const types = component.types || [];
     const shortText = (component.shortText || "").toUpperCase();
 
     return types.includes("country") && shortText === "AU";
   });
+  const hasNonAuCountry = countryComponents.some((component) => {
+    const shortText = (component.shortText || "").toUpperCase();
+    const longText = (component.longText || "").toLowerCase();
 
-  return (hasTasmania && hasAustralia) || hasAuCountryCode;
+    return shortText !== "AU" && longText !== "australia";
+  });
+  const internationalPhone = place.internationalPhoneNumber?.trim() || "";
+  const nationalPhone = place.nationalPhoneNumber?.trim() || "";
+  const website = (place.websiteUri || "").toLowerCase();
+
+  if (hasCountryComponents && !hasAuCountryCode) {
+    return "country_not_au";
+  }
+
+  if (hasNonAuCountry) {
+    return "non_au_country_component";
+  }
+
+  if (hasFormattedAddress && !hasAustralianAddressMarker) {
+    return "address_not_australian";
+  }
+
+  if (/\bunited states\b|\busa\b|\bus\b/.test(formattedAddress)) {
+    return "us_address";
+  }
+
+  if (internationalPhone && !internationalPhone.startsWith("+61")) {
+    return "non_au_international_phone";
+  }
+
+  if (nationalPhone.startsWith("+1")) {
+    return "us_phone";
+  }
+
+  if (/\.(?:com|net|org)$/.test(website) && website.includes("usa")) {
+    return "us_website";
+  }
+
+  return "";
 }
 
 function isValidPhone(phone?: string) {
@@ -242,21 +297,34 @@ function isValidPhone(phone?: string) {
   return (
     normalizedPhone.startsWith("+61") ||
     normalizedPhone.startsWith("04") ||
-    normalizedPhone.startsWith("03")
+    normalizedPhone.startsWith("02") ||
+    normalizedPhone.startsWith("03") ||
+    normalizedPhone.startsWith("07") ||
+    normalizedPhone.startsWith("08")
   );
 }
 
-async function textSearch(query: string, apiKey: string) {
+async function textSearch(query: string, apiKey: string, cityTarget: CityTarget) {
   const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "X-Goog-Api-Key": apiKey,
       "X-Goog-FieldMask":
-        "places.id,places.displayName,places.addressComponents,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.websiteUri,places.nationalPhoneNumber,places.types",
+        "places.id,places.displayName,places.addressComponents,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.websiteUri,places.nationalPhoneNumber,places.internationalPhoneNumber,places.types",
     },
     body: JSON.stringify({
       textQuery: query,
+      regionCode: cityTarget.countryCode,
+      locationRestriction: {
+        circle: {
+          center: {
+            latitude: cityTarget.lat,
+            longitude: cityTarget.lng,
+          },
+          radius: cityTarget.radiusMeters,
+        },
+      },
       pageSize: 20,
     }),
   });
@@ -299,15 +367,38 @@ export async function POST(req: Request) {
       body = {};
     }
 
-    const trade = body.trade || process.env.LEAD_TRADE || DEFAULT_TRADE;
-    const city = body.city || process.env.LEAD_CITY || DEFAULT_CITY;
-    const maxLeads = clampMaxLeads(body.maxLeads ?? MAX_LEADS_PER_RUN);
+    const requestedTrade =
+      body.tradeKey || body.trade || process.env.LEAD_TRADE || DEFAULT_TRADE;
+    const requestedCity =
+      body.cityKey || body.city || process.env.LEAD_CITY || DEFAULT_CITY;
+    const tradeTarget = getTradeTarget(requestedTrade);
+    const cityTarget = getCityTarget(requestedCity);
+
+    if (!tradeTarget) {
+      return NextResponse.json(
+        { error: "Invalid trade target" },
+        { status: 400 }
+      );
+    }
+
+    if (!cityTarget) {
+      return NextResponse.json(
+        { error: "Invalid city target" },
+        { status: 400 }
+      );
+    }
+
+    const trade = tradeTarget.key;
+    const city = cityTarget.city;
+    const maxLeads = clampMaxLeads(
+      body.limit ?? body.maxLeads ?? MAX_LEADS_PER_RUN
+    );
     const enrich = body.enrich ?? ENRICH_AFTER_GENERATE;
-    const searchQueries = buildSearchQueries(trade, city);
+    const searchQueries = buildSearchQueries(tradeTarget, cityTarget);
 
     console.log("Lead generation settings:", {
-      trade,
-      city,
+      trade: tradeTarget.key,
+      city: cityTarget.key,
       maxLeads,
       enrich,
     });
@@ -318,7 +409,7 @@ export async function POST(req: Request) {
       try {
         console.log("Searching Places query:", query);
 
-        const places = await textSearch(query, apiKey);
+        const places = await textSearch(query, apiKey, cityTarget);
 
         console.log("Places returned:", {
           query,
@@ -476,9 +567,17 @@ export async function POST(req: Request) {
     for (const place of newPlaces) {
       const businessName = getBusinessName(place);
 
-      if (!isValidLocation(place)) {
+      const outOfRegionReason = getOutOfRegionReason(place);
+
+      if (outOfRegionReason) {
         skippedInvalidLocation += 1;
-        console.log(`Skipped (wrong location): ${businessName}`);
+        console.log("LEAD_REJECTED_OUT_OF_REGION", {
+          place_id: place.id || "",
+          name: businessName,
+          city_target: cityTarget.key,
+          trade: tradeTarget.key,
+          reason: outOfRegionReason,
+        });
 
         await saveIgnoredLead(
           place,
@@ -490,10 +589,12 @@ export async function POST(req: Request) {
         continue;
       }
 
-      if (!isValidPhone(place.nationalPhoneNumber)) {
+      if (!isValidPhone(place.internationalPhoneNumber || place.nationalPhoneNumber)) {
         skippedInvalidPhone += 1;
         console.log(
-          `Skipped (invalid phone): ${place.nationalPhoneNumber || ""}`
+          `Skipped (invalid phone): ${
+            place.internationalPhoneNumber || place.nationalPhoneNumber || ""
+          }`
         );
 
         await saveIgnoredLead(
@@ -577,7 +678,7 @@ export async function POST(req: Request) {
               ? String(place.userRatingCount)
               : "",
         website: place.websiteUri || "",
-        phone: place.nationalPhoneNumber || "",
+        phone: place.internationalPhoneNumber || place.nationalPhoneNumber || "",
         tradeValidation,
         status: "lead",
         contactedAt: null,
@@ -586,6 +687,15 @@ export async function POST(req: Request) {
         reviewNotes: "",
         source: "google_places",
         searchQueryFoundFrom: place.searchQueryFoundFrom || "",
+        targetCityKey: cityTarget.key,
+        targetCity: cityTarget.city,
+        targetState: cityTarget.state,
+        targetCountry: cityTarget.country,
+        targetCountryCode: cityTarget.countryCode,
+        targetLat: cityTarget.lat,
+        targetLng: cityTarget.lng,
+        targetRadiusMeters: cityTarget.radiusMeters,
+        sourceQuery: place.searchQueryFoundFrom || "",
         types: place.types || [],
         email: "",
         description: "",

@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CITY_TARGETS } from "./lib/leadTargeting/cities";
+import { TRADE_TARGETS } from "./lib/leadTargeting/trades";
 import type { Lead, LeadStatus, WebsiteEvaluation } from "./lib/leads";
 
 type LeadPriority = "high" | "medium" | "low";
@@ -276,6 +278,9 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [enriching, setEnriching] = useState(false);
+  const [targetCityKey, setTargetCityKey] = useState("hobart");
+  const [targetTradeKey, setTargetTradeKey] = useState("plumber");
+  const [generationLimit, setGenerationLimit] = useState(50);
   const [activeFilter, setActiveFilter] = useState<LeadFilter>("all");
   const [replyNotifications, setReplyNotifications] = useState<
     ReplyNotification[]
@@ -378,6 +383,14 @@ export default function DashboardPage() {
     try {
       const res = await fetch("/api/leads/generate", {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          cityKey: targetCityKey,
+          tradeKey: targetTradeKey,
+          limit: generationLimit,
+        }),
       });
 
       if (!res.ok) {
@@ -601,6 +614,45 @@ export default function DashboardPage() {
                 </div>
               ) : null}
             </div>
+
+            <select
+              value={targetCityKey}
+              onChange={(event) => setTargetCityKey(event.target.value)}
+              disabled={actionRunning}
+              className="rounded-lg border border-white/10 bg-slate-900 px-3 py-3 text-sm font-bold text-white outline-none disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {CITY_TARGETS.map((cityTarget) => (
+                <option key={cityTarget.key} value={cityTarget.key}>
+                  {cityTarget.city}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={targetTradeKey}
+              onChange={(event) => setTargetTradeKey(event.target.value)}
+              disabled={actionRunning}
+              className="rounded-lg border border-white/10 bg-slate-900 px-3 py-3 text-sm font-bold text-white outline-none disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {TRADE_TARGETS.map((tradeTarget) => (
+                <option key={tradeTarget.key} value={tradeTarget.key}>
+                  {tradeTarget.label}
+                </option>
+              ))}
+            </select>
+
+            <input
+              type="number"
+              min={1}
+              max={200}
+              value={generationLimit}
+              onChange={(event) =>
+                setGenerationLimit(Number(event.target.value) || 1)
+              }
+              disabled={actionRunning}
+              className="w-24 rounded-lg border border-white/10 bg-slate-900 px-3 py-3 text-sm font-bold text-white outline-none disabled:cursor-not-allowed disabled:opacity-60"
+              aria-label="Max results"
+            />
 
             <button
               onClick={handleGenerateLeads}
