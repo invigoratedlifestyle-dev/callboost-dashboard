@@ -391,7 +391,7 @@ function heuristicWebsiteEvaluation(args: {
       isWorking: false,
       quality: "bad",
       score: 95,
-      issues: ["Website may be broken or unreachable"],
+      issues: ["I couldn’t get your site to load on mobile"],
       summary:
         "The website could not be loaded reliably, making this a strong replacement opportunity.",
     });
@@ -498,7 +498,7 @@ async function evaluateWebsiteOpportunity(args: {
       isWorking: false,
       quality: "bad",
       score: 95,
-      issues: ["Website may be broken or unreachable"],
+      issues: ["I couldn’t get your site to load on mobile"],
       summary:
         "The website could not be loaded reliably, making this a strong replacement opportunity.",
     });

@@ -148,6 +148,17 @@ function getReviewSource(lead: LeadWithGeneratedContent) {
 }
 
 function getWebsiteOpportunityIssue(lead: LeadWithGeneratedContent) {
+  const evaluation = lead.websiteEvaluation;
+  const isBrokenOrUnreachable =
+    evaluation?.isWorking === false ||
+    evaluation?.issues?.some((issue) =>
+      /broken|unreachable|failed to load|could not be loaded/i.test(issue)
+    );
+
+  if (isBrokenOrUnreachable) {
+    return "I couldn’t get your site to load on mobile";
+  }
+
   const explicitIssue = lead.websiteOpportunity?.issue?.trim();
 
   if (explicitIssue) return explicitIssue;
@@ -192,31 +203,22 @@ function buildOpportunitySms(lead: LeadWithGeneratedContent) {
 
   if (!previewUrl) {
     return [
-      `Hey ${leadName}, quick one — I had a look at your website and noticed ${issue}.`,
+      `Hey ${leadName}, I had a quick look and noticed ${issue}.`,
       "",
-      "I made a cleaner preview. I can send it through if you want to take a look.",
+      "I made a cleaner preview and can send it through if you want to take a look.",
       "",
-      "It's designed to make it easier for people to call you from mobile.",
-      "",
-      "If you like it, I can set it up for $99 setup + $99/month.",
+      "It’s designed to make it easier for people to call quickly from mobile. Want me to set this up properly for you?",
       "",
       "- Jamie",
-      "Reply STOP to opt out",
     ].join("\n");
   }
 
   return [
-    `Hey ${leadName}, quick one — I had a look at your website and noticed ${issue}.`,
+    `Hey ${leadName}, I had a quick look and noticed ${issue}. I made a cleaner preview here: ${previewUrl}`,
     "",
-    "I made a cleaner preview here:",
-    previewUrl,
-    "",
-    "It's designed to make it easier for people to call you from mobile.",
-    "",
-    "If you like it, I can set it up for $99 setup + $99/month.",
+    "It’s designed to make it easier for people to call quickly from mobile. Want me to set this up properly for you?",
     "",
     "- Jamie",
-    "Reply STOP to opt out",
   ].join("\n");
 }
 
@@ -247,9 +249,9 @@ function buildOpportunityEmail(lead: LeadWithGeneratedContent) {
   }
 
   lines.push(
-    "It's designed to make it easier for people to call you quickly from mobile.",
+    "It’s designed to make it easier for people to call you quickly from mobile.",
     "",
-    "If you like it, I can set it up properly for $99 setup + $99/month.",
+    "Want me to set this up properly for you?",
     "",
     "Thanks,",
     "Jamie"
