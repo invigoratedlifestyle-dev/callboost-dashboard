@@ -465,8 +465,6 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   }
 
   const leadName = getLeadName(lead);
-  const emailBody = buildOpportunityEmail(lead);
-  const subject = buildOpportunityEmailSubject(lead);
   const handleLeadUpdated = (updatedLead: Lead) => {
     const nextLead = updatedLead as LeadWithGeneratedContent;
 
@@ -849,9 +847,6 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     Boolean(lead.problems) ||
     Boolean(lead.solution);
 
-  const gmailUrl = `https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(
-    lead.email || ""
-  )}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(emailBody)}`;
   const timeline = getTimeline(messages, callbacks);
   const latestInboundMessageTime = getLatestLeadMessageTime(messages, "inbound");
   const latestOutboundMessageTime = getLatestLeadMessageTime(
@@ -1737,35 +1732,6 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
               No website opportunity evaluation has been generated yet.
             </p>
           )}
-        </section>
-
-        <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
-          <h2 className="mb-4 text-xl font-bold">Email Offer</h2>
-
-          <textarea
-            readOnly
-            value={emailBody}
-            className="min-h-[320px] w-full rounded-xl border border-white/10 bg-slate-900 p-4 text-sm leading-6 text-slate-100 outline-none"
-          />
-
-          <div className="mt-4 flex flex-wrap gap-3">
-            <a
-              href={gmailUrl}
-              target="_blank"
-              className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-500"
-            >
-              Open Gmail
-            </a>
-
-            <a
-              href={`mailto:${lead.email || ""}?subject=${encodeURIComponent(
-                subject
-              )}&body=${encodeURIComponent(emailBody)}`}
-              className="rounded-lg bg-slate-700 px-5 py-3 text-sm font-bold text-white hover:bg-slate-600"
-            >
-              Open Mail App
-            </a>
-          </div>
         </section>
 
         <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
