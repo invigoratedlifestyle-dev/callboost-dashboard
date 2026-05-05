@@ -386,10 +386,32 @@ function getReviews(lead: LeadRecord) {
   return Array.isArray(lead.reviews)
     ? lead.reviews
         .map(normalizeReview)
-        .filter((review): review is Review => Boolean(review?.text))
-        .sort((a, b) => Number(b.rating || 0) - Number(a.rating || 0))
+        .filter(
+          (review): review is Review =>
+            Boolean(review?.text) && Number(review?.rating || 0) >= 4
+        )
+        .sort((a, b) => {
+          const ratingDiff = Number(b.rating || 0) - Number(a.rating || 0);
+
+          if (ratingDiff !== 0) return ratingDiff;
+
+          return getReviewAgeDays(a) - getReviewAgeDays(b);
+        })
         .slice(0, 3)
     : [];
+}
+
+function getReviewAgeDays(review: Review) {
+  const text = review.relativeTimeDescription || "";
+  const numberMatch = text.match(/\d+/);
+  const amount = numberMatch ? Number(numberMatch[0]) : 0;
+
+  if (/day/i.test(text)) return amount;
+  if (/week/i.test(text)) return amount * 7;
+  if (/month/i.test(text)) return amount * 30;
+  if (/year/i.test(text)) return amount * 365;
+
+  return Number.MAX_SAFE_INTEGER;
 }
 
 function isGoogleReviewSource(lead: LeadRecord, reviews: Review[]) {
@@ -625,46 +647,42 @@ export function buildGeneratedSiteHtml(lead: LeadRecord) {
         </div>`
     )
     .join("");
-  const reviewsHeading = hasReviews
-    ? usingGoogleReviews
-      ? "Google reviews from local customers"
-      : "What locals are saying"
-    : `Why locals choose ${businessName}`;
-  const reviewsIntro = hasReviews
-    ? usingGoogleReviews
-      ? "Real Google reviews from recent local customers."
-      : "Recent customer feedback from local jobs."
-    : "Fallback testimonials are used when no real reviews are available.";
-  const reviewsHtml = hasReviews
-    ? reviews
-        .map((review) => {
-          const stars = renderStars(review.rating);
-          const time = review.relativeTimeDescription
-            ? `<small>${escapeHtml(review.relativeTimeDescription)}</small>`
-            : "";
+  const reviewsHeading = usingGoogleReviews
+    ? "Google reviews from local customers"
+    : "What locals are saying";
+  const reviewsIntro = usingGoogleReviews
+    ? "Real Google reviews from recent local customers."
+    : "Recent customer feedback from local jobs.";
+  const reviewsHtml = reviews
+    .map((review) => {
+      const stars = renderStars(review.rating);
+      const time = review.relativeTimeDescription
+        ? `<small>${escapeHtml(review.relativeTimeDescription)}</small>`
+        : "";
 
-          return `
-            <article class="review-card">
-              ${stars ? `<div class="stars">${stars}</div>` : ""}
-              <p>"${escapeHtml(review.text)}"</p>
-              <small>${escapeHtml(review.author)}</small>
-              ${time}
-            </article>`;
-        })
-        .join("")
-    : `
+      return `
         <article class="review-card">
-          <h3>Fast response</h3>
-          <p>Quick contact options and practical next steps when a job needs attention.</p>
-        </article>
-        <article class="review-card">
-          <h3>Clear advice</h3>
-          <p>Straightforward communication about the job, timing and what happens before work begins.</p>
-        </article>
-        <article class="review-card">
-          <h3>Professional work</h3>
-          <p>Clean, respectful service for everyday jobs around homes and businesses.</p>
+          ${stars ? `<div class="stars">${stars}</div>` : ""}
+          <p>"${escapeHtml(review.text)}"</p>
+          <small>${escapeHtml(review.author)}</small>
+          ${time}
         </article>`;
+    })
+    .join("");
+  const reviewsSectionHtml = hasReviews
+    ? `
+    <section id="reviews" class="section">
+      <div class="container">
+        <div class="section-header center">
+          <div class="section-kicker">Reviews</div>
+          <h2>${escapeHtml(reviewsHeading)}</h2>
+          ${reviewSummaryHtml}
+          <p class="muted">${escapeHtml(reviewsIntro)}</p>
+        </div>
+        <div class="review-grid">${reviewsHtml}</div>
+      </div>
+    </section>`
+    : "";
   const faqHtml = faqs
     .map(
       ([question, answer]) => `
@@ -880,17 +898,7 @@ export function buildGeneratedSiteHtml(lead: LeadRecord) {
       </div>
     </section>
 
-    <section id="reviews" class="section">
-      <div class="container">
-        <div class="section-header center">
-          <div class="section-kicker">Reviews</div>
-          <h2>${escapeHtml(reviewsHeading)}</h2>
-          ${reviewSummaryHtml}
-          <p class="muted">${escapeHtml(reviewsIntro)}</p>
-        </div>
-        <div class="review-grid">${reviewsHtml}</div>
-      </div>
-    </section>
+    ${reviewsSectionHtml}
 
     <section id="areas" class="section soft">
       <div class="container">

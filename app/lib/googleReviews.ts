@@ -46,6 +46,64 @@ function hasExistingGoogleReviews(lead: LeadWithReviews) {
   );
 }
 
+function getReviewRating(review: unknown) {
+  if (!review || typeof review !== "object") return 0;
+
+  const rating = Number((review as Record<string, unknown>).rating);
+
+  return Number.isFinite(rating) ? rating : 0;
+}
+
+function getReviewTime(review: GoogleReview) {
+  const text = review.relativeTimeDescription || "";
+  const numberMatch = text.match(/\d+/);
+  const amount = numberMatch ? Number(numberMatch[0]) : 0;
+
+  if (/day/i.test(text)) return amount;
+  if (/week/i.test(text)) return amount * 7;
+  if (/month/i.test(text)) return amount * 30;
+  if (/year/i.test(text)) return amount * 365;
+
+  return Number.MAX_SAFE_INTEGER;
+}
+
+function filterPositiveReviews(reviews: GoogleReview[]) {
+  return reviews
+    .filter((review) => review.rating >= 4)
+    .sort((a, b) => {
+      const ratingDiff = b.rating - a.rating;
+
+      if (ratingDiff !== 0) return ratingDiff;
+
+      return getReviewTime(a) - getReviewTime(b);
+    });
+}
+
+function normalizeStoredGoogleReview(review: unknown): GoogleReview | null {
+  if (!review || typeof review !== "object") return null;
+
+  const record = review as Record<string, unknown>;
+  const rating = getReviewRating(review);
+  const text = getString(record.text).trim();
+
+  if (rating < 4 || !text) return null;
+
+  return {
+    author:
+      getString(record.author).trim() ||
+      getString(record.author_name).trim() ||
+      getString(record.name).trim() ||
+      "Google reviewer",
+    rating,
+    text,
+    relativeTimeDescription:
+      getString(record.relativeTimeDescription).trim() ||
+      getString(record.relative_time_description).trim() ||
+      null,
+    source: "google",
+  };
+}
+
 export async function fetchGooglePlaceDetails(placeId: string, apiKey: string) {
   if (!placeId || !apiKey) {
     return null;
@@ -75,7 +133,8 @@ export async function fetchGooglePlaceDetails(placeId: string, apiKey: string) {
 }
 
 export function normalizeGoogleReviews(details?: GooglePlaceDetails | null) {
-  return (details?.reviews || [])
+  return filterPositiveReviews(
+    (details?.reviews || [])
     .map((review) => {
       const normalizedReview: GoogleReview = {
         author: review.authorAttribution?.displayName || "Google reviewer",
@@ -88,7 +147,8 @@ export function normalizeGoogleReviews(details?: GooglePlaceDetails | null) {
 
       return normalizedReview;
     })
-    .filter((review) => review.text);
+      .filter((review) => review.text)
+  );
 }
 
 export function buildGoogleReviewFields(args: {
@@ -96,27 +156,46 @@ export function buildGoogleReviewFields(args: {
   businessName: string;
   reviews: GoogleReview[];
 }) {
-  if (args.reviews.length > 0) {
+  const reviews = filterPositiveReviews(args.reviews);
+
+  if (reviews.length > 0) {
     console.log(
-      `Found ${args.reviews.length} Google reviews for ${args.businessName}`
+      `Found ${reviews.length} positive Google reviews for ${args.businessName}`
     );
 
     return {
-      reviews: args.reviews,
+      reviews,
       reviewsSource: "google",
     };
   }
 
   if (args.existingLead && hasExistingGoogleReviews(args.existingLead)) {
+    const existingReviews = Array.isArray(args.existingLead.reviews)
+      ? filterPositiveReviews(
+          args.existingLead.reviews
+            .map(normalizeStoredGoogleReview)
+            .filter((review): review is GoogleReview => Boolean(review))
+        )
+      : [];
+
+    if (!existingReviews.length) {
+      console.log(`No positive Google reviews found for ${args.businessName}`);
+
+      return {
+        reviews: [],
+        reviewsSource: "none",
+      };
+    }
+
     console.log(`Preserved existing Google reviews for ${args.businessName}`);
 
     return {
-      reviews: args.existingLead.reviews,
+      reviews: existingReviews,
       reviewsSource: "google",
     };
   }
 
-  console.log(`No Google reviews found for ${args.businessName}`);
+  console.log(`No positive Google reviews found for ${args.businessName}`);
 
   return {
     reviews: [],
