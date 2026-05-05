@@ -272,12 +272,27 @@ function getStoredSoundEnabled() {
   );
 }
 
+function getLeadSelectionKey(lead: DashboardLead) {
+  if (lead.slug) return lead.slug;
+  if (lead.id !== undefined && lead.id !== null) return String(lead.id);
+
+  return `${lead.name || lead.businessName || "lead"}-${lead.city || ""}-${
+    lead.trade || ""
+  }`;
+}
+
 export default function DashboardPage() {
   const [leads, setLeads] = useState<DashboardLead[]>([]);
   const [clientRevenueLeads, setClientRevenueLeads] = useState<DashboardLead[]>([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [enriching, setEnriching] = useState(false);
+  const [bulkActionRunning, setBulkActionRunning] = useState<string | null>(
+    null
+  );
+  const [selectedLeadKeys, setSelectedLeadKeys] = useState<Set<string>>(
+    () => new Set()
+  );
   const [targetCityKey, setTargetCityKey] = useState("hobart");
   const [targetTradeKey, setTargetTradeKey] = useState("plumber");
   const [generationLimit, setGenerationLimit] = useState(50);
@@ -291,7 +306,8 @@ export default function DashboardPage() {
   const isFirstNotificationLoadRef = useRef(true);
   const soundEnabledRef = useRef(soundEnabled);
   const permissionRequestedRef = useRef(false);
-  const actionRunning = generating || enriching;
+  const selectAllCheckboxRef = useRef<HTMLInputElement | null>(null);
+  const actionRunning = generating || enriching || Boolean(bulkActionRunning);
 
   const loadLeads = useCallback(async (filter: LeadFilter) => {
     const url =
@@ -492,6 +508,122 @@ export default function DashboardPage() {
       return (getOpportunityScore(b) || 0) - (getOpportunityScore(a) || 0);
     });
   }, [activeFilter, leads]);
+
+  const selectedLeads = useMemo(() => {
+    return visibleLeads.filter((lead) =>
+      selectedLeadKeys.has(getLeadSelectionKey(lead))
+    );
+  }, [selectedLeadKeys, visibleLeads]);
+
+  const allVisibleSelected =
+    visibleLeads.length > 0 &&
+    visibleLeads.every((lead) => selectedLeadKeys.has(getLeadSelectionKey(lead)));
+  const someVisibleSelected = selectedLeads.length > 0;
+  const selectedClientCount = selectedLeads.filter(
+    (lead) => lead.status === "client"
+  ).length;
+
+  useEffect(() => {
+    if (selectAllCheckboxRef.current) {
+      selectAllCheckboxRef.current.indeterminate =
+        someVisibleSelected && !allVisibleSelected;
+    }
+  }, [allVisibleSelected, someVisibleSelected]);
+
+  function isLeadSelected(lead: DashboardLead) {
+    return selectedLeadKeys.has(getLeadSelectionKey(lead));
+  }
+
+  function toggleLeadSelection(lead: DashboardLead) {
+    const key = getLeadSelectionKey(lead);
+
+    setSelectedLeadKeys((current) => {
+      const next = new Set(current);
+
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+
+      return next;
+    });
+  }
+
+  function toggleVisibleLeadSelection() {
+    setSelectedLeadKeys((current) => {
+      const next = new Set(current);
+
+      if (allVisibleSelected) {
+        for (const lead of visibleLeads) {
+          next.delete(getLeadSelectionKey(lead));
+        }
+      } else {
+        for (const lead of visibleLeads) {
+          next.add(getLeadSelectionKey(lead));
+        }
+      }
+
+      return next;
+    });
+  }
+
+  function clearSelectedLeads() {
+    setSelectedLeadKeys(new Set());
+  }
+
+  async function runSelectedBulkAction(
+    action: "enrich" | "contacted" | "archived"
+  ) {
+    const slugs = selectedLeads
+      .map((lead) => lead.slug || "")
+      .filter((slug) => slug);
+
+    if (!slugs.length) {
+      alert("Selected leads need slugs before bulk actions can run.");
+      return;
+    }
+
+    setBulkActionRunning(action);
+
+    try {
+      const isStatusAction = action === "contacted" || action === "archived";
+      const res = await fetch(
+        isStatusAction ? "/api/leads/bulk-status" : "/api/leads/enrich-selected",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(
+            isStatusAction
+              ? {
+                  slugs,
+                  status: action,
+                }
+              : { slugs }
+          ),
+        }
+      );
+      const result = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        console.error("Bulk action failed:", result);
+        alert(result.message || result.error || "Bulk action failed");
+        return;
+      }
+
+      console.log("Bulk action result:", { action, result });
+      await loadLeads(activeFilter);
+      await loadClientRevenueLeads();
+      clearSelectedLeads();
+    } catch (error) {
+      console.error("Bulk action failed:", error);
+      alert("Bulk action failed");
+    } finally {
+      setBulkActionRunning(null);
+    }
+  }
 
   const revenueSummary = useMemo(() => {
     const payingClients = clientRevenueLeads.filter(
@@ -759,6 +891,60 @@ export default function DashboardPage() {
           ))}
         </div>
 
+        {selectedLeads.length > 0 ? (
+          <div className="sticky top-3 z-10 mb-4 flex flex-col gap-3 rounded-xl border border-blue-400/20 bg-blue-500/10 px-4 py-3 backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm font-bold text-blue-100">
+              {selectedLeads.length} selected
+              {selectedClientCount > 0 ? (
+                <span className="ml-2 text-xs text-blue-200/70">
+                  {selectedClientCount} client
+                  {selectedClientCount === 1 ? "" : "s"} protected
+                </span>
+              ) : null}
+            </p>
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={clearSelectedLeads}
+                disabled={Boolean(bulkActionRunning)}
+                className="rounded-lg bg-white/10 px-3 py-2 text-xs font-bold text-slate-200 hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Clear selection
+              </button>
+
+              <button
+                onClick={() => runSelectedBulkAction("enrich")}
+                disabled={Boolean(bulkActionRunning)}
+                className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {bulkActionRunning === "enrich"
+                  ? "Enriching..."
+                  : "Enrich Selected"}
+              </button>
+
+              <button
+                onClick={() => runSelectedBulkAction("contacted")}
+                disabled={Boolean(bulkActionRunning) || selectedClientCount > 0}
+                className="rounded-lg bg-slate-700 px-3 py-2 text-xs font-bold text-white hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {bulkActionRunning === "contacted"
+                  ? "Updating..."
+                  : "Mark Contacted"}
+              </button>
+
+              <button
+                onClick={() => runSelectedBulkAction("archived")}
+                disabled={Boolean(bulkActionRunning) || selectedClientCount > 0}
+                className="rounded-lg bg-red-600 px-3 py-2 text-xs font-bold text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {bulkActionRunning === "archived"
+                  ? "Archiving..."
+                  : "Archive Selected"}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
         <div className="rounded-2xl border border-white/10 bg-white/5 shadow-2xl">
           <div className="border-b border-white/10 px-6 py-4">
             <h2 className="text-lg font-bold">{filterTitles[activeFilter]}</h2>
@@ -768,6 +954,17 @@ export default function DashboardPage() {
             <table className="w-full border-collapse text-left">
               <thead>
                 <tr className="border-b border-white/10 text-sm text-slate-400">
+                  <th className="w-12 px-5 py-4">
+                    <input
+                      ref={selectAllCheckboxRef}
+                      type="checkbox"
+                      checked={allVisibleSelected}
+                      onChange={toggleVisibleLeadSelection}
+                      disabled={!visibleLeads.length || actionRunning}
+                      className="h-4 w-4"
+                      aria-label="Select all visible leads"
+                    />
+                  </th>
                   <th className="px-5 py-4">Lead</th>
                   <th className="px-5 py-4">Opportunity</th>
                   <th className="px-5 py-4">Contact</th>
@@ -781,7 +978,7 @@ export default function DashboardPage() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td className="px-5 py-6 text-slate-400" colSpan={7}>
+                    <td className="px-5 py-6 text-slate-400" colSpan={8}>
                       Loading leads...
                     </td>
                   </tr>
@@ -801,16 +998,32 @@ export default function DashboardPage() {
                       lead.email && !isPlaceholderEmail(lead.email)
                         ? lead.email
                         : "";
+                    const selected = isLeadSelected(lead);
+                    const paymentFailed =
+                      getPaymentStatus(lead) === "payment_failed";
 
                     return (
                       <tr
                         key={leadKey}
                         className={`border-b ${
-                          getPaymentStatus(lead) === "payment_failed"
+                          paymentFailed
                             ? "border-red-400/30 bg-red-500/10"
-                            : "border-white/10"
-                        }`}
+                            : selected
+                              ? "border-blue-400/20 bg-blue-500/10"
+                              : "border-white/10"
+                        } ${paymentFailed && selected ? "ring-1 ring-blue-400/20" : ""}`}
                       >
+                        <td className="px-5 py-4">
+                          <input
+                            type="checkbox"
+                            checked={selected}
+                            onChange={() => toggleLeadSelection(lead)}
+                            disabled={actionRunning}
+                            className="h-4 w-4"
+                            aria-label={`Select ${leadName || "lead"}`}
+                          />
+                        </td>
+
                         <td className="px-5 py-4">
                           <div className="flex flex-wrap items-center gap-2">
                             <p className="text-sm font-bold text-white">
@@ -925,7 +1138,7 @@ export default function DashboardPage() {
                   })
                 ) : (
                   <tr>
-                    <td className="px-5 py-6 text-slate-400" colSpan={7}>
+                    <td className="px-5 py-6 text-slate-400" colSpan={8}>
                       No leads found for this view.
                     </td>
                   </tr>
