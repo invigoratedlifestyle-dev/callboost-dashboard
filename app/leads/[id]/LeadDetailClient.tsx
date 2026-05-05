@@ -352,6 +352,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const [checkoutError, setCheckoutError] = useState("");
   const [openingPortal, setOpeningPortal] = useState(false);
   const [portalError, setPortalError] = useState("");
+  const [redoingOpportunity, setRedoingOpportunity] = useState(false);
+  const [opportunityError, setOpportunityError] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -499,6 +501,55 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       if (!emailBodyEdited) {
         setEmailOfferBody(buildOpportunityEmail(lead));
       }
+    }
+  };
+  const handleRedoWebsiteOpportunity = async () => {
+    if (!lead) return;
+
+    setRedoingOpportunity(true);
+    setOpportunityError("");
+
+    try {
+      const res = await fetch("/api/enrich", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          slug: lead.slug || lead.id,
+          website: lead.website || "",
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to redo website opportunity");
+      }
+
+      const refreshRes = await fetch(`/api/leads/${lead.slug || lead.id}`, {
+        cache: "no-store",
+      });
+
+      if (refreshRes.ok) {
+        const refreshData = await refreshRes.json();
+
+        if (refreshData.lead) {
+          handleLeadUpdated(refreshData.lead);
+          return;
+        }
+      }
+
+      if (data.lead) {
+        handleLeadUpdated(data.lead);
+      }
+    } catch (error) {
+      setOpportunityError(
+        error instanceof Error
+          ? error.message
+          : "Failed to redo website opportunity"
+      );
+    } finally {
+      setRedoingOpportunity(false);
     }
   };
   const handleStartContactEdit = () => {
@@ -1664,7 +1715,25 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
         </section>
 
         <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
-          <h2 className="mb-4 text-xl font-bold">Website Opportunity</h2>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-xl font-bold">Website Opportunity</h2>
+
+            <button
+              onClick={handleRedoWebsiteOpportunity}
+              disabled={redoingOpportunity}
+              className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-bold text-white hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {redoingOpportunity
+                ? "Redoing..."
+                : "Redo Website Opportunity"}
+            </button>
+          </div>
+
+          {opportunityError ? (
+            <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">
+              {opportunityError}
+            </p>
+          ) : null}
 
           {websiteEvaluation ? (
             <div className="space-y-5">

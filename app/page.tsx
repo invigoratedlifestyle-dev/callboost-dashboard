@@ -296,7 +296,7 @@ export default function DashboardPage() {
   const [targetCityKey, setTargetCityKey] = useState("hobart");
   const [targetTradeKey, setTargetTradeKey] = useState("plumber");
   const [generationLimit, setGenerationLimit] = useState(50);
-  const [activeFilter, setActiveFilter] = useState<LeadFilter>("all");
+  const [activeFilter, setActiveFilter] = useState<LeadFilter>("lead");
   const [replyNotifications, setReplyNotifications] = useState<
     ReplyNotification[]
   >([]);
