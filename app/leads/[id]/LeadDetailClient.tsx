@@ -260,6 +260,41 @@ function buildOpportunityEmail(lead: LeadWithGeneratedContent) {
   return lines.join("\n");
 }
 
+function buildCloseSms() {
+  return [
+    "Glad you like it 👍 I handle everything — setup, hosting, updates and small changes — for $99 setup + $99/month.",
+    "",
+    "Want me to set it up and send the payment link?",
+  ].join("\n");
+}
+
+function buildCloseEmailSubject() {
+  return "Website preview setup";
+}
+
+function buildCloseEmail() {
+  return [
+    "Glad you like it 👍",
+    "",
+    "I handle everything — setup, hosting, updates, and small changes — for $99 setup + $99/month.",
+    "",
+    "I can get it live for you and send through the payment link to start.",
+    "",
+    "Want me to set it up?",
+    "",
+    "Thanks,",
+    "Jamie",
+  ].join("\n");
+}
+
+function looksLikeInterestedReply(message?: LeadMessage | null) {
+  if (!message || message.direction !== "inbound") return false;
+
+  return /\b(interested|yes|send it|looks good|how much|price|cost|go ahead|set it up)\b/i.test(
+    message.body || ""
+  );
+}
+
 function getTimeline(messages: LeadMessage[], callbacks: CallbackRequest[]) {
   return [
     ...messages.map((message) => ({
@@ -336,6 +371,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     useState<FollowUpStage | null>(null);
   const [followUpNotice, setFollowUpNotice] = useState("");
   const [followUpError, setFollowUpError] = useState("");
+  const [closeReplyNotice, setCloseReplyNotice] = useState("");
+  const [closeReplyError, setCloseReplyError] = useState("");
   const [callbackForwardingEnabled, setCallbackForwardingEnabled] =
     useState(false);
   const [callbackForwardToEmail, setCallbackForwardToEmail] = useState("");
@@ -888,6 +925,42 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       setSendingFollowUp(null);
     }
   };
+  const handleCopyCloseReply = async (channel: OutreachChannel) => {
+    setCloseReplyNotice("");
+    setCloseReplyError("");
+
+    try {
+      const copyText =
+        channel === "sms"
+          ? buildCloseSms()
+          : `${buildCloseEmailSubject()}\n\n${buildCloseEmail()}`;
+
+      await navigator.clipboard.writeText(copyText);
+      setCloseReplyNotice(
+        channel === "sms" ? "Close SMS copied." : "Close email copied."
+      );
+    } catch {
+      setCloseReplyError("Could not copy close reply.");
+    }
+  };
+  const handleUseCloseReply = (channel: OutreachChannel) => {
+    setCloseReplyNotice("");
+    setCloseReplyError("");
+    setOutreachChannel(channel);
+
+    if (channel === "sms") {
+      setSmsBody(buildCloseSms());
+      setSmsBodyEdited(true);
+      setCloseReplyNotice("Close SMS loaded into composer.");
+      return;
+    }
+
+    setEmailSubject(buildCloseEmailSubject());
+    setEmailOfferBody(buildCloseEmail());
+    setEmailSubjectEdited(true);
+    setEmailBodyEdited(true);
+    setCloseReplyNotice("Close email loaded into composer.");
+  };
   const generatedDescription =
     lead.description || lead.solution || lead.subheadline || "";
   const generatedSiteUrl = lead.generatedSiteUrl || "";
@@ -906,6 +979,9 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     messages,
     "outbound"
   );
+  const latestInboundMessage =
+    messages.find((message) => message.direction === "inbound") || null;
+  const mayBeReadyForClose = looksLikeInterestedReply(latestInboundMessage);
   const hasReplyAfterLastOutbound =
     latestInboundMessageTime > latestOutboundMessageTime;
   const canShowFollowUpActions = lead.status === "contacted";
@@ -1371,6 +1447,63 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
             </div>
           </section>
         ) : null}
+
+        <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
+          <div className="mb-4">
+            <h2 className="text-xl font-bold">Interested reply</h2>
+            <p className="mt-1 text-sm text-slate-400">
+              Use this when a lead replies positively and is ready for pricing.
+            </p>
+          </div>
+
+          {mayBeReadyForClose ? (
+            <p className="mb-4 rounded-lg bg-green-500/10 px-3 py-2 text-sm font-bold text-green-300">
+              This lead may be ready for a close reply.
+            </p>
+          ) : null}
+
+          {closeReplyNotice ? (
+            <p className="mb-4 rounded-lg bg-green-500/10 px-3 py-2 text-sm font-bold text-green-300">
+              {closeReplyNotice}
+            </p>
+          ) : null}
+
+          {closeReplyError ? (
+            <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">
+              {closeReplyError}
+            </p>
+          ) : null}
+
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={() => handleCopyCloseReply("sms")}
+              className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-bold text-white hover:bg-slate-600"
+            >
+              Copy close SMS
+            </button>
+
+            <button
+              onClick={() => handleCopyCloseReply("email")}
+              className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-bold text-white hover:bg-slate-600"
+            >
+              Copy close Email
+            </button>
+
+            <button
+              onClick={() => handleUseCloseReply("sms")}
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500"
+            >
+              Use in SMS
+            </button>
+
+            <button
+              onClick={() => handleUseCloseReply("email")}
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500"
+            >
+              Use in Email
+            </button>
+          </div>
+        </section>
 
         <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
