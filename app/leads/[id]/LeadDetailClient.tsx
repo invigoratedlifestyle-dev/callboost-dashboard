@@ -1719,6 +1719,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
             <h2 className="text-xl font-bold">Website Opportunity</h2>
 
             <button
+              type="button"
               onClick={handleRedoWebsiteOpportunity}
               disabled={redoingOpportunity}
               className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-bold text-white hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-60"

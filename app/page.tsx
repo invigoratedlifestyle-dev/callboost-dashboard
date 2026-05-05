@@ -9,6 +9,7 @@ import type { Lead, LeadStatus, WebsiteEvaluation } from "./lib/leads";
 type LeadPriority = "high" | "medium" | "low";
 type WebsiteStatus = "no_website" | "weak_website" | "has_website";
 type LeadFilter = "all" | LeadStatus;
+const DEFAULT_LEAD_FILTER: LeadFilter = "lead";
 type DashboardLead = Lead & {
   priority?: LeadPriority;
   leadScore?: number;
@@ -296,7 +297,8 @@ export default function DashboardPage() {
   const [targetCityKey, setTargetCityKey] = useState("hobart");
   const [targetTradeKey, setTargetTradeKey] = useState("plumber");
   const [generationLimit, setGenerationLimit] = useState(50);
-  const [activeFilter, setActiveFilter] = useState<LeadFilter>("lead");
+  const [activeFilter, setActiveFilter] =
+    useState<LeadFilter>(DEFAULT_LEAD_FILTER);
   const [replyNotifications, setReplyNotifications] = useState<
     ReplyNotification[]
   >([]);
