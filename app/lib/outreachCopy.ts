@@ -167,19 +167,23 @@ export function buildOpportunityEmail(
 }
 
 export function buildInterestedReplySms(
-  args: InterestedReplyPersonalization = {}
+  _args: InterestedReplyPersonalization = {}
 ) {
-  const previewUrl = clean(args.previewUrl);
-  const setupTarget = getBusinessSetupTarget(args);
+  void _args;
 
   return appendOptOut([
-    "Glad you like it. Simple from here: $99 setup, then $99/month.",
+    "Glad you like it 👍",
     "",
-    "I handle the domain setup, hosting, updates and small tweaks, so you do not need to manage anything.",
-    previewUrl ? `Preview: ${previewUrl}` : "",
+    "It's $99 setup + $99/month ongoing.",
     "",
-    `If you are happy to go ahead, I can send the secure payment link and get ${setupTarget} set up.`,
-  ].filter(Boolean).join("\n"));
+    "I handle everything including domain setup, hosting, updates and any small changes needed.",
+    "",
+    "If you'd like to go ahead, I can send through the payment link and get everything set up for you.",
+    "",
+    "Cheers,",
+    "Jamie",
+    "CallBoost",
+  ].join("\n"));
 }
 
 export function buildInterestedReplyEmailSubject(
@@ -197,9 +201,9 @@ export function buildInterestedReplyEmail(
   const lines = [
     "Glad you like it.",
     "",
-    "The setup is simple: $99 setup, then $99/month.",
+    "It's $99 setup + $99/month ongoing.",
     "",
-    `That covers domain setup, hosting, updates and small changes for ${websiteNoun}, so you do not need to manage the technical side.`,
+    `I handle everything including domain setup, hosting, updates and any small changes needed for ${websiteNoun}.`,
     "",
   ];
 
@@ -208,10 +212,11 @@ export function buildInterestedReplyEmail(
   }
 
   lines.push(
-    `If you are happy to go ahead, I can send through the secure payment link and get ${setupTarget} set up.`,
+    `If you'd like to go ahead, I can send through the payment link and get ${setupTarget} set up for you.`,
     "",
-    "Thanks,",
-    "Jamie"
+    "Cheers,",
+    "Jamie",
+    "CallBoost"
   );
 
   return lines.join("\n");
