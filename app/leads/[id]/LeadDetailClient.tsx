@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { generateOfferEmail } from "../../lib/emailTemplate";
 import type {
   CallbackRequest,
   Lead,
@@ -18,6 +17,10 @@ type LeadWithGeneratedContent = Lead & {
   subheadline?: string;
   problems?: string;
   solution?: string;
+  websiteOpportunity?: {
+    issue?: string;
+    summary?: string;
+  };
 };
 
 type OutreachChannel = "sms" | "email";
@@ -144,18 +147,26 @@ function getReviewSource(lead: LeadWithGeneratedContent) {
   };
 }
 
-function getWebsiteOpportunityLine(lead: LeadWithGeneratedContent) {
-  const evaluation = lead.websiteEvaluation;
+function getWebsiteOpportunityIssue(lead: LeadWithGeneratedContent) {
+  const explicitIssue = lead.websiteOpportunity?.issue?.trim();
 
-  if (!evaluation || evaluation.quality === "none" || !evaluation.hasWebsite) {
-    return "I couldn't find a proper website for your business.";
-  }
+  if (explicitIssue) return explicitIssue;
 
-  if (evaluation.quality === "bad" || evaluation.quality === "weak") {
-    return "your current website could do more to turn visitors into calls.";
-  }
+  const firstEvaluationIssue = lead.websiteEvaluation?.issues?.find((issue) =>
+    issue.trim()
+  );
 
-  return "there may be a few quick wins to improve local enquiries.";
+  if (firstEvaluationIssue) return firstEvaluationIssue.trim();
+
+  const opportunitySummary = lead.websiteOpportunity?.summary?.trim();
+
+  if (opportunitySummary) return opportunitySummary;
+
+  const evaluationSummary = lead.websiteEvaluation?.summary?.trim();
+
+  if (evaluationSummary) return evaluationSummary;
+
+  return "";
 }
 
 function getPreviewUrl(lead: LeadWithGeneratedContent) {
@@ -172,43 +183,79 @@ function getLeadName(lead: LeadWithGeneratedContent) {
   return lead.name || lead.businessName || "this business";
 }
 
-function buildSmsOffer(lead: LeadWithGeneratedContent) {
+function buildOpportunitySms(lead: LeadWithGeneratedContent) {
   const previewUrl = getPreviewUrl(lead);
   const leadName = getLeadName(lead);
+  const issue =
+    getWebsiteOpportunityIssue(lead) ||
+    "a couple of things that might be costing you calls";
+
+  if (!previewUrl) {
+    return [
+      `Hey ${leadName}, quick one — I had a look at your website and noticed ${issue}.`,
+      "",
+      "I made a cleaner preview. I can send it through if you want to take a look.",
+      "",
+      "It's designed to make it easier for people to call you from mobile.",
+      "",
+      "If you like it, I can set it up for $99 setup + $99/month.",
+      "",
+      "- Jamie",
+      "Reply STOP to opt out",
+    ].join("\n");
+  }
 
   return [
-    `Hey ${leadName}, I built a quick website preview for your ${lead.trade} business:`,
+    `Hey ${leadName}, quick one — I had a look at your website and noticed ${issue}.`,
     "",
+    "I made a cleaner preview here:",
     previewUrl,
     "",
-    "If you like it, I can set it up properly for $99 setup + $99/month.",
+    "It's designed to make it easier for people to call you from mobile.",
+    "",
+    "If you like it, I can set it up for $99 setup + $99/month.",
     "",
     "- Jamie",
     "Reply STOP to opt out",
   ].join("\n");
 }
 
-function buildEmailSubject(lead: LeadWithGeneratedContent) {
+function buildOpportunityEmailSubject(lead: LeadWithGeneratedContent) {
   return `Quick website preview for ${getLeadName(lead)}`;
 }
 
-function buildEmailOffer(lead: LeadWithGeneratedContent) {
+function buildOpportunityEmail(lead: LeadWithGeneratedContent) {
   const previewUrl = getPreviewUrl(lead);
   const leadName = getLeadName(lead);
+  const issue =
+    getWebsiteOpportunityIssue(lead) ||
+    "A few improvements could make it easier for customers to call you.";
 
-  return [
+  const lines = [
     `Hey ${leadName},`,
     "",
-    `I built a quick website preview for your ${lead.trade} business here:`,
+    "I had a quick look at your website and noticed something that might be costing you calls:",
     "",
-    previewUrl,
+    `- ${issue}`,
     "",
-    `I noticed ${getWebsiteOpportunityLine(lead)}`,
+  ];
+
+  if (previewUrl) {
+    lines.push("I made a cleaner preview here:", previewUrl, "");
+  } else {
+    lines.push("I can send through a preview if you want to take a look.", "");
+  }
+
+  lines.push(
+    "It's designed to make it easier for people to call you quickly from mobile.",
     "",
     "If you like it, I can set it up properly for $99 setup + $99/month.",
     "",
-    "- Jamie",
-  ].join("\n");
+    "Thanks,",
+    "Jamie"
+  );
+
+  return lines.join("\n");
 }
 
 function getTimeline(messages: LeadMessage[], callbacks: CallbackRequest[]) {
@@ -277,6 +324,9 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const [emailTo, setEmailTo] = useState("");
   const [emailSubject, setEmailSubject] = useState("");
   const [emailOfferBody, setEmailOfferBody] = useState("");
+  const [smsBodyEdited, setSmsBodyEdited] = useState(false);
+  const [emailSubjectEdited, setEmailSubjectEdited] = useState(false);
+  const [emailBodyEdited, setEmailBodyEdited] = useState(false);
   const [sendingOffer, setSendingOffer] = useState("");
   const [outreachNotice, setOutreachNotice] = useState("");
   const [outreachError, setOutreachError] = useState("");
@@ -332,10 +382,13 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
         website: loadedLead.website || "",
       });
       setSmsTo(loadedLead.phone || "");
-      setSmsBody(buildSmsOffer(loadedLead));
+      setSmsBody(buildOpportunitySms(loadedLead));
+      setSmsBodyEdited(false);
       setEmailTo(loadedLead.email || "");
-      setEmailSubject(buildEmailSubject(loadedLead));
-      setEmailOfferBody(buildEmailOffer(loadedLead));
+      setEmailSubject(buildOpportunityEmailSubject(loadedLead));
+      setEmailSubjectEdited(false);
+      setEmailOfferBody(buildOpportunityEmail(loadedLead));
+      setEmailBodyEdited(false);
       setCallbackForwardingEnabled(
         Boolean(data.lead?.callbackForwardingEnabled)
       );
@@ -411,11 +464,44 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     );
   }
 
-  const emailBody = generateOfferEmail(lead);
   const leadName = getLeadName(lead);
-  const subject = `Quick win for ${leadName}`;
+  const emailBody = buildOpportunityEmail(lead);
+  const subject = buildOpportunityEmailSubject(lead);
   const handleLeadUpdated = (updatedLead: Lead) => {
-    setLead(updatedLead);
+    const nextLead = updatedLead as LeadWithGeneratedContent;
+
+    setLead(nextLead);
+
+    if (!smsBodyEdited) {
+      setSmsBody(buildOpportunitySms(nextLead));
+    }
+
+    if (!emailSubjectEdited) {
+      setEmailSubject(buildOpportunityEmailSubject(nextLead));
+    }
+
+    if (!emailBodyEdited) {
+      setEmailOfferBody(buildOpportunityEmail(nextLead));
+    }
+  };
+  const handleOutreachChannelChange = (channel: OutreachChannel) => {
+    setOutreachChannel(channel);
+
+    if (!lead) return;
+
+    if (channel === "sms" && !smsBodyEdited) {
+      setSmsBody(buildOpportunitySms(lead));
+    }
+
+    if (channel === "email") {
+      if (!emailSubjectEdited) {
+        setEmailSubject(buildOpportunityEmailSubject(lead));
+      }
+
+      if (!emailBodyEdited) {
+        setEmailOfferBody(buildOpportunityEmail(lead));
+      }
+    }
   };
   const handleStartContactEdit = () => {
     if (!lead) return;
@@ -1246,7 +1332,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
               {(["sms", "email"] as OutreachChannel[]).map((channel) => (
                 <button
                   key={channel}
-                  onClick={() => setOutreachChannel(channel)}
+                  onClick={() => handleOutreachChannelChange(channel)}
                   className={`rounded-md px-4 py-2 text-sm font-bold ${
                     outreachChannel === channel
                       ? "bg-blue-600 text-white"
@@ -1287,7 +1373,10 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 Message
                 <textarea
                   value={smsBody}
-                  onChange={(event) => setSmsBody(event.target.value)}
+                  onChange={(event) => {
+                    setSmsBodyEdited(true);
+                    setSmsBody(event.target.value);
+                  }}
                   className="min-h-[220px] rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm leading-6 text-white outline-none"
                 />
               </label>
@@ -1320,7 +1409,10 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 Subject
                 <input
                   value={emailSubject}
-                  onChange={(event) => setEmailSubject(event.target.value)}
+                  onChange={(event) => {
+                    setEmailSubjectEdited(true);
+                    setEmailSubject(event.target.value);
+                  }}
                   className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none"
                 />
               </label>
@@ -1329,7 +1421,10 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 Body
                 <textarea
                   value={emailOfferBody}
-                  onChange={(event) => setEmailOfferBody(event.target.value)}
+                  onChange={(event) => {
+                    setEmailBodyEdited(true);
+                    setEmailOfferBody(event.target.value);
+                  }}
                   className="min-h-[280px] rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm leading-6 text-white outline-none"
                 />
               </label>
