@@ -81,6 +81,7 @@ async function getGooglePlaceDetailsForLead(placeId: string, apiKey: string) {
 
 type GoogleTextSearchResponse = {
   places?: GooglePlace[];
+  nextPageToken?: string;
   error?: {
     message?: string;
   };
@@ -224,48 +225,97 @@ const AU_STATE_MARKERS = [
   "nt",
 ];
 
+const OBVIOUS_FOREIGN_ADDRESS_MARKERS = [
+  "united states",
+  "usa",
+  "ca usa",
+  "ny",
+  "texas",
+  "florida",
+  "california",
+  "illinois",
+  "pennsylvania",
+  "ohio",
+  "georgia",
+  "north carolina",
+  "michigan",
+  "new jersey",
+  "virginia",
+  "washington",
+  "arizona",
+  "massachusetts",
+  "tennessee",
+  "indiana",
+  "missouri",
+  "maryland",
+  "wisconsin",
+  "colorado",
+  "minnesota",
+  "south carolina",
+  "alabama",
+  "louisiana",
+  "kentucky",
+  "oregon",
+  "oklahoma",
+  "connecticut",
+  "utah",
+  "iowa",
+  "nevada",
+  "arkansas",
+  "mississippi",
+  "kansas",
+  "new mexico",
+  "nebraska",
+  "idaho",
+  "west virginia",
+  "hawaii",
+  "new hampshire",
+  "maine",
+  "montana",
+  "rhode island",
+  "delaware",
+  "south dakota",
+  "north dakota",
+  "alaska",
+  "vermont",
+  "wyoming",
+];
+
+function hasAddressMarker(address: string, marker: string) {
+  return new RegExp(`\\b${marker.replace(/\s+/g, "\\s+")}\\b`, "i").test(
+    address
+  );
+}
+
 function getOutOfRegionReason(place: GooglePlace) {
   const formattedAddress = (place.formattedAddress || "").toLowerCase();
   const hasFormattedAddress = Boolean(formattedAddress);
   const hasAustralianAddressMarker = AU_STATE_MARKERS.some((marker) =>
-    new RegExp(`\\b${marker.replace(/\s+/g, "\\s+")}\\b`, "i").test(
-      formattedAddress
-    )
+    hasAddressMarker(formattedAddress, marker)
+  );
+  const hasObviousForeignAddressMarker = OBVIOUS_FOREIGN_ADDRESS_MARKERS.some(
+    (marker) => hasAddressMarker(formattedAddress, marker)
   );
   const countryComponents = (place.addressComponents || []).filter((component) =>
     (component.types || []).includes("country")
   );
   const hasCountryComponents = countryComponents.length > 0;
   const hasAuCountryCode = countryComponents.some((component) => {
-    const types = component.types || [];
-    const shortText = (component.shortText || "").toUpperCase();
-
-    return types.includes("country") && shortText === "AU";
-  });
-  const hasNonAuCountry = countryComponents.some((component) => {
     const shortText = (component.shortText || "").toUpperCase();
     const longText = (component.longText || "").toLowerCase();
 
-    return shortText !== "AU" && longText !== "australia";
+    return shortText === "AU" || longText === "australia";
   });
   const internationalPhone = place.internationalPhoneNumber?.trim() || "";
   const nationalPhone = place.nationalPhoneNumber?.trim() || "";
   const website = (place.websiteUri || "").toLowerCase();
 
-  if (hasCountryComponents && !hasAuCountryCode) {
-    return "country_not_au";
+  if (hasCountryComponents) {
+    return hasAuCountryCode ? "" : "country_not_au";
   }
 
-  if (hasNonAuCountry) {
-    return "non_au_country_component";
-  }
-
-  if (hasFormattedAddress && !hasAustralianAddressMarker) {
-    return "address_not_australian";
-  }
-
-  if (/\bunited states\b|\busa\b|\bus\b/.test(formattedAddress)) {
-    return "us_address";
+  if (hasFormattedAddress && hasObviousForeignAddressMarker) {
+    return "foreign_address";
   }
 
   if (internationalPhone && !internationalPhone.startsWith("+61")) {
@@ -278,6 +328,10 @@ function getOutOfRegionReason(place: GooglePlace) {
 
   if (/\.(?:com|net|org)$/.test(website) && website.includes("usa")) {
     return "us_website";
+  }
+
+  if (hasFormattedAddress && hasAustralianAddressMarker) {
+    return "";
   }
 
   return "";
@@ -304,45 +358,104 @@ function isValidPhone(phone?: string) {
   );
 }
 
-async function textSearch(query: string, apiKey: string, cityTarget: CityTarget) {
-  const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Goog-Api-Key": apiKey,
-      "X-Goog-FieldMask":
-        "places.id,places.displayName,places.addressComponents,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.websiteUri,places.nationalPhoneNumber,places.internationalPhoneNumber,places.types",
+function buildLocationRectangle(lat: number, lng: number, radiusMeters: number) {
+  const earthRadiusMeters = 6371000;
+  const latDelta = (radiusMeters / earthRadiusMeters) * (180 / Math.PI);
+  const lngDelta =
+    (radiusMeters / earthRadiusMeters) *
+    (180 / Math.PI) /
+    Math.cos((lat * Math.PI) / 180);
+
+  return {
+    low: {
+      latitude: lat - latDelta,
+      longitude: lng - lngDelta,
     },
-    body: JSON.stringify({
+    high: {
+      latitude: lat + latDelta,
+      longitude: lng + lngDelta,
+    },
+  };
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function textSearch(
+  query: string,
+  apiKey: string,
+  cityTarget: CityTarget,
+  maxResults: number
+) {
+  const rectangle = buildLocationRectangle(
+    cityTarget.lat,
+    cityTarget.lng,
+    cityTarget.radiusMeters
+  );
+  const allPlaces: GooglePlace[] = [];
+  let pageToken = "";
+
+  console.log("PLACES_TEXT_SEARCH_TARGET", {
+    query,
+    city: cityTarget.city,
+    state: cityTarget.state,
+    countryCode: cityTarget.countryCode,
+    rectangle,
+    maxResults,
+  });
+
+  do {
+    const body = {
       textQuery: query,
       regionCode: cityTarget.countryCode,
       locationRestriction: {
-        circle: {
-          center: {
-            latitude: cityTarget.lat,
-            longitude: cityTarget.lng,
-          },
-          radius: cityTarget.radiusMeters,
-        },
+        rectangle,
       },
-      pageSize: 20,
-    }),
-  });
+      pageSize: Math.min(20, Math.max(1, maxResults - allPlaces.length)),
+      ...(pageToken ? { pageToken } : {}),
+    };
 
-  if (!res.ok) {
-    const errorText = await res.text();
-    throw new Error(
-      `Google Places Text Search failed: ${res.status} ${errorText}`
-    );
-  }
+    const res = await fetch("https://places.googleapis.com/v1/places:searchText", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": apiKey,
+        "X-Goog-FieldMask":
+          "places.id,places.displayName,places.addressComponents,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.websiteUri,places.nationalPhoneNumber,places.internationalPhoneNumber,places.types",
+      },
+      body: JSON.stringify(body),
+    });
 
-  const data = (await res.json()) as GoogleTextSearchResponse;
+    if (!res.ok) {
+      const errorText = await res.text();
+      throw new Error(
+        `Google Places Text Search failed: ${res.status} ${errorText}`
+      );
+    }
 
-  if (data.error?.message) {
-    throw new Error(data.error.message);
-  }
+    const data = (await res.json()) as GoogleTextSearchResponse;
 
-  return data.places || [];
+    if (data.error?.message) {
+      throw new Error(data.error.message);
+    }
+
+    allPlaces.push(...(data.places || []));
+    pageToken = data.nextPageToken || "";
+
+    console.log("PLACES_TEXT_SEARCH_PAGE", {
+      query,
+      pageResults: data.places?.length || 0,
+      totalCollected: allPlaces.length,
+      hasNextPage: Boolean(data.nextPageToken),
+    });
+
+    if (pageToken && allPlaces.length < maxResults) {
+      await delay(1500);
+    }
+  } while (pageToken && allPlaces.length < maxResults);
+
+  return allPlaces.slice(0, maxResults);
 }
 
 export async function POST(req: Request) {
@@ -409,7 +522,7 @@ export async function POST(req: Request) {
       try {
         console.log("Searching Places query:", query);
 
-        const places = await textSearch(query, apiKey, cityTarget);
+        const places = await textSearch(query, apiKey, cityTarget, maxLeads);
 
         console.log("Places returned:", {
           query,
@@ -577,6 +690,8 @@ export async function POST(req: Request) {
           city_target: cityTarget.key,
           trade: tradeTarget.key,
           reason: outOfRegionReason,
+          formattedAddress: place.formattedAddress || "",
+          internationalPhoneNumber: place.internationalPhoneNumber || "",
         });
 
         await saveIgnoredLead(
@@ -632,6 +747,18 @@ export async function POST(req: Request) {
       });
     }
 
+    validPlaces.sort((a, b) => {
+      const scoreDiff = b.tradeValidation.score - a.tradeValidation.score;
+
+      if (scoreDiff !== 0) return scoreDiff;
+
+      const ratingDiff = (b.place.rating || 0) - (a.place.rating || 0);
+
+      if (ratingDiff !== 0) return ratingDiff;
+
+      return (b.place.userRatingCount || 0) - (a.place.userRatingCount || 0);
+    });
+
     const cappedPlaces = validPlaces.slice(0, maxLeads);
     const leads = [];
     let enriched = 0;
@@ -656,6 +783,10 @@ export async function POST(req: Request) {
         businessName,
         reviews: googleReviews,
       });
+      const leadPriorityScore =
+        tradeValidation.score +
+        (Number(place.rating) || 0) +
+        Math.min(Number(place.userRatingCount) || 0, 100) / 100;
       const lead = {
         businessName,
         trade,
@@ -679,6 +810,7 @@ export async function POST(req: Request) {
               : "",
         website: place.websiteUri || "",
         phone: place.internationalPhoneNumber || place.nationalPhoneNumber || "",
+        leadPriorityScore,
         tradeValidation,
         status: "lead",
         contactedAt: null,
