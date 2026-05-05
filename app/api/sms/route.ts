@@ -6,6 +6,7 @@ import {
   getLeadRowBySlug,
   listLeadRows,
   rowToLead,
+  updateLeadStatusBySlug,
   type LeadRow,
 } from "../../lib/supabase/leads";
 
@@ -33,6 +34,17 @@ function normalizePhone(value: unknown) {
   }
 
   return phone;
+}
+
+function normalizeOptOutBody(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/^[\s.,!?;:'"()[\]{}-]+|[\s.,!?;:'"()[\]{}-]+$/g, "");
+}
+
+function isSmsOptOut(body: string) {
+  return normalizeOptOutBody(body) === "stop";
 }
 
 async function findLeadByOutboundSms(fromPhone: string) {
@@ -79,6 +91,7 @@ export async function POST(req: Request) {
     const from = getString(formData.get("From"));
     const to = getString(formData.get("To"));
     const body = getString(formData.get("Body"));
+    const isOptOut = isSmsOptOut(body);
 
     if (!from || !body) {
       console.log("Inbound SMS ignored: missing sender or body");
@@ -89,9 +102,12 @@ export async function POST(req: Request) {
       (await findLeadByOutboundSms(from)) || (await findLeadByPhone(from));
 
     if (!match) {
-      console.log("Inbound SMS ignored: no matching lead or outbound message", {
-        from,
-      });
+      console.log(
+        isOptOut
+          ? "Inbound SMS STOP detected but no matching lead found"
+          : "Inbound SMS ignored: no matching lead or outbound message",
+        { from }
+      );
       return new Response("", { status: 200 });
     }
 
@@ -105,7 +121,40 @@ export async function POST(req: Request) {
       body,
       status: "received",
       provider: "twilio",
+      metadata: isOptOut
+        ? {
+            optOut: true,
+            action: "archived_on_stop",
+          }
+        : undefined,
     });
+
+    if (isOptOut) {
+      console.log("Inbound SMS STOP detected", {
+        from,
+        leadId: match.leadId,
+        slug: match.slug,
+      });
+
+      if (!match.slug) {
+        console.log("Inbound SMS STOP archive skipped: matched lead has no slug", {
+          from,
+          leadId: match.leadId,
+        });
+        return new Response("", { status: 200 });
+      }
+
+      try {
+        await updateLeadStatusBySlug(match.slug, "archived");
+      } catch (archiveError) {
+        console.error("Inbound SMS STOP archive update failed", {
+          from,
+          leadId: match.leadId,
+          slug: match.slug,
+          error: archiveError,
+        });
+      }
+    }
 
     return new Response("", { status: 200 });
   } catch (error) {
