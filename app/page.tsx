@@ -526,7 +526,7 @@ export default function DashboardPage() {
   return (
     <main className="min-h-screen bg-slate-950 text-white">
       <div className="mx-auto max-w-7xl px-6 py-10">
-        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <p className="mb-2 text-sm font-bold uppercase tracking-[0.2em] text-blue-400">
               CallBoost
@@ -540,7 +540,7 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center lg:justify-end">
             {!soundEnabled ? (
               <button
                 onClick={handleEnableSoundAlerts}
@@ -615,61 +615,6 @@ export default function DashboardPage() {
               ) : null}
             </div>
 
-            <select
-              value={targetCityKey}
-              onChange={(event) => setTargetCityKey(event.target.value)}
-              disabled={actionRunning}
-              className="rounded-lg border border-white/10 bg-slate-900 px-3 py-3 text-sm font-bold text-white outline-none disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {CITY_TARGETS.map((cityTarget) => (
-                <option key={cityTarget.key} value={cityTarget.key}>
-                  {cityTarget.city}
-                </option>
-              ))}
-            </select>
-
-            <select
-              value={targetTradeKey}
-              onChange={(event) => setTargetTradeKey(event.target.value)}
-              disabled={actionRunning}
-              className="rounded-lg border border-white/10 bg-slate-900 px-3 py-3 text-sm font-bold text-white outline-none disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {TRADE_TARGETS.map((tradeTarget) => (
-                <option key={tradeTarget.key} value={tradeTarget.key}>
-                  {tradeTarget.label}
-                </option>
-              ))}
-            </select>
-
-            <input
-              type="number"
-              min={1}
-              max={200}
-              value={generationLimit}
-              onChange={(event) =>
-                setGenerationLimit(Number(event.target.value) || 1)
-              }
-              disabled={actionRunning}
-              className="w-24 rounded-lg border border-white/10 bg-slate-900 px-3 py-3 text-sm font-bold text-white outline-none disabled:cursor-not-allowed disabled:opacity-60"
-              aria-label="Max results"
-            />
-
-            <button
-              onClick={handleGenerateLeads}
-              disabled={actionRunning}
-              className="rounded-lg bg-green-600 px-5 py-3 text-sm font-bold text-white hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {generating ? "Generating..." : "+ Generate Leads"}
-            </button>
-
-            <button
-              onClick={handleEnrichAll}
-              disabled={actionRunning}
-              className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {enriching ? "Enriching..." : "Enrich Active"}
-            </button>
-
             <button
               onClick={handleLogout}
               disabled={actionRunning}
@@ -678,6 +623,82 @@ export default function DashboardPage() {
               Logout
             </button>
           </div>
+        </div>
+
+        <section className="mb-4 rounded-2xl border border-white/10 bg-white/5 p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-white">Lead generation</h2>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 lg:flex lg:items-end">
+              <label className="grid gap-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                City
+                <select
+                  value={targetCityKey}
+                  onChange={(event) => setTargetCityKey(event.target.value)}
+                  disabled={actionRunning}
+                  className="min-w-44 rounded-lg border border-white/10 bg-slate-900 px-3 py-3 text-sm font-bold normal-case tracking-normal text-white outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {CITY_TARGETS.map((cityTarget) => (
+                    <option key={cityTarget.key} value={cityTarget.key}>
+                      {cityTarget.city}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="grid gap-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                Trade
+                <select
+                  value={targetTradeKey}
+                  onChange={(event) => setTargetTradeKey(event.target.value)}
+                  disabled={actionRunning}
+                  className="min-w-44 rounded-lg border border-white/10 bg-slate-900 px-3 py-3 text-sm font-bold normal-case tracking-normal text-white outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {TRADE_TARGETS.map((tradeTarget) => (
+                    <option key={tradeTarget.key} value={tradeTarget.key}>
+                      {tradeTarget.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="grid gap-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                Limit
+                <input
+                  type="number"
+                  min={1}
+                  max={200}
+                  value={generationLimit}
+                  onChange={(event) =>
+                    setGenerationLimit(Number(event.target.value) || 1)
+                  }
+                  disabled={actionRunning}
+                  className="w-full rounded-lg border border-white/10 bg-slate-900 px-3 py-3 text-sm font-bold normal-case tracking-normal text-white outline-none disabled:cursor-not-allowed disabled:opacity-60 sm:w-28"
+                  aria-label="Max results"
+                />
+              </label>
+
+              <button
+                onClick={handleGenerateLeads}
+                disabled={actionRunning}
+                className="h-11 rounded-lg bg-green-600 px-5 text-sm font-bold text-white hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-60 sm:self-end"
+              >
+                {generating ? "Generating..." : "+ Generate Leads"}
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <div className="mb-6 flex justify-start">
+          <button
+            onClick={handleEnrichAll}
+            disabled={actionRunning}
+            className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {enriching ? "Enriching..." : "Enrich Leads"}
+          </button>
         </div>
 
         <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
