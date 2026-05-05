@@ -412,26 +412,106 @@ async function updatePaymentStatusBySubscription(
 async function handlePaymentRecovered(invoice: Stripe.Invoice) {
   const stripeInvoiceId = invoice.id || "";
   const stripeCustomerId = getStripeId(invoice.customer);
+  const supabase = getSupabaseAdmin();
 
-  if (!stripeCustomerId) {
+  function getNestedString(value: unknown, path: string[]) {
+    let current = value;
+
+    for (const key of path) {
+      if (!current || typeof current !== "object" || !(key in current)) {
+        return "";
+      }
+
+      current = (current as Record<string, unknown>)[key];
+    }
+
+    return getString(current);
+  }
+
+  const lookupErrors: unknown[] = [];
+
+  async function findLeadBy(field: string, value: string) {
+    const { data, error } = await supabase
+      .from("leads")
+      .select("*")
+      .eq(field, value)
+      .maybeSingle();
+
+    if (error) {
+      console.error("LEAD_LOOKUP_ERROR", {
+        stripe_invoice_id: stripeInvoiceId,
+        stripe_customer_id: stripeCustomerId,
+        lookup_field: field,
+        lookup_value: value,
+        error,
+      });
+      lookupErrors.push({ field, value, error });
+    }
+
+    console.log("LEAD_LOOKUP_RESULT", {
+      stripe_invoice_id: stripeInvoiceId,
+      lookup_field: field,
+      lookup_value: value,
+      found: Boolean(data),
+      lead_id: data?.id || null,
+    });
+
+    return error ? null : data;
+  }
+
+  const firstLine = invoice.lines?.data?.[0] as unknown;
+  const invoiceParent = (invoice as unknown as { parent?: unknown }).parent;
+  const lineLeadId = getNestedString(firstLine, ["metadata", "lead_id"]);
+  const parentLeadId = getNestedString(invoiceParent, [
+    "subscription_details",
+    "metadata",
+    "lead_id",
+  ]);
+  const parentSubscriptionId = getNestedString(invoiceParent, [
+    "subscription_details",
+    "subscription",
+  ]);
+  const lineSubscriptionId = getNestedString(firstLine, [
+    "parent",
+    "subscription_item_details",
+    "subscription",
+  ]);
+  const stripeSubscriptionId = parentSubscriptionId || lineSubscriptionId;
+
+  console.log("RECOVERY_LOOKUP_INPUT", {
+    leadId: lineLeadId || parentLeadId,
+    stripeCustomerId,
+    stripeSubscriptionId,
+    stripeInvoiceId,
+  });
+
+  if (!lineLeadId && !parentLeadId && !stripeCustomerId && !stripeSubscriptionId) {
     console.log("PAYMENT_RECOVERED_CUSTOMER_MISSING", {
       stripe_invoice_id: stripeInvoiceId,
     });
     return;
   }
 
-  const supabase = getSupabaseAdmin();
-  const { data: lead, error: leadError } = await supabase
-    .from("leads")
-    .select("id, name, status, payment_status, stripe_customer_id")
-    .eq("stripe_customer_id", stripeCustomerId)
-    .maybeSingle();
+  const lead =
+    (lineLeadId ? await findLeadBy("id", lineLeadId) : null) ||
+    (parentLeadId ? await findLeadBy("id", parentLeadId) : null) ||
+    (stripeCustomerId
+      ? await findLeadBy("stripe_customer_id", stripeCustomerId)
+      : null) ||
+    (parentSubscriptionId
+      ? await findLeadBy("stripe_subscription_id", parentSubscriptionId)
+      : null) ||
+    (lineSubscriptionId
+      ? await findLeadBy("stripe_subscription_id", lineSubscriptionId)
+      : null);
 
-  if (leadError || !lead) {
+  if (!lead) {
     console.log("PAYMENT_RECOVERED_LEAD_NOT_FOUND", {
       stripe_invoice_id: stripeInvoiceId,
       stripe_customer_id: stripeCustomerId,
-      error: leadError,
+      stripe_subscription_id: stripeSubscriptionId,
+      lead_id: lineLeadId || parentLeadId,
+      errors: lookupErrors.length ? lookupErrors : undefined,
     });
     return;
   }
@@ -496,6 +576,8 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
+
+  console.log("STRIPE_EVENT_TYPE", event.type, { stripe_event_id: event.id });
 
   try {
     if (event.type === "checkout.session.completed") {
