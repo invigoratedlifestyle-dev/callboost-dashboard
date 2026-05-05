@@ -287,10 +287,44 @@ function buildCloseEmail() {
   ].join("\n");
 }
 
+function buildPaymentSms(paymentLink: string) {
+  return [
+    "Perfect — here’s the secure payment link to get started:",
+    paymentLink,
+    "",
+    "Once that’s done, I’ll get everything set up and live for you.",
+  ].join("\n");
+}
+
+function buildPaymentEmailSubject() {
+  return "Payment link to get started";
+}
+
+function buildPaymentEmail(paymentLink: string) {
+  return [
+    "Perfect — here’s the secure payment link to get started:",
+    "",
+    paymentLink,
+    "",
+    "Once that’s done, I’ll get everything set up and live for you.",
+    "",
+    "Thanks,",
+    "Jamie",
+  ].join("\n");
+}
+
 function looksLikeInterestedReply(message?: LeadMessage | null) {
   if (!message || message.direction !== "inbound") return false;
 
   return /\b(interested|yes|send it|looks good|how much|price|cost|go ahead|set it up)\b/i.test(
+    message.body || ""
+  );
+}
+
+function looksLikePaymentReadyReply(message?: LeadMessage | null) {
+  if (!message || message.direction !== "inbound") return false;
+
+  return /\b(yes|go ahead|sounds good|let'?s do it|send link|payment link|ready|set it up)\b/i.test(
     message.body || ""
   );
 }
@@ -373,6 +407,9 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const [followUpError, setFollowUpError] = useState("");
   const [closeReplyNotice, setCloseReplyNotice] = useState("");
   const [closeReplyError, setCloseReplyError] = useState("");
+  const [generatingPaymentLink, setGeneratingPaymentLink] = useState(false);
+  const [paymentReplyNotice, setPaymentReplyNotice] = useState("");
+  const [paymentReplyError, setPaymentReplyError] = useState("");
   const [callbackForwardingEnabled, setCallbackForwardingEnabled] =
     useState(false);
   const [callbackForwardToEmail, setCallbackForwardToEmail] = useState("");
@@ -961,6 +998,82 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     setEmailBodyEdited(true);
     setCloseReplyNotice("Close email loaded into composer.");
   };
+  const handleGeneratePaymentReplyLink = async () => {
+    if (!lead) return;
+
+    setGeneratingPaymentLink(true);
+    setPaymentReplyNotice("");
+    setPaymentReplyError("");
+
+    try {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          leadId: lead.id,
+          slug: lead.slug || slug,
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.url) {
+        throw new Error(data.error || "Failed to generate payment link");
+      }
+
+      setCheckoutUrl(data.url);
+      setPaymentReplyNotice("Payment link generated.");
+    } catch (error) {
+      setPaymentReplyError(
+        error instanceof Error
+          ? error.message
+          : "Failed to generate payment link"
+      );
+    } finally {
+      setGeneratingPaymentLink(false);
+    }
+  };
+  const handleCopyPaymentReply = async (channel: OutreachChannel) => {
+    if (!checkoutUrl) return;
+
+    setPaymentReplyNotice("");
+    setPaymentReplyError("");
+
+    try {
+      const copyText =
+        channel === "sms"
+          ? buildPaymentSms(checkoutUrl)
+          : `${buildPaymentEmailSubject()}\n\n${buildPaymentEmail(checkoutUrl)}`;
+
+      await navigator.clipboard.writeText(copyText);
+      setPaymentReplyNotice(
+        channel === "sms" ? "Payment SMS copied." : "Payment email copied."
+      );
+    } catch {
+      setPaymentReplyError("Could not copy payment reply.");
+    }
+  };
+  const handleUsePaymentReply = (channel: OutreachChannel) => {
+    if (!checkoutUrl) return;
+
+    setPaymentReplyNotice("");
+    setPaymentReplyError("");
+    setOutreachChannel(channel);
+
+    if (channel === "sms") {
+      setSmsBody(buildPaymentSms(checkoutUrl));
+      setSmsBodyEdited(true);
+      setPaymentReplyNotice("Payment SMS loaded into composer.");
+      return;
+    }
+
+    setEmailSubject(buildPaymentEmailSubject());
+    setEmailOfferBody(buildPaymentEmail(checkoutUrl));
+    setEmailSubjectEdited(true);
+    setEmailBodyEdited(true);
+    setPaymentReplyNotice("Payment email loaded into composer.");
+  };
   const generatedDescription =
     lead.description || lead.solution || lead.subheadline || "";
   const generatedSiteUrl = lead.generatedSiteUrl || "";
@@ -982,6 +1095,9 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const latestInboundMessage =
     messages.find((message) => message.direction === "inbound") || null;
   const mayBeReadyForClose = looksLikeInterestedReply(latestInboundMessage);
+  const mayBeReadyForPaymentLink =
+    looksLikePaymentReadyReply(latestInboundMessage);
+  const hasPaymentLink = Boolean(checkoutUrl);
   const hasReplyAfterLastOutbound =
     latestInboundMessageTime > latestOutboundMessageTime;
   const canShowFollowUpActions = lead.status === "contacted";
@@ -1499,6 +1615,87 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
             <button
               onClick={() => handleUseCloseReply("email")}
               className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500"
+            >
+              Use in Email
+            </button>
+          </div>
+        </section>
+
+        <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
+          <div className="mb-4">
+            <h2 className="text-xl font-bold">Payment link reply</h2>
+            <p className="mt-1 text-sm text-slate-400">
+              Use this after the lead confirms they want to go ahead.
+            </p>
+          </div>
+
+          {mayBeReadyForPaymentLink ? (
+            <p className="mb-4 rounded-lg bg-green-500/10 px-3 py-2 text-sm font-bold text-green-300">
+              This lead may be ready for a payment link.
+            </p>
+          ) : null}
+
+          {paymentReplyNotice ? (
+            <p className="mb-4 rounded-lg bg-green-500/10 px-3 py-2 text-sm font-bold text-green-300">
+              {paymentReplyNotice}
+            </p>
+          ) : null}
+
+          {paymentReplyError ? (
+            <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">
+              {paymentReplyError}
+            </p>
+          ) : null}
+
+          {checkoutUrl ? (
+            <a
+              href={checkoutUrl}
+              target="_blank"
+              className="mb-4 block break-all text-sm text-blue-300 hover:text-blue-200"
+            >
+              {checkoutUrl}
+            </a>
+          ) : null}
+
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={handleGeneratePaymentReplyLink}
+              disabled={generatingPaymentLink}
+              className="rounded-lg bg-green-600 px-4 py-2 text-sm font-bold text-white hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {generatingPaymentLink
+                ? "Generating..."
+                : "Generate payment link"}
+            </button>
+
+            <button
+              onClick={() => handleCopyPaymentReply("sms")}
+              disabled={!hasPaymentLink}
+              className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-bold text-white hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Copy payment SMS
+            </button>
+
+            <button
+              onClick={() => handleCopyPaymentReply("email")}
+              disabled={!hasPaymentLink}
+              className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-bold text-white hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Copy payment Email
+            </button>
+
+            <button
+              onClick={() => handleUsePaymentReply("sms")}
+              disabled={!hasPaymentLink}
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Use in SMS
+            </button>
+
+            <button
+              onClick={() => handleUsePaymentReply("email")}
+              disabled={!hasPaymentLink}
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
             >
               Use in Email
             </button>
