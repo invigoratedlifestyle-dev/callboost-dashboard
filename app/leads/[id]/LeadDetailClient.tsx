@@ -21,6 +21,7 @@ type LeadWithGeneratedContent = Lead & {
 };
 
 type OutreachChannel = "sms" | "email";
+type FollowUpStage = 1 | 2 | 3;
 
 type TimelineItem =
   | {
@@ -249,6 +250,19 @@ function normalizePhone(value: string) {
   return value.trim();
 }
 
+function getLatestLeadMessageTime(
+  messages: LeadMessage[],
+  direction: "inbound" | "outbound"
+) {
+  return messages.reduce((latest, message) => {
+    if (message.direction !== direction || !message.createdAt) return latest;
+
+    const timestamp = new Date(message.createdAt).getTime();
+
+    return Number.isFinite(timestamp) ? Math.max(latest, timestamp) : latest;
+  }, 0);
+}
+
 export default function LeadDetailClient({ slug }: { slug: string }) {
   const [lead, setLead] = useState<LeadWithGeneratedContent | null>(null);
   const [callbacks, setCallbacks] = useState<CallbackRequest[]>([]);
@@ -266,6 +280,10 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const [sendingOffer, setSendingOffer] = useState("");
   const [outreachNotice, setOutreachNotice] = useState("");
   const [outreachError, setOutreachError] = useState("");
+  const [sendingFollowUp, setSendingFollowUp] =
+    useState<FollowUpStage | null>(null);
+  const [followUpNotice, setFollowUpNotice] = useState("");
+  const [followUpError, setFollowUpError] = useState("");
   const [callbackForwardingEnabled, setCallbackForwardingEnabled] =
     useState(false);
   const [callbackForwardToEmail, setCallbackForwardToEmail] = useState("");
@@ -672,6 +690,67 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       setSendingOffer("");
     }
   };
+  const reloadLeadMessages = async () => {
+    if (!lead) return;
+
+    const messagesRes = await fetch(`/api/leads/${lead.slug || lead.id}/messages`, {
+      cache: "no-store",
+    });
+
+    if (!messagesRes.ok) return;
+
+    const messagesData = await messagesRes.json();
+
+    setMessages(messagesData.messages || []);
+    setCallbacks(messagesData.callbacks || callbacks);
+  };
+  const handleSendFollowUp = async (stage: FollowUpStage) => {
+    if (!lead) return;
+
+    const latestInbound = getLatestLeadMessageTime(messages, "inbound");
+    const latestOutbound = getLatestLeadMessageTime(messages, "outbound");
+
+    if (latestInbound > latestOutbound) {
+      setFollowUpNotice("");
+      setFollowUpError("Lead has replied since the last outbound message.");
+      return;
+    }
+
+    setSendingFollowUp(stage);
+    setFollowUpNotice("");
+    setFollowUpError("");
+
+    try {
+      const res = await fetch(`/api/leads/${lead.slug || lead.id}/follow-up`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ stage }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to send follow-up");
+      }
+
+      await reloadLeadMessages();
+
+      setFollowUpNotice(
+        stage === 3
+          ? `Final follow-up sent by ${data.channel === "email" ? "email" : "SMS"}.`
+          : `Follow-up ${stage} sent by ${
+              data.channel === "email" ? "email" : "SMS"
+            }.`
+      );
+    } catch (error) {
+      setFollowUpError(
+        error instanceof Error ? error.message : "Failed to send follow-up"
+      );
+    } finally {
+      setSendingFollowUp(null);
+    }
+  };
   const generatedDescription =
     lead.description || lead.solution || lead.subheadline || "";
   const generatedSiteUrl = lead.generatedSiteUrl || "";
@@ -688,6 +767,19 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     lead.email || ""
   )}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(emailBody)}`;
   const timeline = getTimeline(messages, callbacks);
+  const latestInboundMessageTime = getLatestLeadMessageTime(messages, "inbound");
+  const latestOutboundMessageTime = getLatestLeadMessageTime(
+    messages,
+    "outbound"
+  );
+  const hasReplyAfterLastOutbound =
+    latestInboundMessageTime > latestOutboundMessageTime;
+  const canShowFollowUpActions = lead.status === "contacted";
+  const hasFollowUpDestination = Boolean(lead.phone || lead.email);
+  const followUpDisabled =
+    Boolean(sendingFollowUp) ||
+    hasReplyAfterLastOutbound ||
+    !hasFollowUpDestination;
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">
@@ -1090,6 +1182,59 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 ) : null}
               </div>
             ) : null}
+          </section>
+        ) : null}
+
+        {canShowFollowUpActions ? (
+          <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
+            <div className="mb-4">
+              <h2 className="text-xl font-bold">Follow-ups</h2>
+              <p className="mt-1 text-sm text-slate-400">
+                Send a short manual follow-up by SMS first, or email if there is
+                no phone number.
+              </p>
+            </div>
+
+            {followUpNotice ? (
+              <p className="mb-4 rounded-lg bg-green-500/10 px-3 py-2 text-sm font-bold text-green-300">
+                {followUpNotice}
+              </p>
+            ) : null}
+
+            {followUpError ? (
+              <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">
+                {followUpError}
+              </p>
+            ) : null}
+
+            {hasReplyAfterLastOutbound ? (
+              <p className="mb-4 rounded-lg bg-cyan-500/10 px-3 py-2 text-sm text-cyan-200">
+                This lead has replied since the last outbound message.
+              </p>
+            ) : null}
+
+            {!hasFollowUpDestination ? (
+              <p className="mb-4 rounded-lg bg-yellow-500/10 px-3 py-2 text-sm text-yellow-200">
+                Add a phone number or email before sending a follow-up.
+              </p>
+            ) : null}
+
+            <div className="flex flex-wrap gap-3">
+              {([1, 2, 3] as FollowUpStage[]).map((stage) => (
+                <button
+                  key={stage}
+                  onClick={() => handleSendFollowUp(stage)}
+                  disabled={followUpDisabled}
+                  className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {sendingFollowUp === stage
+                    ? "Sending..."
+                    : stage === 3
+                      ? "Send Final Follow-up"
+                      : `Send Follow-up ${stage}`}
+                </button>
+              ))}
+            </div>
           </section>
         ) : null}
 
