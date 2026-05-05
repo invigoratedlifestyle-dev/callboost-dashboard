@@ -409,6 +409,72 @@ async function updatePaymentStatusBySubscription(
   }
 }
 
+async function handlePaymentRecovered(invoice: Stripe.Invoice) {
+  const stripeInvoiceId = invoice.id || "";
+  const stripeCustomerId = getStripeId(invoice.customer);
+
+  if (!stripeCustomerId) {
+    console.log("PAYMENT_RECOVERED_CUSTOMER_MISSING", {
+      stripe_invoice_id: stripeInvoiceId,
+    });
+    return;
+  }
+
+  const supabase = getSupabaseAdmin();
+  const { data: lead, error: leadError } = await supabase
+    .from("leads")
+    .select("id, name, status, payment_status, stripe_customer_id")
+    .eq("stripe_customer_id", stripeCustomerId)
+    .maybeSingle();
+
+  if (leadError || !lead) {
+    console.log("PAYMENT_RECOVERED_LEAD_NOT_FOUND", {
+      stripe_invoice_id: stripeInvoiceId,
+      stripe_customer_id: stripeCustomerId,
+      error: leadError,
+    });
+    return;
+  }
+
+  const updatePayload: {
+    payment_status: string;
+    status?: string;
+    updated_at: string;
+  } = {
+    payment_status: "paid",
+    updated_at: new Date().toISOString(),
+  };
+
+  if (
+    lead.status === "client" ||
+    lead.status === "contacted" ||
+    lead.status === "lead"
+  ) {
+    updatePayload.status = "client";
+  }
+
+  const { error: updateError } = await supabase
+    .from("leads")
+    .update(updatePayload)
+    .eq("id", lead.id);
+
+  if (updateError) {
+    console.error("PAYMENT_RECOVERED_UPDATE_FAILED", {
+      stripe_invoice_id: stripeInvoiceId,
+      stripe_customer_id: stripeCustomerId,
+      lead_id: lead.id,
+      error: updateError,
+    });
+    return;
+  }
+
+  console.log("PAYMENT_RECOVERED", {
+    stripe_invoice_id: stripeInvoiceId,
+    stripe_customer_id: stripeCustomerId,
+    lead_id: lead.id,
+  });
+}
+
 export async function POST(req: Request) {
   const body = await req.text();
   const signature = req.headers.get("stripe-signature");
@@ -444,6 +510,10 @@ export async function POST(req: Request) {
         invoice,
         stripeEventId: event.id,
       });
+    }
+
+    if (event.type === "invoice.payment_succeeded") {
+      await handlePaymentRecovered(event.data.object as Stripe.Invoice);
     }
 
     if (event.type === "customer.subscription.deleted") {
