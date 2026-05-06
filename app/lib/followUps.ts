@@ -1,3 +1,5 @@
+import { hasUsableFollowUpContact } from "./contactMethods";
+
 export type FollowUpStage = 1 | 2 | 3;
 
 export type FollowUpLead = {
@@ -57,22 +59,11 @@ function getManualFollowUpStage(
   return stage === 1 || stage === 2 || stage === 3 ? stage : null;
 }
 
-function isPlaceholderEmail(email: string) {
-  const normalizedEmail = email.trim().toLowerCase();
-
-  return (
-    normalizedEmail === "contact@example.com" ||
-    normalizedEmail === "admin@example.com" ||
-    normalizedEmail === "test@example.com" ||
-    normalizedEmail.endsWith("@example.com")
-  );
-}
-
 function hasContactMethod(lead: FollowUpLead) {
-  const phone = String(lead.phone || "").trim();
-  const email = String(lead.email || "").trim();
-
-  return Boolean(phone || (email && !isPlaceholderEmail(email)));
+  return hasUsableFollowUpContact({
+    phone: lead.phone,
+    email: lead.email,
+  });
 }
 
 export function getFollowUpDueStatus(

@@ -9,6 +9,7 @@ import type {
   LeadStatus,
   WebsiteEvaluation,
 } from "../../lib/leads";
+import { hasUsableFollowUpContact } from "../../lib/contactMethods";
 import {
   buildInterestedReplyEmail,
   buildInterestedReplyEmailSubject,
@@ -1113,7 +1114,10 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const hasReplyAfterLastOutbound =
     latestInboundMessageTime > latestOutboundMessageTime;
   const canShowFollowUpActions = lead.status === "contacted";
-  const hasFollowUpDestination = Boolean(lead.phone || lead.email);
+  const hasFollowUpDestination = hasUsableFollowUpContact({
+    phone: lead.phone,
+    email: lead.email,
+  });
   const followUpDisabled =
     Boolean(sendingFollowUp) ||
     hasReplyAfterLastOutbound ||
@@ -1682,8 +1686,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
             <div className="mb-4">
               <h2 className="text-xl font-bold">Follow-ups</h2>
               <p className="mt-1 text-sm text-slate-400">
-                Send a short manual follow-up by SMS first, or email if there is
-                no phone number.
+                Follow-ups use the last outbound channel where possible.
               </p>
             </div>
 
@@ -1707,7 +1710,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
 
             {!hasFollowUpDestination ? (
               <p className="mb-4 rounded-lg bg-yellow-500/10 px-3 py-2 text-sm text-yellow-200">
-                Add a phone number or email before sending a follow-up.
+                Add a valid Australian mobile number or email before sending a
+                follow-up.
               </p>
             ) : null}
 

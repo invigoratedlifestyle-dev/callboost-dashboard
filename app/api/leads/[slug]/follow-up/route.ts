@@ -1,4 +1,8 @@
 import { NextResponse } from "next/server";
+import {
+  getUsableAustralianMobile,
+  getUsableEmail,
+} from "../../../../lib/contactMethods";
 import { sendEmail, sendSms } from "../../../../lib/outboundMessages";
 import { appendOptOut } from "../../../../lib/smsOptOut";
 import {
@@ -53,6 +57,56 @@ function getLatestMessageTime(
   }, 0);
 }
 
+function getLatestOutboundMessage(
+  messages: Awaited<ReturnType<typeof listLeadMessages>>
+) {
+  return messages.reduce<(typeof messages)[number] | null>((latest, message) => {
+    if (
+      message.direction !== "outbound" ||
+      message.status === "failed" ||
+      !message.createdAt
+    ) {
+      return latest;
+    }
+
+    if (!latest) return message;
+
+    const messageTime = new Date(message.createdAt).getTime();
+    const latestTime = new Date(latest.createdAt || "").getTime();
+
+    return Number.isFinite(messageTime) && messageTime > latestTime
+      ? message
+      : latest;
+  }, null);
+}
+
+function getFollowUpChannel(args: {
+  latestOutboundChannel?: string | null;
+  phone: string;
+  email: string;
+}): { channel: "sms" | "email"; to: string } | null {
+  const mobile = getUsableAustralianMobile(args.phone);
+  const email = getUsableEmail(args.email);
+
+  if (args.latestOutboundChannel === "sms" && mobile) {
+    return { channel: "sms", to: mobile };
+  }
+
+  if (args.latestOutboundChannel === "email" && email) {
+    return { channel: "email", to: email };
+  }
+
+  if (mobile) {
+    return { channel: "sms", to: mobile };
+  }
+
+  if (email) {
+    return { channel: "email", to: email };
+  }
+
+  return null;
+}
+
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ slug: string }> }
@@ -102,20 +156,29 @@ export async function POST(
     const leadName = getString(lead.name) || getString(lead.businessName);
     const leadPhone = getString(lead.phone);
     const leadEmail = getString(lead.email);
-    const channel = leadPhone ? "sms" : "email";
-    const to = channel === "sms" ? leadPhone : leadEmail;
+    const latestOutboundMessage = getLatestOutboundMessage(messages);
+    const destination = getFollowUpChannel({
+      latestOutboundChannel: latestOutboundMessage?.channel,
+      phone: leadPhone,
+      email: leadEmail,
+    });
+
+    if (!destination) {
+      return NextResponse.json(
+        {
+          error:
+            "Lead needs a valid Australian mobile number or email before follow-up",
+        },
+        { status: 400 }
+      );
+    }
+
+    const { channel, to } = destination;
     const subject = channel === "email" ? "Quick follow-up from CallBoost" : "";
     const messageBody =
       channel === "sms"
         ? appendOptOut(buildFollowUpBody(stage, leadName))
         : buildFollowUpBody(stage, leadName);
-
-    if (!to) {
-      return NextResponse.json(
-        { error: "Lead needs a phone number or email before follow-up" },
-        { status: 400 }
-      );
-    }
 
     let fromAddress = "";
     let providerMessageId = "";
