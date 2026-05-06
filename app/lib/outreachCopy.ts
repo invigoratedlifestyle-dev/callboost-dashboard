@@ -57,6 +57,18 @@ function getWebsiteNoun(args: InterestedReplyPersonalization) {
   return "your website";
 }
 
+function hasNoWebsiteOpportunity(lead: OutreachLead) {
+  const evaluation = lead.websiteEvaluation;
+
+  return (
+    evaluation?.hasWebsite === false ||
+    evaluation?.quality === "none" ||
+    /no website/i.test(lead.websiteOpportunity?.issue || "") ||
+    /no website/i.test(evaluation?.summary || "") ||
+    evaluation?.issues?.some((issue) => /no website/i.test(issue))
+  );
+}
+
 export function getWebsiteOpportunityIssue(lead: OutreachLead) {
   const evaluation = lead.websiteEvaluation;
   const isBrokenOrUnreachable =
@@ -99,6 +111,38 @@ export function buildOpportunitySms(
   previewUrl: string
 ) {
   const leadName = getLeadName(lead);
+
+  if (hasNoWebsiteOpportunity(lead)) {
+    const lines = [
+      `Hey ${leadName}, I had a quick look and couldn't find a website for your business.`,
+      "",
+    ];
+
+    if (previewUrl) {
+      lines.push(
+        "I put together a quick mobile-friendly preview here:",
+        previewUrl,
+        ""
+      );
+    } else {
+      lines.push(
+        "I put together a quick mobile-friendly preview and can send it through if you want to take a look.",
+        ""
+      );
+    }
+
+    lines.push(
+      "It's designed to make it easier for people to call or enquire quickly from their phone.",
+      "",
+      "Want me to set this up properly for you?",
+      "",
+      "- Jamie",
+      "CallBoost"
+    );
+
+    return appendOptOut(lines.join("\n"));
+  }
+
   const issue =
     getWebsiteOpportunityIssue(lead) ||
     "a couple of things that might be costing you calls";
@@ -135,6 +179,41 @@ export function buildOpportunityEmail(
   previewUrl: string
 ) {
   const leadName = getLeadName(lead);
+
+  if (hasNoWebsiteOpportunity(lead)) {
+    const lines = [
+      `Hey ${leadName},`,
+      "",
+      "I had a quick look and couldn't find a website for your business.",
+      "",
+    ];
+
+    if (previewUrl) {
+      lines.push(
+        "I put together a quick mobile-friendly preview here:",
+        previewUrl,
+        ""
+      );
+    } else {
+      lines.push(
+        "I put together a quick mobile-friendly preview and can send it through if you want to take a look.",
+        ""
+      );
+    }
+
+    lines.push(
+      "It's designed to make it easier for people to call or enquire quickly from their phone.",
+      "",
+      "Want me to set this up properly for you?",
+      "",
+      "Thanks,",
+      "Jamie",
+      "CallBoost"
+    );
+
+    return lines.join("\n");
+  }
+
   const issue =
     getWebsiteOpportunityIssue(lead) ||
     "A few improvements could make it easier for customers to call you.";
