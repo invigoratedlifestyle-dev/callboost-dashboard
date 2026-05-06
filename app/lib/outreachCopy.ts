@@ -80,6 +80,95 @@ function hasBrokenWebsiteOpportunity(lead: OutreachLead) {
   );
 }
 
+function getMappedOpportunityPoint(value: string) {
+  const issue = value.toLowerCase();
+
+  if (
+    /contact form|contact page|contact option|email form|get in touch/i.test(
+      issue
+    )
+  ) {
+    return "making it easier for customers to contact you";
+  }
+
+  if (/phone|call button|tap to call|click to call|call/i.test(issue)) {
+    return "making it easier for people to call quickly";
+  }
+
+  if (
+    /cta|call to action|enquir|inquir|quote|booking|book|convert|conversion/i.test(
+      issue
+    )
+  ) {
+    return "helping convert more visitors into enquiries";
+  }
+
+  if (
+    /too much text|long text|content heavy|clutter|navigation|navigate|mobile|responsive/i.test(
+      issue
+    )
+  ) {
+    return "making the site easier to navigate on mobile";
+  }
+
+  if (
+    /outdated|old technology|old tech|dated|modern|first impression|design|layout|visual/i.test(
+      issue
+    )
+  ) {
+    return "improving the overall first impression";
+  }
+
+  if (/trust|review|testimonial|proof|credibility/i.test(issue)) {
+    return "building more trust before people get in touch";
+  }
+
+  if (/slow|speed|performance|load/i.test(issue)) {
+    return "making the site feel faster and easier to use on mobile";
+  }
+
+  if (/local|service area|suburb|location/i.test(issue)) {
+    return "making your local service area clearer";
+  }
+
+  return "";
+}
+
+function getWebsiteOpportunitySalesPoints(lead: OutreachLead) {
+  const sourceText = [
+    lead.websiteOpportunity?.issue,
+    lead.websiteOpportunity?.summary,
+    ...(lead.websiteEvaluation?.issues || []),
+    lead.websiteEvaluation?.summary,
+  ];
+  const points: string[] = [];
+
+  for (const value of sourceText) {
+    const point = getMappedOpportunityPoint(value || "");
+
+    if (point && !points.includes(point)) {
+      points.push(point);
+    }
+
+    if (points.length === 2) break;
+  }
+
+  if (points.length > 0) return points;
+
+  return [
+    "making it easier for customers to contact you quickly from their phone",
+    "improving the overall first impression",
+  ];
+}
+
+function formatOpportunityPoints(points: string[]) {
+  if (points.length <= 1) {
+    return points[0] || "making it easier for customers to get in touch";
+  }
+
+  return `${points[0]} and ${points[1]}`;
+}
+
 export function getWebsiteOpportunityIssue(lead: OutreachLead) {
   if (hasBrokenWebsiteOpportunity(lead)) {
     return "I couldn't get your site to load on mobile";
@@ -178,29 +267,37 @@ export function buildOpportunitySms(
     return appendOptOut(lines.join("\n"));
   }
 
-  const issue =
-    getWebsiteOpportunityIssue(lead) ||
-    "a couple of things that might be costing you calls";
+  const opportunityPoints = formatOpportunityPoints(
+    getWebsiteOpportunitySalesPoints(lead)
+  );
+  const lines = [
+    `Hey ${leadName}, I had a quick look at your website and noticed a few areas that could be improved to help convert more visitors into calls.`,
+    "",
+  ];
 
-  if (!previewUrl) {
-    return appendOptOut([
-      `Hey ${leadName}, I had a quick look and noticed ${issue}.`,
-      "",
-      "I made a cleaner preview and can send it through if you want to take a look.",
-      "",
-      "It's designed to make it easier for people to call quickly from mobile. Want me to set this up properly for you?",
-      "",
-      "- Jamie",
-    ].join("\n"));
+  if (previewUrl) {
+    lines.push(
+      "I put together a quick mobile-friendly preview here:",
+      previewUrl,
+      ""
+    );
+  } else {
+    lines.push(
+      "I put together a quick mobile-friendly preview and can send it through if you want to take a look.",
+      ""
+    );
   }
 
-  return appendOptOut([
-    `Hey ${leadName}, I had a quick look and noticed ${issue}. I made a cleaner preview here: ${previewUrl}`,
+  lines.push(
+    `Mainly around ${opportunityPoints}.`,
     "",
-    "It's designed to make it easier for people to call quickly from mobile. Want me to set this up properly for you?",
+    "Want me to set this up properly for you?",
     "",
     "- Jamie",
-  ].join("\n"));
+    "CallBoost"
+  );
+
+  return appendOptOut(lines.join("\n"));
 }
 
 export function buildOpportunityEmailSubject(
@@ -283,32 +380,38 @@ export function buildOpportunityEmail(
     return lines.join("\n");
   }
 
-  const issue =
-    getWebsiteOpportunityIssue(lead) ||
-    "A few improvements could make it easier for customers to call you.";
+  const opportunityPoints = formatOpportunityPoints(
+    getWebsiteOpportunitySalesPoints(lead)
+  );
 
   const lines = [
     `Hey ${leadName},`,
     "",
-    "I had a quick look at your website and noticed something that might be costing you calls:",
-    "",
-    `- ${issue}`,
+    "I had a quick look at your website and noticed a few areas that could be improved to help convert more visitors into calls.",
     "",
   ];
 
   if (previewUrl) {
-    lines.push("I made a cleaner preview here:", previewUrl, "");
+    lines.push(
+      "I put together a quick mobile-friendly preview here:",
+      previewUrl,
+      ""
+    );
   } else {
-    lines.push("I can send through a preview if you want to take a look.", "");
+    lines.push(
+      "I put together a quick mobile-friendly preview and can send it through if you want to take a look.",
+      ""
+    );
   }
 
   lines.push(
-    "It's designed to make it easier for people to call you quickly from mobile.",
+    `Mainly around ${opportunityPoints}.`,
     "",
     "Want me to set this up properly for you?",
     "",
     "Thanks,",
-    "Jamie"
+    "Jamie",
+    "CallBoost"
   );
 
   return lines.join("\n");
