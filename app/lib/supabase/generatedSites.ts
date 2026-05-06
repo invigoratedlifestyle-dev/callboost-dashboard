@@ -846,7 +846,7 @@ export function buildGeneratedSiteHtml(lead: LeadRecord) {
   const ratingBadgeHtml = hasStrongHeroRating
     ? `<div class="hero-rating">Rated ${escapeHtml(rating)}&#9733; from ${escapeHtml(reviewCount)} local reviews</div>`
     : `<div class="hero-rating">${escapeHtml(buildNeutralHeroBadge(trade, city))}</div>`;
-  const reviewSummaryHtml = hasRating
+  const reviewSummaryHtml = hasStrongHeroRating
     ? `<p class="review-summary">Rated ${escapeHtml(rating)}&#9733; from ${escapeHtml(reviewCount)} local reviews</p>`
     : "";
   const heroUrgencyHtml = isServiceTrade(trade)
@@ -883,12 +883,14 @@ export function buildGeneratedSiteHtml(lead: LeadRecord) {
         </div>`
     )
     .join("");
+  const showReviewsSection = hasReviews && (hasStrongHeroRating || reviews.length > 0);
   const reviewsHeading = usingGoogleReviews
     ? "Google reviews from local customers"
     : "What locals are saying";
-  const reviewsIntro = usingGoogleReviews
-    ? "Real Google reviews from recent local customers."
-    : "Recent customer feedback from local jobs.";
+  const reviewsIntro =
+    usingGoogleReviews && hasStrongHeroRating
+      ? "Real Google reviews from recent local customers."
+      : "Recent customer feedback from local jobs.";
   const reviewsHtml = reviews
     .map((review) => {
       const stars = renderStars(review.rating);
@@ -905,7 +907,7 @@ export function buildGeneratedSiteHtml(lead: LeadRecord) {
         </article>`;
     })
     .join("");
-  const reviewsSectionHtml = hasReviews
+  const reviewsSectionHtml = showReviewsSection
     ? `
     <section id="reviews" class="section">
       <div class="container">
