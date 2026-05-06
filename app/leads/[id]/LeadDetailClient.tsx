@@ -1267,7 +1267,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                         target="_blank"
                         className="text-blue-400 hover:text-blue-300"
                       >
-                        {lead.heroImageUrl}
+                        View Hero Image
                       </a>
                     ) : (
                       <span className="text-slate-500">Not set yet</span>
