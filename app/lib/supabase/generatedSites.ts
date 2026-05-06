@@ -771,6 +771,20 @@ function buildHeroSubheading(trade: string, city: string, topServices: string) {
   return `Fast, reliable ${label} for homes and businesses across ${city}. Call today for help with ${topServices}.`;
 }
 
+function buildNeutralHeroBadge(trade: string, city: string) {
+  const label = isPlumberTrade(trade) ? "plumbing" : trade.toLowerCase();
+
+  if (isServiceTrade(trade)) {
+    return `Available for urgent ${label || "local"} issues`;
+  }
+
+  if (city) {
+    return `Local ${city} service`;
+  }
+
+  return "Fast local response";
+}
+
 export function buildGeneratedSiteHtml(lead: LeadRecord) {
   const slugSource =
     getText(lead.slug) ||
@@ -804,6 +818,8 @@ export function buildGeneratedSiteHtml(lead: LeadRecord) {
     getText(lead.reviewCount).trim() ||
     getText(lead.userRatingCount).trim();
   const hasRating = Boolean(rating && reviewCount);
+  const ratingNumber = Number(rating);
+  const hasStrongHeroRating = hasRating && Number.isFinite(ratingNumber) && ratingNumber >= 3.5;
   const services = getServices(lead, trade);
   const topServices = getTopServices(services, trade);
   const serviceAreas = getServiceAreas(lead, city);
@@ -827,9 +843,9 @@ export function buildGeneratedSiteHtml(lead: LeadRecord) {
   const callButtonHtml = hasPhone
     ? `<a class="button accent" href="tel:${escapeAttribute(phoneRaw)}">Call Now: ${escapeHtml(phone)}</a>`
     : `<a class="button accent" href="#quote">Call Now</a>`;
-  const ratingBadgeHtml = hasRating
+  const ratingBadgeHtml = hasStrongHeroRating
     ? `<div class="hero-rating">Rated ${escapeHtml(rating)}&#9733; from ${escapeHtml(reviewCount)} local reviews</div>`
-    : "";
+    : `<div class="hero-rating">${escapeHtml(buildNeutralHeroBadge(trade, city))}</div>`;
   const reviewSummaryHtml = hasRating
     ? `<p class="review-summary">Rated ${escapeHtml(rating)}&#9733; from ${escapeHtml(reviewCount)} local reviews</p>`
     : "";
