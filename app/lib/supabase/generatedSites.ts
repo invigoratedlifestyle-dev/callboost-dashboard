@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from "./server";
 import type { LeadRecord } from "../leadLifecycle";
+import { getRandomHeroImage } from "../siteAssets";
 
 export type GeneratedSiteRow = {
   id?: string | number;
@@ -509,6 +510,23 @@ function getHeroImages(trade: string, seed: string) {
   return pickStable(isPlumberTrade(trade) ? plumberImages : genericTradeImages, seed);
 }
 
+async function getGeneratedHeroImage(args: {
+  lead: LeadRecord;
+  trade: string;
+  seed: string;
+}) {
+  const businessHeroImage = getBusinessHeroImage(args.lead);
+
+  if (businessHeroImage?.url) return businessHeroImage.url;
+
+  try {
+    return await getRandomHeroImage(args.trade);
+  } catch (error) {
+    console.warn("Generated site asset lookup failed; using stock hero image.", error);
+    return getHeroImages(args.trade, args.seed);
+  }
+}
+
 function getLocationCoords(location: unknown) {
   if (!location || typeof location !== "object") return null;
 
@@ -785,7 +803,7 @@ function buildNeutralHeroBadge(trade: string, city: string) {
   return "Fast local response";
 }
 
-export function buildGeneratedSiteHtml(lead: LeadRecord) {
+export async function buildGeneratedSiteHtml(lead: LeadRecord) {
   const slugSource =
     getText(lead.slug) ||
     getText(lead.id) ||
@@ -803,9 +821,8 @@ export function buildGeneratedSiteHtml(lead: LeadRecord) {
   const tradeSlug = normalizeTrade(trade);
   const businessSlug = slugify(slugSource);
   const seed = `${businessSlug}-${citySlug}-${tradeSlug}`;
-  const businessHeroImage = getBusinessHeroImage(lead);
-  // Business-specific imagery can improve trust and conversion. Stock trade imagery remains the safe fallback.
-  const heroImage = businessHeroImage?.url || getHeroImages(trade, seed);
+  // Business-specific and library imagery can improve trust and conversion. Stock trade imagery remains the safe fallback.
+  const heroImage = await getGeneratedHeroImage({ lead, trade, seed });
   const phone = getText(lead.phone).trim();
   const phoneRaw = phoneToTel(phone);
   const hasPhone = Boolean(phoneRaw);

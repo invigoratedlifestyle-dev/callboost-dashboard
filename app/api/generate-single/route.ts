@@ -172,7 +172,7 @@ Return ONLY valid JSON:
       generatedSiteUrl: publicUrl,
       aiGeneratedAt: new Date().toISOString(),
     });
-    const html = buildGeneratedSiteHtml(updatedLead);
+    const html = await buildGeneratedSiteHtml(updatedLead);
     const generatedSite = await saveGeneratedSite({
       leadId: leadRow.id || null,
       slug,
