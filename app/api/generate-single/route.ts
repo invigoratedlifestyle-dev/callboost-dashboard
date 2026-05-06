@@ -15,6 +15,26 @@ const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+const templateTradeOptions = [
+  "plumber",
+  "electrician",
+  "builder",
+  "cleaner",
+  "landscaper",
+  "roofer",
+  "painter",
+  "mechanic",
+];
+
+const templateTypeOptions = [
+  "modern",
+  "premium",
+  "local",
+  "emergency",
+  "minimal",
+  "corporate",
+];
+
 function extractJson(text: string) {
   const cleaned = text.trim();
 
@@ -43,9 +63,40 @@ function getPublicUrl(request: Request, slug: string) {
   return `${origin}/sites/${slug}`;
 }
 
+function normalizeTemplateTrade(value: unknown, fallback: unknown) {
+  const normalized = String(value || fallback || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  if (templateTradeOptions.includes(normalized)) return normalized;
+  if (normalized.includes("plumb")) return "plumber";
+  if (normalized.includes("electric")) return "electrician";
+  if (normalized.includes("build")) return "builder";
+  if (normalized.includes("clean")) return "cleaner";
+  if (normalized.includes("landscap")) return "landscaper";
+  if (normalized.includes("roof")) return "roofer";
+  if (normalized.includes("paint")) return "painter";
+  if (normalized.includes("mechanic")) return "mechanic";
+
+  return "plumber";
+}
+
+function normalizeTemplateType(value: unknown) {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return templateTypeOptions.includes(normalized) ? normalized : "modern";
+}
+
 export async function POST(req: Request) {
   try {
-    const { slug } = await req.json();
+    const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+    const slug = typeof body.slug === "string" ? body.slug : "";
 
     if (!slug) {
       return NextResponse.json({ error: "Missing slug" }, { status: 400 });
@@ -103,8 +154,15 @@ Return ONLY valid JSON:
       Array.isArray(existingLead.reviews) &&
       existingLead.reviews.length > 0;
     const publicUrl = getPublicUrl(req, slug);
+    const templateTrade = normalizeTemplateTrade(
+      body.templateTrade,
+      existingLead.trade
+    );
+    const templateType = normalizeTemplateType(body.templateType);
     const updatedLead = withLifecycleDefaults({
       ...existingLead,
+      templateTrade,
+      templateType,
       description: ai.description,
       services: ai.services,
       reviews: hasGoogleReviews ? existingLead.reviews : ai.reviews,

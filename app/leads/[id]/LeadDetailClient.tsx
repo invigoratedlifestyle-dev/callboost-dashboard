@@ -28,6 +28,8 @@ import { GenerateSiteButton } from "./GenerateSiteButton";
 type LeadWithGeneratedContent = Lead & {
   displayName?: string;
   heroImageUrl?: string;
+  templateTrade?: string;
+  templateType?: string;
   headline?: string;
   subheadline?: string;
   problems?: string;
@@ -40,6 +42,26 @@ type LeadWithGeneratedContent = Lead & {
 
 type OutreachChannel = "sms" | "email";
 type FollowUpStage = 1 | 2 | 3;
+
+const templateTradeOptions = [
+  "plumber",
+  "electrician",
+  "builder",
+  "cleaner",
+  "landscaper",
+  "roofer",
+  "painter",
+  "mechanic",
+];
+
+const templateTypeOptions = [
+  "modern",
+  "premium",
+  "local",
+  "emergency",
+  "minimal",
+  "corporate",
+];
 
 type TimelineItem =
   | {
@@ -256,6 +278,26 @@ function normalizePhone(value: string) {
   return value.trim();
 }
 
+function normalizeTemplateTrade(value?: string | null) {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  if (templateTradeOptions.includes(normalized)) return normalized;
+  if (normalized.includes("plumb")) return "plumber";
+  if (normalized.includes("electric")) return "electrician";
+  if (normalized.includes("build")) return "builder";
+  if (normalized.includes("clean")) return "cleaner";
+  if (normalized.includes("landscap")) return "landscaper";
+  if (normalized.includes("roof")) return "roofer";
+  if (normalized.includes("paint")) return "painter";
+  if (normalized.includes("mechanic")) return "mechanic";
+
+  return "plumber";
+}
+
 function getLatestLeadMessageTime(
   messages: LeadMessage[],
   direction: "inbound" | "outbound"
@@ -324,6 +366,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const [portalError, setPortalError] = useState("");
   const [redoingOpportunity, setRedoingOpportunity] = useState(false);
   const [opportunityError, setOpportunityError] = useState("");
+  const [templateTrade, setTemplateTrade] = useState("plumber");
+  const [templateType, setTemplateType] = useState("modern");
 
   useEffect(() => {
     let active = true;
@@ -347,6 +391,14 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       const loadedLead = data.lead as LeadWithGeneratedContent;
 
       setLead(loadedLead);
+      setTemplateTrade(
+        loadedLead.templateTrade || normalizeTemplateTrade(loadedLead.trade)
+      );
+      setTemplateType(
+        templateTypeOptions.includes(loadedLead.templateType || "")
+          ? loadedLead.templateType || "modern"
+          : "modern"
+      );
       setCallbacks(data.callbacks || []);
       setContactDraft({
         trade: loadedLead.trade || "",
@@ -451,6 +503,14 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     const nextLead = updatedLead as LeadWithGeneratedContent;
 
     setLead(nextLead);
+    setTemplateTrade(
+      nextLead.templateTrade || normalizeTemplateTrade(nextLead.trade)
+    );
+    setTemplateType(
+      templateTypeOptions.includes(nextLead.templateType || "")
+        ? nextLead.templateType || "modern"
+        : "modern"
+    );
 
     if (!smsBodyEdited) {
       setSmsBody(buildOpportunitySms(nextLead, getPreviewUrl(nextLead)));
@@ -1448,7 +1508,39 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
               )}
             </p>
 
-            <div className="mt-6 flex flex-wrap gap-3">
+              <div className="mt-6 grid gap-4 md:grid-cols-2">
+                <label className="grid gap-2 text-sm font-bold text-slate-300">
+                  Template Trade
+                  <select
+                    value={templateTrade}
+                    onChange={(event) => setTemplateTrade(event.target.value)}
+                    className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none"
+                  >
+                    {templateTradeOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="grid gap-2 text-sm font-bold text-slate-300">
+                  Template Type
+                  <select
+                    value={templateType}
+                    onChange={(event) => setTemplateType(event.target.value)}
+                    className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none"
+                  >
+                    {templateTypeOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <div className="mt-6 flex flex-wrap gap-3">
               <button
                 onClick={() => {
                   if (!generatedSiteUrl) {
@@ -1465,7 +1557,12 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
 
               <EnrichButton lead={lead} onEnriched={handleLeadUpdated} />
 
-              <GenerateSiteButton lead={lead} onGenerated={handleLeadUpdated} />
+              <GenerateSiteButton
+                lead={lead}
+                templateTrade={templateTrade}
+                templateType={templateType}
+                onGenerated={handleLeadUpdated}
+              />
 
               <button
                 onClick={handleCreateCheckoutLink}
