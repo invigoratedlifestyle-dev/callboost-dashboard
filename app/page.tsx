@@ -24,17 +24,32 @@ type DashboardLead = Lead & {
   client_started_at?: string | null;
 };
 
-type ReplyNotification = {
-  id: string;
-  lead_id: string | number | null;
-  lead_slug: string;
-  business_name: string;
-  lead_status: LeadStatus;
-  channel: "sms" | "email";
-  body: string;
-  subject: string;
-  created_at: string;
-};
+type DashboardNotification =
+  | {
+      type: "reply";
+      id: string;
+      leadSlug: string;
+      businessName: string;
+      leadStatus: LeadStatus;
+      channel: "sms" | "email";
+      body: string;
+      subject: string;
+      createdAt: string;
+      label: string;
+    }
+  | {
+      type: "follow_up";
+      id: string;
+      leadSlug: string;
+      businessName: string;
+      city: string;
+      trade: string;
+      nextFollowUpStage: 1 | 2 | 3;
+      nextFollowUpLabel: string;
+      dueAt: string | null;
+      createdAt: string | null;
+      label: string;
+    };
 
 type FollowUpQueueItem = {
   id: string;
@@ -202,38 +217,13 @@ function formatNotificationTime(value?: string) {
   return date.toLocaleString();
 }
 
-function formatFollowUpTime(value?: string | null) {
-  if (!value) return "-";
+function getNotificationPreview(notification: DashboardNotification) {
+  if (notification.type === "follow_up") {
+    const details = [notification.trade, notification.city].filter(Boolean).join(" - ");
 
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
+    return details || notification.nextFollowUpLabel;
   }
 
-  return date.toLocaleString();
-}
-
-function getOverdueLabel(value?: string | null) {
-  const dueTime = new Date(value || "").getTime();
-
-  if (!Number.isFinite(dueTime)) return "";
-
-  const elapsedMs = Date.now() - dueTime;
-
-  if (elapsedMs < 0) return "";
-
-  const elapsedHours = Math.floor(elapsedMs / (60 * 60 * 1000));
-
-  if (elapsedHours < 1) return "Due now";
-  if (elapsedHours < 24) return `${elapsedHours}h overdue`;
-
-  const elapsedDays = Math.floor(elapsedHours / 24);
-
-  return `${elapsedDays}d overdue`;
-}
-
-function getReplyPreview(notification: ReplyNotification) {
   const text = notification.body || notification.subject || "New reply";
 
   return text.length > 90 ? `${text.slice(0, 87)}...` : text;
@@ -302,11 +292,14 @@ function playTripleBeep() {
   window.setTimeout(() => playNotificationBeep(), 300);
 }
 
-function isHotLeadReply(notification: ReplyNotification) {
-  return /\b(how much|price|quote|cost)\b/i.test(notification.body || "");
+function isHotLeadReply(notification: DashboardNotification) {
+  return (
+    notification.type === "reply" &&
+    /\b(how much|price|quote|cost)\b/i.test(notification.body || "")
+  );
 }
 
-function playLeadReplySound(notification: ReplyNotification) {
+function playLeadReplySound(notification: DashboardNotification) {
   if (isHotLeadReply(notification)) {
     playTripleBeep();
     return;
@@ -349,11 +342,10 @@ export default function DashboardPage() {
   const [generationLimit, setGenerationLimit] = useState(50);
   const [activeFilter, setActiveFilter] =
     useState<LeadFilter>(DEFAULT_LEAD_FILTER);
-  const [replyNotifications, setReplyNotifications] = useState<
-    ReplyNotification[]
+  const [notifications, setNotifications] = useState<
+    DashboardNotification[]
   >([]);
   const [followUpQueue, setFollowUpQueue] = useState<FollowUpQueueItem[]>([]);
-  const [followUpQueueError, setFollowUpQueueError] = useState("");
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(getStoredSoundEnabled);
   const prevNotificationIdsRef = useRef<Set<string>>(new Set());
@@ -410,30 +402,27 @@ export default function DashboardPage() {
       }
 
       setFollowUpQueue(data.needsFollowUp || []);
-      setFollowUpQueueError("");
     } catch (error) {
       console.error("Failed to load follow-up queue:", error);
       setFollowUpQueue([]);
-      setFollowUpQueueError(
-        error instanceof Error ? error.message : "Failed to load follow-up queue"
-      );
     }
   }, []);
 
-  async function loadReplyNotifications() {
+  async function loadNotifications() {
     try {
-      const res = await fetch("/api/notifications/replies", {
+      const res = await fetch("/api/notifications", {
         cache: "no-store",
       });
 
       if (!res.ok) return;
 
       const data = await res.json();
-      const notifications = (data.notifications || []) as ReplyNotification[];
+      const nextNotifications = (data.notifications || []) as
+        DashboardNotification[];
       const nextIds = new Set(
-        notifications.map((notification) => notification.id).filter(Boolean)
+        nextNotifications.map((notification) => notification.id).filter(Boolean)
       );
-      const newestNotification = notifications.find(
+      const newestNotification = nextNotifications.find(
         (notification) => !prevNotificationIdsRef.current.has(notification.id)
       );
 
@@ -447,20 +436,24 @@ export default function DashboardPage() {
           "Notification" in window &&
           Notification.permission === "granted"
         ) {
-          new Notification("New Lead Reply", {
-            body: `${newestNotification.business_name}: ${newestNotification.body.slice(
-              0,
-              80
-            )}`,
-          });
+          new Notification(
+            newestNotification.type === "reply"
+              ? "New Lead Reply"
+              : "Follow-up Due",
+            {
+              body: `${newestNotification.businessName}: ${getNotificationPreview(
+                newestNotification
+              ).slice(0, 80)}`,
+            }
+          );
         }
       }
 
       prevNotificationIdsRef.current = nextIds;
       isFirstNotificationLoadRef.current = false;
-      setReplyNotifications(notifications);
+      setNotifications(nextNotifications);
     } catch (error) {
-      console.error("Failed to load reply notifications:", error);
+      console.error("Failed to load notifications:", error);
     }
   }
 
@@ -574,12 +567,12 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    // Initial notification load plus light polling for new replies.
+    // Initial notification load plus light polling for new attention items.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadReplyNotifications();
+    loadNotifications();
 
     const interval = window.setInterval(() => {
-      void loadReplyNotifications();
+      void loadNotifications();
     }, 25000);
 
     return () => window.clearInterval(interval);
@@ -588,11 +581,12 @@ export default function DashboardPage() {
   const unreadLeadSlugs = useMemo(
     () =>
       new Set(
-        replyNotifications
-          .map((notification) => notification.lead_slug)
+        notifications
+          .filter((notification) => notification.type === "reply")
+          .map((notification) => notification.leadSlug)
           .filter(Boolean)
       ),
-    [replyNotifications]
+    [notifications]
   );
 
   const visibleLeads = useMemo(() => {
@@ -784,10 +778,10 @@ export default function DashboardPage() {
                 onClick={() => setNotificationsOpen((open) => !open)}
                 className="relative rounded-lg bg-white/10 px-5 py-3 text-sm font-bold text-slate-200 hover:bg-white/15"
               >
-                Replies
-                {replyNotifications.length > 0 ? (
+                Notifications
+                {notifications.length > 0 ? (
                   <span className="ml-2 rounded-full bg-red-500 px-2 py-0.5 text-xs text-white">
-                    {replyNotifications.length}
+                    {notifications.length}
                   </span>
                 ) : null}
               </button>
@@ -796,48 +790,58 @@ export default function DashboardPage() {
                 <div className="absolute right-0 z-20 mt-2 w-[min(22rem,calc(100vw-3rem))] rounded-xl border border-white/10 bg-slate-900 p-3 shadow-2xl">
                   <div className="mb-2 flex items-center justify-between gap-3">
                     <p className="text-sm font-bold text-white">
-                      Unread replies
+                      Notifications
                     </p>
                     <span className="text-xs text-slate-500">
-                      {replyNotifications.length}
+                      {notifications.length}
                     </span>
                   </div>
 
-                  {replyNotifications.length ? (
+                  {notifications.length ? (
                     <div className="max-h-96 space-y-2 overflow-y-auto">
-                      {replyNotifications.map((notification) => (
+                      {notifications.map((notification) => (
                         <Link
                           key={notification.id}
-                          href={`/leads/${notification.lead_slug}`}
+                          href={`/leads/${notification.leadSlug}`}
                           className="block rounded-lg border border-white/10 bg-white/5 p-3 hover:bg-white/10"
                         >
                           <div className="flex items-center justify-between gap-3">
                             <p className="min-w-0 truncate text-sm font-bold text-white">
-                              {notification.business_name}
+                              {notification.businessName}
                             </p>
-                            <span className="rounded-full bg-blue-500/15 px-2 py-0.5 text-[10px] font-bold uppercase text-blue-300">
-                              {notification.channel}
-                            </span>
                             <span
-                              className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${getStatusBadgeClass(
-                                notification.lead_status
-                              )}`}
+                              className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                                notification.type === "reply"
+                                  ? "bg-cyan-500/15 text-cyan-300"
+                                  : "bg-blue-500/15 text-blue-300"
+                              }`}
                             >
-                              {statusLabels[notification.lead_status] || "Lead"}
+                              {notification.type === "reply"
+                                ? "New reply"
+                                : "Follow-up due"}
                             </span>
+                            {notification.type === "reply" ? (
+                              <span className="rounded-full bg-blue-500/15 px-2 py-0.5 text-[10px] font-bold uppercase text-blue-300">
+                                {notification.channel}
+                              </span>
+                            ) : null}
                           </div>
                           <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-300">
-                            {getReplyPreview(notification)}
+                            {getNotificationPreview(notification)}
                           </p>
                           <p className="mt-2 text-[11px] text-slate-500">
-                            {formatNotificationTime(notification.created_at)}
+                            {formatNotificationTime(
+                              notification.type === "reply"
+                                ? notification.createdAt
+                                : notification.dueAt || notification.createdAt || ""
+                            )}
                           </p>
                         </Link>
                       ))}
                     </div>
                   ) : (
                     <p className="rounded-lg bg-white/5 p-3 text-sm text-slate-400">
-                      No unread replies.
+                      No notifications.
                     </p>
                   )}
                 </div>
@@ -965,7 +969,10 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          <div className="rounded-xl border border-blue-400/20 bg-blue-500/10 px-4 py-3">
+          <Link
+            href="/follow-ups"
+            className="rounded-xl border border-blue-400/20 bg-blue-500/10 px-4 py-3 hover:bg-blue-500/15"
+          >
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-300">
               Follow-ups
             </p>
@@ -973,7 +980,7 @@ export default function DashboardPage() {
             <p className="mt-1 text-xs font-bold text-blue-200/80">
               Need review
             </p>
-          </div>
+          </Link>
 
           <div className="rounded-xl border border-red-400/15 bg-red-500/10 px-4 py-3">
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-red-300">
@@ -1003,102 +1010,6 @@ export default function DashboardPage() {
             <p className="mt-1 text-2xl font-black">{summaryCounts.unscored}</p>
           </div>
         </div>
-
-        <section className="mb-6 rounded-2xl border border-white/10 bg-white/5 p-5">
-          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-lg font-bold text-white">Needs Follow-up</h2>
-              <p className="mt-1 text-sm text-slate-400">
-                Contacted leads due for the next manual follow-up.
-              </p>
-            </div>
-
-            {followUpQueue.length ? (
-              <span className="self-start rounded-full bg-blue-500/15 px-3 py-1 text-xs font-bold uppercase tracking-wide text-blue-300 sm:self-auto">
-                {followUpQueue.length} due
-              </span>
-            ) : null}
-          </div>
-
-          {followUpQueueError ? (
-            <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">
-              {followUpQueueError}
-            </p>
-          ) : followUpQueue.length ? (
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-left">
-                <thead>
-                  <tr className="border-b border-white/10 text-sm text-slate-400">
-                    <th className="px-3 py-3">Lead</th>
-                    <th className="px-3 py-3">Next Step</th>
-                    <th className="px-3 py-3">Last Outbound</th>
-                    <th className="px-3 py-3">Due</th>
-                    <th className="px-3 py-3">Action</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {followUpQueue.map((item) => {
-                    const overdueLabel = getOverdueLabel(item.dueAt);
-
-                    return (
-                      <tr
-                        key={item.slug || item.id}
-                        className="border-b border-white/10"
-                      >
-                        <td className="px-3 py-3">
-                          <p className="text-sm font-bold text-white">
-                            {item.businessName || "Unnamed business"}
-                          </p>
-                          <p className="mt-1 text-xs text-slate-400">
-                            {item.trade || "Unknown trade"} -{" "}
-                            {item.city || "Unknown city"}
-                          </p>
-                        </td>
-
-                        <td className="px-3 py-3">
-                          <span className="whitespace-nowrap rounded-full bg-blue-500/15 px-3 py-1 text-xs font-bold text-blue-300">
-                            {item.nextFollowUpLabel}
-                          </span>
-                        </td>
-
-                        <td className="px-3 py-3 text-sm text-slate-300">
-                          {formatFollowUpTime(item.lastOutboundAt)}
-                        </td>
-
-                        <td className="px-3 py-3">
-                          <div className="flex flex-col items-start gap-1">
-                            <span className="text-sm text-slate-300">
-                              {formatFollowUpTime(item.dueAt)}
-                            </span>
-                            {overdueLabel ? (
-                              <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-300">
-                                {overdueLabel}
-                              </span>
-                            ) : null}
-                          </div>
-                        </td>
-
-                        <td className="px-3 py-3">
-                          <Link
-                            href={`/leads/${item.slug}`}
-                            className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-500"
-                          >
-                            Open
-                          </Link>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p className="rounded-lg bg-white/5 p-3 text-sm text-slate-400">
-              No contacted leads are due for manual follow-up right now.
-            </p>
-          )}
-        </section>
 
         <div className="mb-4 flex flex-wrap gap-2">
           {leadFilters.map((filter) => (
