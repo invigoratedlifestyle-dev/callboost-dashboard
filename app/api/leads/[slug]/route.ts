@@ -101,6 +101,10 @@ export async function PATCH(
         nextLead.instagram = body.instagram;
       }
 
+      if (hasOwn(body, "heroImageUrl") && typeof body.heroImageUrl === "string") {
+        nextLead.heroImageUrl = body.heroImageUrl;
+      }
+
       if (hasOwn(body, "callbackForwardingEnabled")) {
         nextLead.callbackForwardingEnabled =
           body.callbackForwardingEnabled === true ||

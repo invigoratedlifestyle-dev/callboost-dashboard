@@ -26,6 +26,7 @@ import { EnrichButton } from "./EnrichButton";
 import { GenerateSiteButton } from "./GenerateSiteButton";
 
 type LeadWithGeneratedContent = Lead & {
+  heroImageUrl?: string;
   headline?: string;
   subheadline?: string;
   problems?: string;
@@ -309,6 +310,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     website: "",
     facebook: "",
     instagram: "",
+    heroImageUrl: "",
   });
   const [creatingCheckout, setCreatingCheckout] = useState(false);
   const [checkoutUrl, setCheckoutUrl] = useState("");
@@ -348,6 +350,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
         website: loadedLead.website || "",
         facebook: loadedLead.facebook || "",
         instagram: loadedLead.instagram || "",
+        heroImageUrl: loadedLead.heroImageUrl || "",
       });
       setSmsTo(loadedLead.phone || "");
       setSmsBody(buildOpportunitySms(loadedLead, getPreviewUrl(loadedLead)));
@@ -527,6 +530,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       website: lead.website || "",
       facebook: lead.facebook || "",
       instagram: lead.instagram || "",
+      heroImageUrl: lead.heroImageUrl || "",
     });
     setContactError("");
     setIsEditingContact(true);
@@ -539,6 +543,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
         website: lead.website || "",
         facebook: lead.facebook || "",
         instagram: lead.instagram || "",
+        heroImageUrl: lead.heroImageUrl || "",
       });
     }
 
@@ -553,6 +558,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     const nextWebsite = normalizeWebsite(contactDraft.website);
     const nextFacebook = normalizeWebsite(contactDraft.facebook);
     const nextInstagram = normalizeWebsite(contactDraft.instagram);
+    const nextHeroImageUrl = normalizeWebsite(contactDraft.heroImageUrl);
 
     if (nextEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) {
       setContactError("Email looks invalid.");
@@ -574,6 +580,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
           website: nextWebsite,
           facebook: nextFacebook,
           instagram: nextInstagram,
+          heroImageUrl: nextHeroImageUrl,
         }),
       });
       const data = await res.json();
@@ -591,6 +598,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
         website: updatedLead.website || "",
         facebook: updatedLead.facebook || "",
         instagram: updatedLead.instagram || "",
+        heroImageUrl: updatedLead.heroImageUrl || "",
       });
       setSmsTo(updatedLead.phone || "");
       setEmailTo(updatedLead.email || "");
@@ -1192,6 +1200,37 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                       </a>
                     ) : (
                       <span className="text-slate-500">Not found yet</span>
+                    )}
+                  </>
+                )}
+              </div>
+
+              <div>
+                <strong className="text-white">Hero Image:</strong>{" "}
+                {isEditingContact ? (
+                  <input
+                    value={contactDraft.heroImageUrl}
+                    onChange={(event) =>
+                      setContactDraft((current) => ({
+                        ...current,
+                        heroImageUrl: event.target.value,
+                      }))
+                    }
+                    className="mt-2 w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none"
+                    placeholder="https://example.com/hero.jpg"
+                  />
+                ) : (
+                  <>
+                    {lead.heroImageUrl ? (
+                      <a
+                        href={lead.heroImageUrl}
+                        target="_blank"
+                        className="text-blue-400 hover:text-blue-300"
+                      >
+                        {lead.heroImageUrl}
+                      </a>
+                    ) : (
+                      <span className="text-slate-500">Not set yet</span>
                     )}
                   </>
                 )}
