@@ -157,6 +157,218 @@ function pickStable<T>(items: T[], seed: string, offset = 0) {
   return items[(hashString(seed) + offset) % items.length];
 }
 
+function getRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function getNestedValue(record: Record<string, unknown>, path: string[]) {
+  let current: unknown = record;
+
+  for (const key of path) {
+    const currentRecord = getRecord(current);
+
+    if (!currentRecord) return undefined;
+
+    current = currentRecord[key];
+  }
+
+  return current;
+}
+
+function getImageUrl(value: unknown): string {
+  if (typeof value === "string") return value.trim();
+
+  const record = getRecord(value);
+
+  if (!record) return "";
+
+  return getText(
+    record.url ||
+      record.src ||
+      record.image ||
+      record.imageUrl ||
+      record.photoUrl ||
+      record.href ||
+      record.contentUrl
+  ).trim();
+}
+
+function isValidHttpUrl(value: string) {
+  try {
+    const url = new URL(value);
+
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function getImageDimension(value: unknown, key: "width" | "height") {
+  const record = getRecord(value);
+  const nested = getRecord(record?.dimensions);
+  const size = getRecord(record?.size);
+  const parsed = Number(record?.[key] ?? nested?.[key] ?? size?.[key]);
+
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function looksLikeLogoOrThumbnail(url: string, source: string, value: unknown) {
+  const record = getRecord(value);
+  const text = [
+    url,
+    source,
+    getText(record?.type),
+    getText(record?.kind),
+    getText(record?.alt),
+    getText(record?.title),
+    getText(record?.label),
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  return /logo|icon|favicon|avatar|profile|thumbnail|thumb|badge/.test(text);
+}
+
+function scoreBusinessHeroImageCandidate(args: {
+  source: string;
+  url: string;
+  value: unknown;
+}) {
+  const { source, url, value } = args;
+
+  if (!isValidHttpUrl(url)) return null;
+  if (looksLikeLogoOrThumbnail(url, source, value)) return null;
+
+  const width = getImageDimension(value, "width");
+  const height = getImageDimension(value, "height");
+
+  if ((width && width < 600) || (height && height < 300)) return null;
+
+  const ratio = width && height ? width / height : null;
+
+  if (ratio && ratio < 1.15) return null;
+
+  let score = 10;
+
+  if (/hero|cover|banner|og|social/i.test(source)) score += 40;
+  if (/image|photo/i.test(source)) score += 10;
+  if (width && width >= 1000) score += 10;
+  if (height && height >= 500) score += 8;
+  if (ratio && ratio >= 1.4) score += 10;
+
+  return score;
+}
+
+function addBusinessHeroImageCandidate(
+  candidates: Array<{ score: number; source: string; url: string }>,
+  source: string,
+  value: unknown,
+  scoreBoost = 0
+) {
+  const url = getImageUrl(value);
+  const score = scoreBusinessHeroImageCandidate({ source, url, value });
+
+  if (score === null) return;
+
+  candidates.push({ score: score + scoreBoost, source, url });
+}
+
+function addBusinessHeroImageCandidatesFromArray(
+  candidates: Array<{ score: number; source: string; url: string }>,
+  source: string,
+  value: unknown
+) {
+  if (!Array.isArray(value)) return;
+
+  value.forEach((item, index) => {
+    addBusinessHeroImageCandidate(candidates, `${source}[${index}]`, item);
+  });
+}
+
+function getBusinessHeroImage(lead: LeadRecord) {
+  const leadRecord = getRecord(lead) || {};
+  const candidates: Array<{ score: number; source: string; url: string }> = [];
+  const explicitPaths = [
+    ["heroImageOverride"],
+    ["heroImageUrl"],
+    ["heroImage"],
+    ["generatedHeroImageUrl"],
+    ["generatedHeroImage"],
+    ["data", "heroImageOverride"],
+    ["data", "heroImageUrl"],
+    ["data", "heroImage"],
+  ];
+  const imagePaths = [
+    ["coverImage"],
+    ["coverPhoto"],
+    ["facebookCoverImage"],
+    ["socialImage"],
+    ["ogImage"],
+    ["openGraphImage"],
+    ["websiteImage"],
+    ["metadata", "image"],
+    ["metadata", "ogImage"],
+    ["websiteMetadata", "image"],
+    ["websiteMetadata", "ogImage"],
+    ["socialMetadata", "image"],
+    ["socialMetadata", "ogImage"],
+    ["facebook", "coverImage"],
+    ["facebook", "coverPhoto"],
+    ["data", "coverImage"],
+    ["data", "coverPhoto"],
+    ["data", "facebookCoverImage"],
+    ["data", "socialImage"],
+    ["data", "ogImage"],
+    ["data", "openGraphImage"],
+    ["data", "websiteMetadata", "image"],
+    ["data", "websiteMetadata", "ogImage"],
+    ["data", "socialMetadata", "image"],
+    ["data", "facebook", "coverImage"],
+    ["data", "facebook", "coverPhoto"],
+  ];
+  const imageArrayPaths = [
+    ["images"],
+    ["photos"],
+    ["websiteImages"],
+    ["socialImages"],
+    ["data", "images"],
+    ["data", "photos"],
+    ["data", "websiteImages"],
+    ["data", "socialImages"],
+  ];
+
+  for (const path of explicitPaths) {
+    addBusinessHeroImageCandidate(
+      candidates,
+      path.join("."),
+      getNestedValue(leadRecord, path),
+      100
+    );
+  }
+
+  for (const path of imagePaths) {
+    addBusinessHeroImageCandidate(
+      candidates,
+      path.join("."),
+      getNestedValue(leadRecord, path)
+    );
+  }
+
+  for (const path of imageArrayPaths) {
+    addBusinessHeroImageCandidatesFromArray(
+      candidates,
+      path.join("."),
+      getNestedValue(leadRecord, path)
+    );
+  }
+
+  const bestCandidate = candidates.sort((a, b) => b.score - a.score)[0];
+
+  return bestCandidate ? { source: bestCandidate.source, url: bestCandidate.url } : null;
+}
+
 function isPlumberTrade(trade: unknown) {
   return String(trade ?? "").toLowerCase().includes("plumb");
 }
@@ -576,7 +788,9 @@ export function buildGeneratedSiteHtml(lead: LeadRecord) {
   const tradeSlug = normalizeTrade(trade);
   const businessSlug = slugify(slugSource);
   const seed = `${businessSlug}-${citySlug}-${tradeSlug}`;
-  const heroImage = getHeroImages(trade, seed);
+  const businessHeroImage = getBusinessHeroImage(lead);
+  // Business-specific imagery can improve trust and conversion. Stock trade imagery remains the safe fallback.
+  const heroImage = businessHeroImage?.url || getHeroImages(trade, seed);
   const phone = getText(lead.phone).trim();
   const phoneRaw = phoneToTel(phone);
   const hasPhone = Boolean(phoneRaw);
