@@ -5,15 +5,25 @@ import type { Lead } from "../../lib/leads";
 
 type Props = {
   lead: Lead;
+  templateTrade?: string;
+  templateType?: string;
   onGenerated?: (updatedLead: Lead) => void;
 };
 
-export function GenerateSiteButton({ lead, onGenerated }: Props) {
+export default function GenerateSiteButton({
+  lead,
+  templateTrade,
+  templateType,
+  onGenerated,
+}: Props) {
   const [loading, setLoading] = useState(false);
 
   async function handleGenerate() {
     try {
       setLoading(true);
+
+      const nextTemplateTrade = templateTrade || lead.trade || "";
+      const nextTemplateType = templateType || "modern";
 
       const res = await fetch("/api/generate-single", {
         method: "POST",
@@ -24,6 +34,8 @@ export function GenerateSiteButton({ lead, onGenerated }: Props) {
           slug: lead.slug,
           id: lead.id,
           lead,
+          templateTrade: nextTemplateTrade,
+          templateType: nextTemplateType,
         }),
       });
 

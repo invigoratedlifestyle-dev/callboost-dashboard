@@ -23,7 +23,7 @@ import {
   type InterestedReplyPersonalization,
 } from "../../lib/outreachCopy";
 import { EnrichButton } from "./EnrichButton";
-import { GenerateSiteButton } from "./GenerateSiteButton";
+import GenerateSiteButton from "./GenerateSiteButton";
 
 type LeadWithGeneratedContent = Lead & {
   displayName?: string;
