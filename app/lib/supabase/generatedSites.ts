@@ -277,17 +277,22 @@ function getTopServices(services: string[], trade: string) {
   return "repairs, maintenance and urgent jobs";
 }
 
+const legacyPlumberUnderSinkHeroImage =
+  // Deprecated for new generations; keep the URL documented so saved site HTML using it remains understandable.
+  "https://commons.wikimedia.org/wiki/Special:Redirect/file/Plumber_under_kitchen_sink.jpg";
+
 function getHeroImages(trade: string, seed: string) {
   const plumberImages = [
     "https://commons.wikimedia.org/wiki/Special:Redirect/file/Sink_unclogging_repair.jpg",
     "https://commons.wikimedia.org/wiki/Special:Redirect/file/Plumber_at_work.jpg",
-    "https://commons.wikimedia.org/wiki/Special:Redirect/file/Plumber_under_kitchen_sink.jpg",
     "https://commons.wikimedia.org/wiki/Special:Redirect/file/Plumber_soldering_pipe_above_new_water_heater.JPG",
   ];
   const genericTradeImages = [
     "https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=1800&q=80",
     "https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?auto=format&fit=crop&w=1800&q=80",
   ];
+
+  void legacyPlumberUnderSinkHeroImage;
 
   return pickStable(isPlumberTrade(trade) ? plumberImages : genericTradeImages, seed);
 }
