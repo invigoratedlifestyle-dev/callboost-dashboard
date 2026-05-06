@@ -81,6 +81,14 @@ export async function PATCH(
 
       const nextLead = { ...existingLead };
 
+      if (hasOwn(body, "trade") && typeof body.trade === "string") {
+        nextLead.trade = body.trade;
+      }
+
+      if (hasOwn(body, "city") && typeof body.city === "string") {
+        nextLead.city = body.city;
+      }
+
       if (hasOwn(body, "phone") && typeof body.phone === "string") {
         nextLead.phone = body.phone;
       }

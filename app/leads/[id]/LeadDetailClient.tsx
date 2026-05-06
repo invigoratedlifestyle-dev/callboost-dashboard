@@ -306,6 +306,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const [savingContact, setSavingContact] = useState(false);
   const [contactError, setContactError] = useState("");
   const [contactDraft, setContactDraft] = useState({
+    trade: "",
+    city: "",
     phone: "",
     email: "",
     website: "",
@@ -347,6 +349,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       setLead(loadedLead);
       setCallbacks(data.callbacks || []);
       setContactDraft({
+        trade: loadedLead.trade || "",
+        city: loadedLead.city || "",
         phone: loadedLead.phone || "",
         email: loadedLead.email || "",
         website: loadedLead.website || "",
@@ -532,6 +536,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     if (!lead) return;
 
     setContactDraft({
+      trade: lead.trade || "",
+      city: lead.city || "",
       phone: lead.phone || "",
       email: lead.email || "",
       website: lead.website || "",
@@ -546,6 +552,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const handleCancelContactEdit = () => {
     if (lead) {
       setContactDraft({
+        trade: lead.trade || "",
+        city: lead.city || "",
         phone: lead.phone || "",
         email: lead.email || "",
         website: lead.website || "",
@@ -562,6 +570,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const handleSaveContactEdit = async () => {
     if (!lead) return;
 
+    const nextTrade = contactDraft.trade.trim();
+    const nextCity = contactDraft.city.trim();
     const nextPhone = normalizePhone(contactDraft.phone);
     const nextEmail = normalizeEmail(contactDraft.email);
     const nextWebsite = normalizeWebsite(contactDraft.website);
@@ -585,6 +595,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          trade: nextTrade,
+          city: nextCity,
           phone: nextPhone,
           email: nextEmail,
           website: nextWebsite,
@@ -604,6 +616,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
 
       setLead(updatedLead);
       setContactDraft({
+        trade: updatedLead.trade || "",
+        city: updatedLead.city || "",
         phone: updatedLead.phone || "",
         email: updatedLead.email || "",
         website: updatedLead.website || "",
@@ -1133,9 +1147,24 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
             ) : null}
 
             <div className="space-y-3 text-slate-300">
-              <p>
-                <strong className="text-white">Trade:</strong> {lead.trade || "-"}
-              </p>
+              <div>
+                <strong className="text-white">Trade:</strong>{" "}
+                {isEditingContact ? (
+                  <input
+                    value={contactDraft.trade}
+                    onChange={(event) =>
+                      setContactDraft((current) => ({
+                        ...current,
+                        trade: event.target.value,
+                      }))
+                    }
+                    className="mt-2 w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none"
+                    placeholder="Plumber"
+                  />
+                ) : (
+                  <span>{lead.trade || "-"}</span>
+                )}
+              </div>
 
               <div>
                 <strong className="text-white">Display Name:</strong>{" "}
@@ -1161,9 +1190,24 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 )}
               </div>
 
-              <p>
-                <strong className="text-white">City:</strong> {lead.city || "-"}
-              </p>
+              <div>
+                <strong className="text-white">City:</strong>{" "}
+                {isEditingContact ? (
+                  <input
+                    value={contactDraft.city}
+                    onChange={(event) =>
+                      setContactDraft((current) => ({
+                        ...current,
+                        city: event.target.value,
+                      }))
+                    }
+                    className="mt-2 w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none"
+                    placeholder="Hobart"
+                  />
+                ) : (
+                  <span>{lead.city || "-"}</span>
+                )}
+              </div>
 
               <div>
                 <strong className="text-white">Phone:</strong>{" "}
