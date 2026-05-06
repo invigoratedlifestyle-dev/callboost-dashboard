@@ -307,6 +307,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     phone: "",
     email: "",
     website: "",
+    facebook: "",
+    instagram: "",
   });
   const [creatingCheckout, setCreatingCheckout] = useState(false);
   const [checkoutUrl, setCheckoutUrl] = useState("");
@@ -344,6 +346,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
         phone: loadedLead.phone || "",
         email: loadedLead.email || "",
         website: loadedLead.website || "",
+        facebook: loadedLead.facebook || "",
+        instagram: loadedLead.instagram || "",
       });
       setSmsTo(loadedLead.phone || "");
       setSmsBody(buildOpportunitySms(loadedLead, getPreviewUrl(loadedLead)));
@@ -521,6 +525,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       phone: lead.phone || "",
       email: lead.email || "",
       website: lead.website || "",
+      facebook: lead.facebook || "",
+      instagram: lead.instagram || "",
     });
     setContactError("");
     setIsEditingContact(true);
@@ -531,6 +537,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
         phone: lead.phone || "",
         email: lead.email || "",
         website: lead.website || "",
+        facebook: lead.facebook || "",
+        instagram: lead.instagram || "",
       });
     }
 
@@ -543,6 +551,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     const nextPhone = normalizePhone(contactDraft.phone);
     const nextEmail = normalizeEmail(contactDraft.email);
     const nextWebsite = normalizeWebsite(contactDraft.website);
+    const nextFacebook = normalizeWebsite(contactDraft.facebook);
+    const nextInstagram = normalizeWebsite(contactDraft.instagram);
 
     if (nextEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) {
       setContactError("Email looks invalid.");
@@ -562,6 +572,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
           phone: nextPhone,
           email: nextEmail,
           website: nextWebsite,
+          facebook: nextFacebook,
+          instagram: nextInstagram,
         }),
       });
       const data = await res.json();
@@ -577,6 +589,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
         phone: updatedLead.phone || "",
         email: updatedLead.email || "",
         website: updatedLead.website || "",
+        facebook: updatedLead.facebook || "",
+        instagram: updatedLead.instagram || "",
       });
       setSmsTo(updatedLead.phone || "");
       setEmailTo(updatedLead.email || "");
@@ -1198,35 +1212,67 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 )}
               </p>
 
-              <p>
+              <div>
                 <strong className="text-white">Facebook:</strong>{" "}
-                {lead.facebook ? (
-                  <a
-                    href={lead.facebook}
-                    target="_blank"
-                    className="text-blue-400 hover:text-blue-300"
-                  >
-                    {lead.facebook}
-                  </a>
+                {isEditingContact ? (
+                  <input
+                    value={contactDraft.facebook}
+                    onChange={(event) =>
+                      setContactDraft((current) => ({
+                        ...current,
+                        facebook: event.target.value,
+                      }))
+                    }
+                    className="mt-2 w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none"
+                    placeholder="https://facebook.com/example"
+                  />
                 ) : (
-                  <span className="text-slate-500">Not found yet</span>
+                  <>
+                    {lead.facebook ? (
+                      <a
+                        href={lead.facebook}
+                        target="_blank"
+                        className="text-blue-400 hover:text-blue-300"
+                      >
+                        {lead.facebook}
+                      </a>
+                    ) : (
+                      <span className="text-slate-500">Not found yet</span>
+                    )}
+                  </>
                 )}
-              </p>
+              </div>
 
-              <p>
+              <div>
                 <strong className="text-white">Instagram:</strong>{" "}
-                {lead.instagram ? (
-                  <a
-                    href={lead.instagram}
-                    target="_blank"
-                    className="text-blue-400 hover:text-blue-300"
-                  >
-                    {lead.instagram}
-                  </a>
+                {isEditingContact ? (
+                  <input
+                    value={contactDraft.instagram}
+                    onChange={(event) =>
+                      setContactDraft((current) => ({
+                        ...current,
+                        instagram: event.target.value,
+                      }))
+                    }
+                    className="mt-2 w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none"
+                    placeholder="https://instagram.com/example"
+                  />
                 ) : (
-                  <span className="text-slate-500">Not found yet</span>
+                  <>
+                    {lead.instagram ? (
+                      <a
+                        href={lead.instagram}
+                        target="_blank"
+                        className="text-blue-400 hover:text-blue-300"
+                      >
+                        {lead.instagram}
+                      </a>
+                    ) : (
+                      <span className="text-slate-500">Not found yet</span>
+                    )}
+                  </>
                 )}
-              </p>
+              </div>
 
               <p>
                 <strong className="text-white">Rating:</strong>{" "}

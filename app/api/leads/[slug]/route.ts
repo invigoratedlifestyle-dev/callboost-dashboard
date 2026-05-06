@@ -93,6 +93,14 @@ export async function PATCH(
         nextLead.website = body.website;
       }
 
+      if (hasOwn(body, "facebook") && typeof body.facebook === "string") {
+        nextLead.facebook = body.facebook;
+      }
+
+      if (hasOwn(body, "instagram") && typeof body.instagram === "string") {
+        nextLead.instagram = body.instagram;
+      }
+
       if (hasOwn(body, "callbackForwardingEnabled")) {
         nextLead.callbackForwardingEnabled =
           body.callbackForwardingEnabled === true ||
