@@ -93,6 +93,10 @@ export async function PATCH(
         nextLead.website = body.website;
       }
 
+      if (hasOwn(body, "displayName") && typeof body.displayName === "string") {
+        nextLead.displayName = body.displayName;
+      }
+
       if (hasOwn(body, "facebook") && typeof body.facebook === "string") {
         nextLead.facebook = body.facebook;
       }

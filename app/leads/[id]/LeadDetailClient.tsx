@@ -26,6 +26,7 @@ import { EnrichButton } from "./EnrichButton";
 import { GenerateSiteButton } from "./GenerateSiteButton";
 
 type LeadWithGeneratedContent = Lead & {
+  displayName?: string;
   heroImageUrl?: string;
   headline?: string;
   subheadline?: string;
@@ -308,6 +309,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     phone: "",
     email: "",
     website: "",
+    displayName: "",
     facebook: "",
     instagram: "",
     heroImageUrl: "",
@@ -348,6 +350,11 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
         phone: loadedLead.phone || "",
         email: loadedLead.email || "",
         website: loadedLead.website || "",
+        displayName:
+          loadedLead.displayName ||
+          loadedLead.businessName ||
+          loadedLead.name ||
+          "",
         facebook: loadedLead.facebook || "",
         instagram: loadedLead.instagram || "",
         heroImageUrl: loadedLead.heroImageUrl || "",
@@ -528,6 +535,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       phone: lead.phone || "",
       email: lead.email || "",
       website: lead.website || "",
+      displayName: lead.displayName || lead.businessName || lead.name || "",
       facebook: lead.facebook || "",
       instagram: lead.instagram || "",
       heroImageUrl: lead.heroImageUrl || "",
@@ -541,6 +549,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
         phone: lead.phone || "",
         email: lead.email || "",
         website: lead.website || "",
+        displayName: lead.displayName || lead.businessName || lead.name || "",
         facebook: lead.facebook || "",
         instagram: lead.instagram || "",
         heroImageUrl: lead.heroImageUrl || "",
@@ -556,6 +565,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     const nextPhone = normalizePhone(contactDraft.phone);
     const nextEmail = normalizeEmail(contactDraft.email);
     const nextWebsite = normalizeWebsite(contactDraft.website);
+    const nextDisplayName = contactDraft.displayName.trim();
     const nextFacebook = normalizeWebsite(contactDraft.facebook);
     const nextInstagram = normalizeWebsite(contactDraft.instagram);
     const nextHeroImageUrl = normalizeWebsite(contactDraft.heroImageUrl);
@@ -578,6 +588,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
           phone: nextPhone,
           email: nextEmail,
           website: nextWebsite,
+          displayName: nextDisplayName,
           facebook: nextFacebook,
           instagram: nextInstagram,
           heroImageUrl: nextHeroImageUrl,
@@ -596,6 +607,11 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
         phone: updatedLead.phone || "",
         email: updatedLead.email || "",
         website: updatedLead.website || "",
+        displayName:
+          updatedLead.displayName ||
+          updatedLead.businessName ||
+          updatedLead.name ||
+          "",
         facebook: updatedLead.facebook || "",
         instagram: updatedLead.instagram || "",
         heroImageUrl: updatedLead.heroImageUrl || "",
@@ -1120,6 +1136,30 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
               <p>
                 <strong className="text-white">Trade:</strong> {lead.trade || "-"}
               </p>
+
+              <div>
+                <strong className="text-white">Display Name:</strong>{" "}
+                {isEditingContact ? (
+                  <input
+                    value={contactDraft.displayName}
+                    onChange={(event) =>
+                      setContactDraft((current) => ({
+                        ...current,
+                        displayName: event.target.value,
+                      }))
+                    }
+                    className="mt-2 w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none"
+                    placeholder={lead.businessName || lead.name || "Business name"}
+                  />
+                ) : (
+                  <span>
+                    {lead.displayName ||
+                      lead.businessName ||
+                      lead.name ||
+                      "Not set yet"}
+                  </span>
+                )}
+              </div>
 
               <p>
                 <strong className="text-white">City:</strong> {lead.city || "-"}
