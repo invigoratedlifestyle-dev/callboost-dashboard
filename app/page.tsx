@@ -36,6 +36,20 @@ type ReplyNotification = {
   created_at: string;
 };
 
+type FollowUpQueueItem = {
+  id: string;
+  slug: string;
+  businessName: string;
+  city: string;
+  trade: string;
+  lastOutboundAt: string | null;
+  latestOutboundAt: string | null;
+  nextFollowUpStage: 1 | 2 | 3;
+  nextFollowUpLabel: string;
+  dueAt: string | null;
+  dueSince: string | null;
+};
+
 const leadFilters: Array<{ value: LeadFilter; label: string }> = [
   { value: "all", label: "All" },
   { value: "lead", label: "Leads" },
@@ -188,6 +202,37 @@ function formatNotificationTime(value?: string) {
   return date.toLocaleString();
 }
 
+function formatFollowUpTime(value?: string | null) {
+  if (!value) return "-";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString();
+}
+
+function getOverdueLabel(value?: string | null) {
+  const dueTime = new Date(value || "").getTime();
+
+  if (!Number.isFinite(dueTime)) return "";
+
+  const elapsedMs = Date.now() - dueTime;
+
+  if (elapsedMs < 0) return "";
+
+  const elapsedHours = Math.floor(elapsedMs / (60 * 60 * 1000));
+
+  if (elapsedHours < 1) return "Due now";
+  if (elapsedHours < 24) return `${elapsedHours}h overdue`;
+
+  const elapsedDays = Math.floor(elapsedHours / 24);
+
+  return `${elapsedDays}d overdue`;
+}
+
 function getReplyPreview(notification: ReplyNotification) {
   const text = notification.body || notification.subject || "New reply";
 
@@ -307,6 +352,8 @@ export default function DashboardPage() {
   const [replyNotifications, setReplyNotifications] = useState<
     ReplyNotification[]
   >([]);
+  const [followUpQueue, setFollowUpQueue] = useState<FollowUpQueueItem[]>([]);
+  const [followUpQueueError, setFollowUpQueueError] = useState("");
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(getStoredSoundEnabled);
   const prevNotificationIdsRef = useRef<Set<string>>(new Set());
@@ -349,6 +396,28 @@ export default function DashboardPage() {
     const data = await res.json();
 
     setClientRevenueLeads(data.leads || []);
+  }, []);
+
+  const loadFollowUpQueue = useCallback(async () => {
+    try {
+      const res = await fetch("/api/follow-ups/needs", {
+        cache: "no-store",
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to load follow-up queue");
+      }
+
+      setFollowUpQueue(data.needsFollowUp || []);
+      setFollowUpQueueError("");
+    } catch (error) {
+      console.error("Failed to load follow-up queue:", error);
+      setFollowUpQueue([]);
+      setFollowUpQueueError(
+        error instanceof Error ? error.message : "Failed to load follow-up queue"
+      );
+    }
   }, []);
 
   async function loadReplyNotifications() {
@@ -432,6 +501,7 @@ export default function DashboardPage() {
 
       await loadLeads(activeFilter);
       await loadClientRevenueLeads();
+      await loadFollowUpQueue();
     } catch (error) {
       console.error("Generate leads failed:", error);
       alert("Lead generation failed");
@@ -453,6 +523,7 @@ export default function DashboardPage() {
 
       await loadLeads(activeFilter);
       await loadClientRevenueLeads();
+      await loadFollowUpQueue();
     } finally {
       setEnriching(false);
     }
@@ -477,6 +548,18 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadClientRevenueLeads();
   }, [loadClientRevenueLeads]);
+
+  useEffect(() => {
+    // Initial manual follow-up queue load.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadFollowUpQueue();
+
+    const interval = window.setInterval(() => {
+      void loadFollowUpQueue();
+    }, 60000);
+
+    return () => window.clearInterval(interval);
+  }, [loadFollowUpQueue]);
 
   useEffect(() => {
     if (
@@ -629,6 +712,7 @@ export default function DashboardPage() {
       console.log("Bulk action result:", { action, result });
       await loadLeads(activeFilter);
       await loadClientRevenueLeads();
+      await loadFollowUpQueue();
       clearSelectedLeads();
     } catch (error) {
       console.error("Bulk action failed:", error);
@@ -868,7 +952,7 @@ export default function DashboardPage() {
           </button>
         </div>
 
-        <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
           <div className="rounded-xl border border-green-400/20 bg-green-500/10 px-4 py-3">
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-green-300">
               MRR
@@ -878,6 +962,16 @@ export default function DashboardPage() {
             </p>
             <p className="mt-1 text-xs font-bold text-green-200/80">
               Active Clients: {revenueSummary.activeClients}
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-blue-400/20 bg-blue-500/10 px-4 py-3">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-300">
+              Follow-ups
+            </p>
+            <p className="mt-1 text-2xl font-black">{followUpQueue.length}</p>
+            <p className="mt-1 text-xs font-bold text-blue-200/80">
+              Need review
             </p>
           </div>
 
@@ -909,6 +1003,102 @@ export default function DashboardPage() {
             <p className="mt-1 text-2xl font-black">{summaryCounts.unscored}</p>
           </div>
         </div>
+
+        <section className="mb-6 rounded-2xl border border-white/10 bg-white/5 p-5">
+          <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-white">Needs Follow-up</h2>
+              <p className="mt-1 text-sm text-slate-400">
+                Contacted leads due for the next manual follow-up.
+              </p>
+            </div>
+
+            {followUpQueue.length ? (
+              <span className="self-start rounded-full bg-blue-500/15 px-3 py-1 text-xs font-bold uppercase tracking-wide text-blue-300 sm:self-auto">
+                {followUpQueue.length} due
+              </span>
+            ) : null}
+          </div>
+
+          {followUpQueueError ? (
+            <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">
+              {followUpQueueError}
+            </p>
+          ) : followUpQueue.length ? (
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-left">
+                <thead>
+                  <tr className="border-b border-white/10 text-sm text-slate-400">
+                    <th className="px-3 py-3">Lead</th>
+                    <th className="px-3 py-3">Next Step</th>
+                    <th className="px-3 py-3">Last Outbound</th>
+                    <th className="px-3 py-3">Due</th>
+                    <th className="px-3 py-3">Action</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {followUpQueue.map((item) => {
+                    const overdueLabel = getOverdueLabel(item.dueAt);
+
+                    return (
+                      <tr
+                        key={item.slug || item.id}
+                        className="border-b border-white/10"
+                      >
+                        <td className="px-3 py-3">
+                          <p className="text-sm font-bold text-white">
+                            {item.businessName || "Unnamed business"}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-400">
+                            {item.trade || "Unknown trade"} -{" "}
+                            {item.city || "Unknown city"}
+                          </p>
+                        </td>
+
+                        <td className="px-3 py-3">
+                          <span className="whitespace-nowrap rounded-full bg-blue-500/15 px-3 py-1 text-xs font-bold text-blue-300">
+                            {item.nextFollowUpLabel}
+                          </span>
+                        </td>
+
+                        <td className="px-3 py-3 text-sm text-slate-300">
+                          {formatFollowUpTime(item.lastOutboundAt)}
+                        </td>
+
+                        <td className="px-3 py-3">
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="text-sm text-slate-300">
+                              {formatFollowUpTime(item.dueAt)}
+                            </span>
+                            {overdueLabel ? (
+                              <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-amber-300">
+                                {overdueLabel}
+                              </span>
+                            ) : null}
+                          </div>
+                        </td>
+
+                        <td className="px-3 py-3">
+                          <Link
+                            href={`/leads/${item.slug}`}
+                            className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-500"
+                          >
+                            Open
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="rounded-lg bg-white/5 p-3 text-sm text-slate-400">
+              No contacted leads are due for manual follow-up right now.
+            </p>
+          )}
+        </section>
 
         <div className="mb-4 flex flex-wrap gap-2">
           {leadFilters.map((filter) => (
