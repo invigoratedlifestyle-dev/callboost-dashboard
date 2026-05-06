@@ -2,7 +2,11 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CITY_TARGETS } from "./lib/leadTargeting/cities";
+import {
+  AU_STATE_TARGETS,
+  CITY_TARGETS,
+  STATE_WIDE_CITY_KEY,
+} from "./lib/leadTargeting/cities";
 import { TRADE_TARGETS } from "./lib/leadTargeting/trades";
 import type { Lead, LeadStatus, WebsiteEvaluation } from "./lib/leads";
 
@@ -294,6 +298,7 @@ export default function DashboardPage() {
   const [selectedLeadKeys, setSelectedLeadKeys] = useState<Set<string>>(
     () => new Set()
   );
+  const [targetStateKey, setTargetStateKey] = useState("TAS");
   const [targetCityKey, setTargetCityKey] = useState("hobart");
   const [targetTradeKey, setTargetTradeKey] = useState("plumber");
   const [generationLimit, setGenerationLimit] = useState(50);
@@ -310,6 +315,11 @@ export default function DashboardPage() {
   const permissionRequestedRef = useRef(false);
   const selectAllCheckboxRef = useRef<HTMLInputElement | null>(null);
   const actionRunning = generating || enriching || Boolean(bulkActionRunning);
+  const cityOptions = useMemo(
+    () =>
+      CITY_TARGETS.filter((cityTarget) => cityTarget.stateCode === targetStateKey),
+    [targetStateKey]
+  );
 
   const loadLeads = useCallback(async (filter: LeadFilter) => {
     const url =
@@ -405,6 +415,7 @@ export default function DashboardPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          stateKey: targetStateKey,
           cityKey: targetCityKey,
           tradeKey: targetTradeKey,
           limit: generationLimit,
@@ -767,6 +778,27 @@ export default function DashboardPage() {
 
             <div className="grid gap-3 sm:grid-cols-2 lg:flex lg:items-end">
               <label className="grid gap-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                State
+                <select
+                  value={targetStateKey}
+                  onChange={(event) => {
+                    const nextStateKey = event.target.value;
+
+                    setTargetStateKey(nextStateKey);
+                    setTargetCityKey(STATE_WIDE_CITY_KEY);
+                  }}
+                  disabled={actionRunning}
+                  className="min-w-32 rounded-lg border border-white/10 bg-slate-900 px-3 py-3 text-sm font-bold normal-case tracking-normal text-white outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {AU_STATE_TARGETS.map((stateTarget) => (
+                    <option key={stateTarget.key} value={stateTarget.key}>
+                      {stateTarget.key}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="grid gap-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
                 City
                 <select
                   value={targetCityKey}
@@ -774,7 +806,8 @@ export default function DashboardPage() {
                   disabled={actionRunning}
                   className="min-w-44 rounded-lg border border-white/10 bg-slate-900 px-3 py-3 text-sm font-bold normal-case tracking-normal text-white outline-none disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {CITY_TARGETS.map((cityTarget) => (
+                  <option value={STATE_WIDE_CITY_KEY}>State-wide</option>
+                  {cityOptions.map((cityTarget) => (
                     <option key={cityTarget.key} value={cityTarget.key}>
                       {cityTarget.city}
                     </option>

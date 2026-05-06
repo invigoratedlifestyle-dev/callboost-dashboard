@@ -10,7 +10,11 @@ import {
 } from "../../../lib/leadLifecycle";
 import {
   buildLocalSearchQuery,
+  buildStateWideCityTarget,
   getCityTarget,
+  getCityTargetForState,
+  getStateTarget,
+  STATE_WIDE_CITY_KEY,
   type CityTarget,
 } from "../../../lib/leadTargeting/cities";
 import {
@@ -37,6 +41,8 @@ type GenerateRequest = {
   tradeKey?: string;
   city?: string;
   cityKey?: string;
+  state?: string;
+  stateKey?: string;
   limit?: number;
   maxLeads?: number;
   enrich?: boolean;
@@ -122,6 +128,22 @@ function buildSearchQueries(tradeTarget: TradeTarget, cityTarget: CityTarget) {
   return tradeTarget.googleQueryTerms.map((term) =>
     buildLocalSearchQuery(term, cityTarget)
   );
+}
+
+function getRequestedCityTarget(args: {
+  city: string;
+  state?: string;
+}) {
+  const stateTarget = args.state ? getStateTarget(args.state) : null;
+  const normalizedCity = args.city.trim().toLowerCase();
+
+  if (normalizedCity === STATE_WIDE_CITY_KEY || normalizedCity === "state wide") {
+    return stateTarget ? buildStateWideCityTarget(stateTarget) : null;
+  }
+
+  return stateTarget
+    ? getCityTargetForState(args.city, stateTarget.key) || null
+    : getCityTarget(args.city) || null;
 }
 
 function getBusinessName(place: GooglePlace) {
@@ -482,10 +504,14 @@ export async function POST(req: Request) {
 
     const requestedTrade =
       body.tradeKey || body.trade || process.env.LEAD_TRADE || DEFAULT_TRADE;
+    const requestedState = body.stateKey || body.state || process.env.LEAD_STATE;
     const requestedCity =
       body.cityKey || body.city || process.env.LEAD_CITY || DEFAULT_CITY;
     const tradeTarget = getTradeTarget(requestedTrade);
-    const cityTarget = getCityTarget(requestedCity);
+    const cityTarget = getRequestedCityTarget({
+      city: requestedCity,
+      state: requestedState,
+    });
 
     if (!tradeTarget) {
       return NextResponse.json(
@@ -512,6 +538,8 @@ export async function POST(req: Request) {
     console.log("Lead generation settings:", {
       trade: tradeTarget.key,
       city: cityTarget.key,
+      state: cityTarget.stateCode,
+      stateWide: Boolean(cityTarget.isStateWide),
       maxLeads,
       enrich,
     });
@@ -791,6 +819,8 @@ export async function POST(req: Request) {
         businessName,
         trade,
         city,
+        state: cityTarget.stateCode,
+        stateName: cityTarget.state,
         slug,
         id: slug,
         googlePlaceId: place.id || "",
@@ -821,6 +851,7 @@ export async function POST(req: Request) {
         searchQueryFoundFrom: place.searchQueryFoundFrom || "",
         targetCityKey: cityTarget.key,
         targetCity: cityTarget.city,
+        targetStateCode: cityTarget.stateCode,
         targetState: cityTarget.state,
         targetCountry: cityTarget.country,
         targetCountryCode: cityTarget.countryCode,
