@@ -4,7 +4,12 @@ import {
   type FollowUpStage,
 } from "../../../lib/followUps";
 import { listLeadMessages } from "../../../lib/supabase/leadMessages";
-import { listLeadsByStatus } from "../../../lib/supabase/leads";
+import {
+  listLeadRows,
+  rowToLead,
+  type LeadRow,
+} from "../../../lib/supabase/leads";
+import { getLeadStatus } from "../../../lib/leadLifecycle";
 
 function getString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -16,17 +21,27 @@ function getStageLabel(stage: FollowUpStage) {
 
 export async function GET() {
   try {
-    const leads = await listLeadsByStatus("contacted");
+    const leadRows = (await listLeadRows()) as LeadRow[];
+    const contactedLeadRows = leadRows.filter((row) => {
+      const data = row.data && typeof row.data === "object" ? row.data : {};
+
+      return getLeadStatus({ ...data, status: row.status || data.status }) ===
+        "contacted";
+    });
     const now = Date.now();
     const queueItems = await Promise.all(
-      leads.map(async (lead) => {
+      contactedLeadRows.map(async (leadRow) => {
+        const lead = rowToLead(leadRow);
         const slug = getString(lead.slug);
+        const leadId =
+          leadRow.id !== null && leadRow.id !== undefined
+            ? String(leadRow.id)
+            : null;
 
         if (!slug) return null;
 
         const messages = await listLeadMessages({
-          leadId:
-            lead.id !== null && lead.id !== undefined ? String(lead.id) : null,
+          leadId,
           slug,
         });
         const dueStatus = getFollowUpDueStatus(lead, messages, now);
@@ -34,7 +49,7 @@ export async function GET() {
         if (!dueStatus.isDue || !dueStatus.nextStage) return null;
 
         return {
-          id: getString(lead.id) || slug,
+          id: leadId || slug,
           slug,
           businessName:
             getString(lead.businessName) || getString(lead.name) || slug,
