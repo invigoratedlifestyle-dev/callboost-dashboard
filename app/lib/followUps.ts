@@ -1,6 +1,11 @@
 import { hasUsableFollowUpContact } from "./contactMethods";
+import {
+  getUsableAustralianMobile,
+  getUsableEmail,
+} from "./contactMethods";
 
 export type FollowUpStage = 1 | 2 | 3;
+export type FollowUpChannel = "sms" | "email";
 
 export type FollowUpLead = {
   id?: string | number | null;
@@ -12,6 +17,7 @@ export type FollowUpLead = {
 };
 
 export type FollowUpMessage = {
+  channel?: string | null;
   direction?: string | null;
   status?: string | null;
   createdAt?: string | null;
@@ -36,6 +42,26 @@ const followUpDelays: Record<FollowUpStage, number> = {
   2: 3 * DAY_MS,
   3: 7 * DAY_MS,
 };
+
+export function getLeadFirstName(name: string) {
+  return name.trim().split(/\s+/)[0] || "there";
+}
+
+export function buildFollowUpBody(stage: FollowUpStage, name: string) {
+  const firstName = getLeadFirstName(name);
+
+  if (stage === 1) {
+    return `Hey ${firstName}, just checking you saw the website preview I sent through.
+
+Happy to make a few quick changes if needed 👍`;
+  }
+
+  if (stage === 2) {
+    return `Hey ${firstName}, no worries if now isn't the right time — just wanted to check if you wanted me to keep the preview live for you?`;
+  }
+
+  return `Last one from me — I'll leave this for now, but if you want the website preview switched on later just reply here 👍`;
+}
 
 function getTime(value?: string | null) {
   const time = new Date(value || "").getTime();
@@ -64,6 +90,59 @@ function hasContactMethod(lead: FollowUpLead) {
     phone: lead.phone,
     email: lead.email,
   });
+}
+
+export function getLatestOutboundMessageChannel(
+  messages: FollowUpMessage[]
+): FollowUpChannel | null {
+  const latestOutbound = messages.reduce<FollowUpMessage | null>(
+    (latest, message) => {
+      if (
+        message.direction !== "outbound" ||
+        message.status === "failed" ||
+        !message.createdAt
+      ) {
+        return latest;
+      }
+
+      if (!latest) return message;
+
+      const messageTime = getTime(message.createdAt);
+      const latestTime = getTime(latest.createdAt);
+
+      return messageTime > latestTime ? message : latest;
+    },
+    null
+  );
+
+  return latestOutbound?.channel === "email" ? "email" : latestOutbound ? "sms" : null;
+}
+
+export function getFollowUpDestination(args: {
+  latestOutboundChannel?: string | null;
+  phone?: unknown;
+  email?: unknown;
+}): { channel: FollowUpChannel; to: string } | null {
+  const mobile = getUsableAustralianMobile(args.phone);
+  const email = getUsableEmail(args.email);
+
+  if (args.latestOutboundChannel === "sms" && mobile) {
+    return { channel: "sms", to: mobile };
+  }
+
+  if (args.latestOutboundChannel === "email" && email) {
+    return { channel: "email", to: email };
+  }
+
+  if (mobile) {
+    return { channel: "sms", to: mobile };
+  }
+
+  if (email) {
+    return { channel: "email", to: email };
+  }
+
+  return null;
 }
 
 export function getFollowUpDueStatus(

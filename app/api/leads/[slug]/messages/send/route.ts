@@ -19,6 +19,30 @@ function isChannel(value: unknown): value is Channel {
   return value === "sms" || value === "email";
 }
 
+function getMetadata(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function getSafeMessageMetadata(value: unknown) {
+  const metadata = getMetadata(value);
+
+  if (
+    metadata.reason === "manual_follow_up" &&
+    (metadata.follow_up_stage === 1 ||
+      metadata.follow_up_stage === 2 ||
+      metadata.follow_up_stage === 3)
+  ) {
+    return {
+      reason: "manual_follow_up",
+      follow_up_stage: metadata.follow_up_stage,
+    };
+  }
+
+  return {};
+}
+
 function getResendClient() {
   const apiKey = process.env.RESEND_API_KEY;
 
@@ -108,6 +132,7 @@ export async function POST(
     const to = getString(body.to);
     const subject = getString(body.subject);
     const messageBody = getString(body.body);
+    const metadata = getSafeMessageMetadata(body.metadata);
     const outboundBody =
       channel === "sms" ? appendOptOut(messageBody) : messageBody;
 
@@ -194,6 +219,7 @@ export async function POST(
       provider,
       providerMessageId,
       error: errorMessage,
+      metadata,
     });
 
     let updatedLead = lead;

@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import {
-  getUsableAustralianMobile,
-  getUsableEmail,
-} from "../../../../lib/contactMethods";
+  buildFollowUpBody,
+  getFollowUpDestination,
+  getLatestOutboundMessageChannel,
+} from "../../../../lib/followUps";
 import { sendEmail, sendSms } from "../../../../lib/outboundMessages";
 import { appendOptOut } from "../../../../lib/smsOptOut";
 import {
@@ -24,26 +25,6 @@ function getString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function getLeadFirstName(name: string) {
-  return name.trim().split(/\s+/)[0] || "there";
-}
-
-function buildFollowUpBody(stage: FollowUpStage, name: string) {
-  const firstName = getLeadFirstName(name);
-
-  if (stage === 1) {
-    return `Hey ${firstName}, just checking you saw the website preview I sent through.
-
-Happy to make a few quick changes if needed 👍`;
-  }
-
-  if (stage === 2) {
-    return `Hey ${firstName}, no worries if now isn’t the right time — just wanted to check if you wanted me to keep the preview live for you?`;
-  }
-
-  return `Last one from me — I’ll leave this for now, but if you want the website preview switched on later just reply here 👍`;
-}
-
 function getLatestMessageTime(
   messages: Awaited<ReturnType<typeof listLeadMessages>>,
   direction: "inbound" | "outbound"
@@ -55,56 +36,6 @@ function getLatestMessageTime(
 
     return Number.isFinite(timestamp) ? Math.max(latest, timestamp) : latest;
   }, 0);
-}
-
-function getLatestOutboundMessage(
-  messages: Awaited<ReturnType<typeof listLeadMessages>>
-) {
-  return messages.reduce<(typeof messages)[number] | null>((latest, message) => {
-    if (
-      message.direction !== "outbound" ||
-      message.status === "failed" ||
-      !message.createdAt
-    ) {
-      return latest;
-    }
-
-    if (!latest) return message;
-
-    const messageTime = new Date(message.createdAt).getTime();
-    const latestTime = new Date(latest.createdAt || "").getTime();
-
-    return Number.isFinite(messageTime) && messageTime > latestTime
-      ? message
-      : latest;
-  }, null);
-}
-
-function getFollowUpChannel(args: {
-  latestOutboundChannel?: string | null;
-  phone: string;
-  email: string;
-}): { channel: "sms" | "email"; to: string } | null {
-  const mobile = getUsableAustralianMobile(args.phone);
-  const email = getUsableEmail(args.email);
-
-  if (args.latestOutboundChannel === "sms" && mobile) {
-    return { channel: "sms", to: mobile };
-  }
-
-  if (args.latestOutboundChannel === "email" && email) {
-    return { channel: "email", to: email };
-  }
-
-  if (mobile) {
-    return { channel: "sms", to: mobile };
-  }
-
-  if (email) {
-    return { channel: "email", to: email };
-  }
-
-  return null;
 }
 
 export async function POST(
@@ -154,13 +85,10 @@ export async function POST(
     }
 
     const leadName = getString(lead.name) || getString(lead.businessName);
-    const leadPhone = getString(lead.phone);
-    const leadEmail = getString(lead.email);
-    const latestOutboundMessage = getLatestOutboundMessage(messages);
-    const destination = getFollowUpChannel({
-      latestOutboundChannel: latestOutboundMessage?.channel,
-      phone: leadPhone,
-      email: leadEmail,
+    const destination = getFollowUpDestination({
+      latestOutboundChannel: getLatestOutboundMessageChannel(messages),
+      phone: lead.phone,
+      email: lead.email,
     });
 
     if (!destination) {
@@ -175,11 +103,9 @@ export async function POST(
 
     const { channel, to } = destination;
     const subject = channel === "email" ? "Quick follow-up from CallBoost" : "";
+    const followUpBody = buildFollowUpBody(stage, leadName);
     const messageBody =
-      channel === "sms"
-        ? appendOptOut(buildFollowUpBody(stage, leadName))
-        : buildFollowUpBody(stage, leadName);
-
+      channel === "sms" ? appendOptOut(followUpBody) : followUpBody;
     let fromAddress = "";
     let providerMessageId = "";
     const provider = channel === "sms" ? "twilio" : "resend";

@@ -11,6 +11,11 @@ import type {
 } from "../../lib/leads";
 import { hasUsableFollowUpContact } from "../../lib/contactMethods";
 import {
+  buildFollowUpBody,
+  getFollowUpDestination,
+  getLatestOutboundMessageChannel,
+} from "../../lib/followUps";
+import {
   buildInterestedReplyEmail,
   buildInterestedReplyEmailSubject,
   buildInterestedReplySms,
@@ -43,6 +48,11 @@ type LeadWithGeneratedContent = Lead & {
 
 type OutreachChannel = "sms" | "email";
 type FollowUpStage = 1 | 2 | 3;
+type PendingFollowUpMetadata = {
+  reason: "manual_follow_up";
+  follow_up_stage: FollowUpStage;
+  channel: OutreachChannel;
+};
 
 const templateTradeOptions = [
   "plumber",
@@ -332,8 +342,10 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const [sendingOffer, setSendingOffer] = useState("");
   const [outreachNotice, setOutreachNotice] = useState("");
   const [outreachError, setOutreachError] = useState("");
-  const [sendingFollowUp, setSendingFollowUp] =
+  const [preparingFollowUp, setPreparingFollowUp] =
     useState<FollowUpStage | null>(null);
+  const [pendingFollowUpMetadata, setPendingFollowUpMetadata] =
+    useState<PendingFollowUpMetadata | null>(null);
   const [followUpNotice, setFollowUpNotice] = useState("");
   const [followUpError, setFollowUpError] = useState("");
   const [closeReplyNotice, setCloseReplyNotice] = useState("");
@@ -526,6 +538,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     }
   };
   const handleOutreachChannelChange = (channel: OutreachChannel) => {
+    setPendingFollowUpMetadata(null);
     setOutreachChannel(channel);
 
     if (!lead) return;
@@ -848,18 +861,27 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const handleSendOffer = async (channel: OutreachChannel) => {
     if (!lead) return;
 
+    const followUpMetadata =
+      pendingFollowUpMetadata?.channel === channel
+        ? {
+            reason: pendingFollowUpMetadata.reason,
+            follow_up_stage: pendingFollowUpMetadata.follow_up_stage,
+          }
+        : null;
     const payload =
       channel === "sms"
         ? {
             channel,
             to: smsTo,
             body: smsBody,
+            metadata: followUpMetadata,
           }
         : {
             channel,
             to: emailTo,
             subject: emailSubject,
             body: emailOfferBody,
+            metadata: followUpMetadata,
           };
 
     setSendingOffer(channel);
@@ -889,8 +911,15 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       }
 
       setOutreachNotice(
-        channel === "sms" ? "SMS offer sent." : "Email offer sent."
+        followUpMetadata
+          ? channel === "sms"
+            ? "Follow-up SMS sent."
+            : "Follow-up email sent."
+          : channel === "sms"
+            ? "SMS offer sent."
+            : "Email offer sent."
       );
+      setPendingFollowUpMetadata(null);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to send offer";
@@ -900,21 +929,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       setSendingOffer("");
     }
   };
-  const reloadLeadMessages = async () => {
-    if (!lead) return;
-
-    const messagesRes = await fetch(`/api/leads/${lead.slug || lead.id}/messages`, {
-      cache: "no-store",
-    });
-
-    if (!messagesRes.ok) return;
-
-    const messagesData = await messagesRes.json();
-
-    setMessages(messagesData.messages || []);
-    setCallbacks(messagesData.callbacks || callbacks);
-  };
-  const handleSendFollowUp = async (stage: FollowUpStage) => {
+  const handlePrepareFollowUp = (stage: FollowUpStage) => {
     if (!lead) return;
 
     const latestInbound = getLatestLeadMessageTime(messages, "inbound");
@@ -926,40 +941,56 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       return;
     }
 
-    setSendingFollowUp(stage);
+    setPreparingFollowUp(stage);
     setFollowUpNotice("");
     setFollowUpError("");
 
-    try {
-      const res = await fetch(`/api/leads/${lead.slug || lead.id}/follow-up`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ stage }),
-      });
-      const data = await res.json();
+    const destination = getFollowUpDestination({
+      latestOutboundChannel: getLatestOutboundMessageChannel(messages),
+      phone: lead.phone,
+      email: lead.email,
+    });
 
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to send follow-up");
-      }
-
-      await reloadLeadMessages();
-
-      setFollowUpNotice(
-        stage === 3
-          ? `Final follow-up sent by ${data.channel === "email" ? "email" : "SMS"}.`
-          : `Follow-up ${stage} sent by ${
-              data.channel === "email" ? "email" : "SMS"
-            }.`
-      );
-    } catch (error) {
+    if (!destination) {
       setFollowUpError(
-        error instanceof Error ? error.message : "Failed to send follow-up"
+        "Lead needs a valid Australian mobile number or email before follow-up."
       );
-    } finally {
-      setSendingFollowUp(null);
+      setPreparingFollowUp(null);
+      return;
     }
+
+    const leadName = lead.name || lead.businessName || "";
+    const followUpBody = buildFollowUpBody(stage, leadName);
+
+    setOutreachChannel(destination.channel);
+    setPendingFollowUpMetadata({
+      reason: "manual_follow_up",
+      follow_up_stage: stage,
+      channel: destination.channel,
+    });
+
+    if (destination.channel === "sms") {
+      setSmsTo(destination.to);
+      setSmsBody(followUpBody);
+      setSmsBodyEdited(true);
+    } else {
+      setEmailTo(destination.to);
+      setEmailSubject("Quick follow-up from CallBoost");
+      setEmailOfferBody(followUpBody);
+      setEmailSubjectEdited(true);
+      setEmailBodyEdited(true);
+    }
+
+    setOutreachError("");
+    setOutreachNotice(
+      stage === 3
+        ? `Final follow-up loaded into the ${destination.channel === "sms" ? "SMS" : "email"} composer.`
+        : `Follow-up ${stage} loaded into the ${
+            destination.channel === "sms" ? "SMS" : "email"
+          } composer.`
+    );
+    setFollowUpNotice("Review the prepared follow-up in Outreach before sending.");
+    setPreparingFollowUp(null);
   };
   const handleCopyCloseReply = async (channel: OutreachChannel) => {
     setCloseReplyNotice("");
@@ -985,6 +1016,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const handleUseCloseReply = (channel: OutreachChannel) => {
     setCloseReplyNotice("");
     setCloseReplyError("");
+    setPendingFollowUpMetadata(null);
     setOutreachChannel(channel);
 
     if (channel === "sms") {
@@ -1071,6 +1103,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
 
     setPaymentReplyNotice("");
     setPaymentReplyError("");
+    setPendingFollowUpMetadata(null);
     setOutreachChannel(channel);
 
     if (channel === "sms") {
@@ -1119,7 +1152,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     email: lead.email,
   });
   const followUpDisabled =
-    Boolean(sendingFollowUp) ||
+    Boolean(preparingFollowUp) ||
     hasReplyAfterLastOutbound ||
     !hasFollowUpDestination;
 
@@ -1719,15 +1752,15 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
               {([1, 2, 3] as FollowUpStage[]).map((stage) => (
                 <button
                   key={stage}
-                  onClick={() => handleSendFollowUp(stage)}
+                  onClick={() => handlePrepareFollowUp(stage)}
                   disabled={followUpDisabled}
                   className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {sendingFollowUp === stage
-                    ? "Sending..."
+                  {preparingFollowUp === stage
+                    ? "Preparing..."
                     : stage === 3
-                      ? "Send Final Follow-up"
-                      : `Send Follow-up ${stage}`}
+                      ? "Prepare Final Follow-up"
+                      : `Prepare Follow-up ${stage}`}
                 </button>
               ))}
             </div>
@@ -1896,6 +1929,14 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
           {outreachNotice ? (
             <p className="mb-4 rounded-lg bg-green-500/10 px-4 py-3 text-sm font-bold text-green-300">
               {outreachNotice}
+            </p>
+          ) : null}
+
+          {pendingFollowUpMetadata?.channel === outreachChannel ? (
+            <p className="mb-4 rounded-lg bg-blue-500/10 px-4 py-3 text-sm font-bold text-blue-300">
+              {pendingFollowUpMetadata.follow_up_stage === 3
+                ? "Prepared final follow-up. Review and edit before sending."
+                : `Prepared follow-up ${pendingFollowUpMetadata.follow_up_stage}. Review and edit before sending.`}
             </p>
           ) : null}
 
