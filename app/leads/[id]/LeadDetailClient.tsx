@@ -380,6 +380,10 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const [uploadingHeroImage, setUploadingHeroImage] = useState(false);
   const [heroImageUploadNotice, setHeroImageUploadNotice] = useState("");
   const [heroImageUploadError, setHeroImageUploadError] = useState("");
+  const [siteHeroImageUrl, setSiteHeroImageUrl] = useState("");
+  const [savingSiteHeroImage, setSavingSiteHeroImage] = useState(false);
+  const [siteHeroImageNotice, setSiteHeroImageNotice] = useState("");
+  const [siteHeroImageError, setSiteHeroImageError] = useState("");
   const [contactDraft, setContactDraft] = useState({
     trade: "",
     city: "",
@@ -389,7 +393,6 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     displayName: "",
     facebook: "",
     instagram: "",
-    heroImageUrl: "",
   });
   const [creatingCheckout, setCreatingCheckout] = useState(false);
   const [checkoutUrl, setCheckoutUrl] = useState("");
@@ -446,8 +449,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
           "",
         facebook: loadedLead.facebook || "",
         instagram: loadedLead.instagram || "",
-        heroImageUrl: loadedLead.heroImageUrl || "",
       });
+      setSiteHeroImageUrl(loadedLead.heroImageUrl || "");
       setSmsTo(loadedLead.phone || "");
       setSmsBody(buildOpportunitySms(loadedLead, getPreviewUrl(loadedLead)));
       setSmsBodyEdited(false);
@@ -544,6 +547,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
         ? nextLead.templateType || "modern"
         : "modern"
     );
+    setSiteHeroImageUrl(nextLead.heroImageUrl || "");
 
     if (!smsBodyEdited) {
       setSmsBody(buildOpportunitySms(nextLead, getPreviewUrl(nextLead)));
@@ -626,12 +630,6 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       setRedoingOpportunity(false);
     }
   };
-  const resetHeroImageUploadState = () => {
-    setHeroImageFile(null);
-    setUploadingHeroImage(false);
-    setHeroImageUploadNotice("");
-    setHeroImageUploadError("");
-  };
   const handleStartContactEdit = () => {
     if (!lead) return;
 
@@ -644,10 +642,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       displayName: lead.displayName || lead.businessName || lead.name || "",
       facebook: lead.facebook || "",
       instagram: lead.instagram || "",
-      heroImageUrl: lead.heroImageUrl || "",
     });
     setContactError("");
-    resetHeroImageUploadState();
     setIsEditingContact(true);
   };
   const handleCancelContactEdit = () => {
@@ -661,12 +657,10 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
         displayName: lead.displayName || lead.businessName || lead.name || "",
         facebook: lead.facebook || "",
         instagram: lead.instagram || "",
-        heroImageUrl: lead.heroImageUrl || "",
       });
     }
 
     setContactError("");
-    resetHeroImageUploadState();
     setIsEditingContact(false);
   };
   const handleHeroImageFileChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -710,6 +704,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     setUploadingHeroImage(true);
     setHeroImageUploadNotice("Uploading hero image...");
     setHeroImageUploadError("");
+    setSiteHeroImageNotice("");
+    setSiteHeroImageError("");
 
     try {
       const formData = new FormData();
@@ -731,12 +727,9 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
         throw new Error("Upload succeeded but no public image URL was returned.");
       }
 
-      setContactDraft((current) => ({
-        ...current,
-        heroImageUrl: imageUrl,
-      }));
+      setSiteHeroImageUrl(imageUrl);
       setHeroImageFile(null);
-      setHeroImageUploadNotice("Hero image uploaded. Save Business Info to keep it.");
+      setHeroImageUploadNotice("Hero image uploaded. Save the hero image URL to keep it.");
     } catch (error) {
       setHeroImageUploadNotice("");
       setHeroImageUploadError(
@@ -744,6 +737,45 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       );
     } finally {
       setUploadingHeroImage(false);
+    }
+  };
+  const handleSaveSiteHeroImage = async () => {
+    if (!lead) return;
+
+    const nextHeroImageUrl = normalizeWebsite(siteHeroImageUrl);
+
+    setSavingSiteHeroImage(true);
+    setSiteHeroImageNotice("");
+    setSiteHeroImageError("");
+
+    try {
+      const res = await fetch(`/api/leads/${lead.slug || lead.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          heroImageUrl: nextHeroImageUrl,
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to save hero image");
+      }
+
+      const updatedLead = data.lead as LeadWithGeneratedContent;
+
+      setLead(updatedLead);
+      setSiteHeroImageUrl(updatedLead.heroImageUrl || "");
+      setSiteHeroImageNotice("Hero image saved for future generated sites.");
+      setHeroImageUploadNotice("");
+    } catch (error) {
+      setSiteHeroImageError(
+        error instanceof Error ? error.message : "Failed to save hero image"
+      );
+    } finally {
+      setSavingSiteHeroImage(false);
     }
   };
   const handleSaveContactEdit = async () => {
@@ -757,7 +789,6 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     const nextDisplayName = contactDraft.displayName.trim();
     const nextFacebook = normalizeWebsite(contactDraft.facebook);
     const nextInstagram = normalizeWebsite(contactDraft.instagram);
-    const nextHeroImageUrl = normalizeWebsite(contactDraft.heroImageUrl);
 
     if (nextEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) {
       setContactError("Email looks invalid.");
@@ -782,7 +813,6 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
           displayName: nextDisplayName,
           facebook: nextFacebook,
           instagram: nextInstagram,
-          heroImageUrl: nextHeroImageUrl,
         }),
       });
       const data = await res.json();
@@ -807,12 +837,11 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
           "",
         facebook: updatedLead.facebook || "",
         instagram: updatedLead.instagram || "",
-        heroImageUrl: updatedLead.heroImageUrl || "",
       });
+      setSiteHeroImageUrl(updatedLead.heroImageUrl || "");
       setSmsTo(updatedLead.phone || "");
       setEmailTo(updatedLead.email || "");
       setIsEditingContact(false);
-      resetHeroImageUploadState();
     } catch (error) {
       setContactError(
         error instanceof Error
@@ -1492,112 +1521,6 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 )}
               </div>
 
-              <div>
-                <strong className="text-white">Hero Image:</strong>{" "}
-                {isEditingContact ? (
-                  <div className="mt-2 space-y-3">
-                    <input
-                      value={contactDraft.heroImageUrl}
-                      onChange={(event) =>
-                        setContactDraft((current) => ({
-                          ...current,
-                          heroImageUrl: event.target.value,
-                        }))
-                      }
-                      className="w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none"
-                      placeholder="https://example.com/hero.jpg"
-                    />
-
-                    {isPreviewableImageUrl(contactDraft.heroImageUrl) ? (
-                      <div className="overflow-hidden rounded-lg border border-white/10 bg-slate-950">
-                        <Image
-                          src={contactDraft.heroImageUrl}
-                          alt="Hero image preview"
-                          width={640}
-                          height={240}
-                          sizes="(min-width: 1024px) 50vw, 100vw"
-                          className="h-36 w-full object-cover"
-                        />
-                      </div>
-                    ) : null}
-
-                    <div className="rounded-lg border border-white/10 bg-slate-950 p-3">
-                      <label className="grid gap-2 text-sm font-bold text-slate-300">
-                        Upload hero image
-                        <input
-                          type="file"
-                          accept={HERO_IMAGE_ACCEPT}
-                          onChange={handleHeroImageFileChange}
-                          disabled={uploadingHeroImage}
-                          className="block w-full text-sm text-slate-300 file:mr-4 file:rounded-lg file:border-0 file:bg-slate-700 file:px-3 file:py-2 file:text-sm file:font-bold file:text-white hover:file:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
-                        />
-                      </label>
-
-                      <div className="mt-3 flex flex-wrap items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={handleUploadHeroImage}
-                          disabled={uploadingHeroImage || !heroImageFile}
-                          className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {uploadingHeroImage ? "Uploading..." : "Upload"}
-                        </button>
-
-                        {heroImageFile ? (
-                          <span className="text-xs text-slate-400">
-                            {heroImageFile.name}
-                          </span>
-                        ) : null}
-                      </div>
-
-                      <p className="mt-2 text-xs text-slate-500">
-                        JPG, PNG or WebP. Maximum 5MB.
-                      </p>
-
-                      {heroImageUploadNotice ? (
-                        <p className="mt-2 rounded-lg bg-green-500/10 px-3 py-2 text-xs font-bold text-green-300">
-                          {heroImageUploadNotice}
-                        </p>
-                      ) : null}
-
-                      {heroImageUploadError ? (
-                        <p className="mt-2 rounded-lg bg-red-500/10 px-3 py-2 text-xs font-bold text-red-300">
-                          {heroImageUploadError}
-                        </p>
-                      ) : null}
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    {lead.heroImageUrl ? (
-                      <div className="mt-2 space-y-3">
-                        <a
-                          href={lead.heroImageUrl}
-                          target="_blank"
-                          className="text-blue-400 hover:text-blue-300"
-                        >
-                          View Hero Image
-                        </a>
-                        {isPreviewableImageUrl(lead.heroImageUrl) ? (
-                          <div className="overflow-hidden rounded-lg border border-white/10 bg-slate-950">
-                            <Image
-                              src={lead.heroImageUrl}
-                              alt="Hero image preview"
-                              width={640}
-                              height={240}
-                              sizes="(min-width: 1024px) 50vw, 100vw"
-                              className="h-36 w-full object-cover"
-                            />
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : (
-                      <span className="text-slate-500">Not set yet</span>
-                    )}
-                  </>
-                )}
-              </div>
-
               <p>
                 <strong className="text-white">Contact Page:</strong>{" "}
                 {lead.contactPage ? (
@@ -1725,6 +1648,118 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 <span className="text-slate-500">Generate a site first</span>
               )}
             </p>
+
+            <div className="mt-6 rounded-xl border border-white/10 bg-slate-950 p-4">
+              <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="font-bold text-white">Hero Image</h3>
+                  <p className="mt-1 text-sm text-slate-400">
+                    Used as the generated site hero/background image.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleSaveSiteHeroImage}
+                  disabled={savingSiteHeroImage}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {savingSiteHeroImage ? "Saving..." : "Save Hero Image"}
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <label className="grid gap-2 text-sm font-bold text-slate-300">
+                  Hero Image URL
+                  <input
+                    value={siteHeroImageUrl}
+                    onChange={(event) => {
+                      setSiteHeroImageUrl(event.target.value);
+                      setSiteHeroImageNotice("");
+                      setSiteHeroImageError("");
+                    }}
+                    className="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none"
+                    placeholder="https://example.com/hero.jpg"
+                  />
+                </label>
+
+                {isPreviewableImageUrl(siteHeroImageUrl) ? (
+                  <div className="overflow-hidden rounded-lg border border-white/10 bg-slate-900">
+                    <Image
+                      src={siteHeroImageUrl}
+                      alt="Hero image preview"
+                      width={640}
+                      height={240}
+                      sizes="(min-width: 1024px) 50vw, 100vw"
+                      className="h-40 w-full object-cover"
+                    />
+                  </div>
+                ) : (
+                  <p className="rounded-lg bg-white/5 px-3 py-2 text-sm text-slate-500">
+                    No hero image override set. Generated sites will use the
+                    business, trade or default fallback image.
+                  </p>
+                )}
+
+                <div className="rounded-lg border border-white/10 bg-slate-900 p-3">
+                  <label className="grid gap-2 text-sm font-bold text-slate-300">
+                    Upload hero image
+                    <input
+                      type="file"
+                      accept={HERO_IMAGE_ACCEPT}
+                      onChange={handleHeroImageFileChange}
+                      disabled={uploadingHeroImage}
+                      className="block w-full text-sm text-slate-300 file:mr-4 file:rounded-lg file:border-0 file:bg-slate-700 file:px-3 file:py-2 file:text-sm file:font-bold file:text-white hover:file:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
+                    />
+                  </label>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={handleUploadHeroImage}
+                      disabled={uploadingHeroImage || !heroImageFile}
+                      className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {uploadingHeroImage ? "Uploading..." : "Upload"}
+                    </button>
+
+                    {heroImageFile ? (
+                      <span className="text-xs text-slate-400">
+                        {heroImageFile.name}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <p className="mt-2 text-xs text-slate-500">
+                    JPG, PNG or WebP. Maximum 5MB.
+                  </p>
+
+                  {heroImageUploadNotice ? (
+                    <p className="mt-2 rounded-lg bg-green-500/10 px-3 py-2 text-xs font-bold text-green-300">
+                      {heroImageUploadNotice}
+                    </p>
+                  ) : null}
+
+                  {heroImageUploadError ? (
+                    <p className="mt-2 rounded-lg bg-red-500/10 px-3 py-2 text-xs font-bold text-red-300">
+                      {heroImageUploadError}
+                    </p>
+                  ) : null}
+                </div>
+
+                {siteHeroImageNotice ? (
+                  <p className="rounded-lg bg-green-500/10 px-3 py-2 text-sm font-bold text-green-300">
+                    {siteHeroImageNotice}
+                  </p>
+                ) : null}
+
+                {siteHeroImageError ? (
+                  <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm font-bold text-red-300">
+                    {siteHeroImageError}
+                  </p>
+                ) : null}
+              </div>
+            </div>
 
               <div className="mt-6 grid gap-4 md:grid-cols-2">
                 <label className="grid gap-2 text-sm font-bold text-slate-300">
