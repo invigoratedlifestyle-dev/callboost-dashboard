@@ -16,6 +16,11 @@ export type SiteAsset = {
   createdAt: string;
 };
 
+export type UploadedLeadHeroImage = {
+  imageUrl: string;
+  storagePath: string;
+};
+
 type SiteAssetRow = {
   id: string;
   trade: string;
@@ -59,6 +64,17 @@ function getFileExtension(fileName: string, contentType: string) {
   if (contentType === "image/gif") return "gif";
 
   return "jpg";
+}
+
+function sanitizeFileBaseName(fileName: string) {
+  const withoutExtension = fileName.replace(/\.[^.]+$/, "");
+  const sanitized = withoutExtension
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return sanitized || "hero-image";
 }
 
 export async function getAssetsByTrade(trade: string, assetType = "hero") {
@@ -145,6 +161,36 @@ export async function uploadSiteAsset(args: {
   }
 
   return rowToSiteAsset(data as SiteAssetRow);
+}
+
+export async function uploadLeadHeroImage(args: {
+  leadKey: string;
+  file: File;
+}): Promise<UploadedLeadHeroImage> {
+  const supabase = getSupabaseAdmin();
+  const leadKey = normalizeKey(args.leadKey, "lead");
+  const extension = getFileExtension(args.file.name, args.file.type);
+  const fileBaseName = sanitizeFileBaseName(args.file.name);
+  const timestamp = Date.now();
+  const storagePath = `hero-images/${leadKey}/${timestamp}-${fileBaseName}.${extension}`;
+  const bytes = await args.file.arrayBuffer();
+  const { error: uploadError } = await supabase.storage
+    .from(SITE_ASSETS_BUCKET)
+    .upload(storagePath, bytes, {
+      contentType: args.file.type || "image/jpeg",
+      upsert: false,
+    });
+
+  if (uploadError) throw uploadError;
+
+  const { data: publicUrlData } = supabase.storage
+    .from(SITE_ASSETS_BUCKET)
+    .getPublicUrl(storagePath);
+
+  return {
+    imageUrl: publicUrlData.publicUrl,
+    storagePath,
+  };
 }
 
 export async function deleteSiteAsset(id: string) {

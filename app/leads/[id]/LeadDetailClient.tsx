@@ -1,7 +1,8 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { type ChangeEvent, useEffect, useState } from "react";
 import type {
   CallbackRequest,
   Lead,
@@ -73,6 +74,11 @@ const templateTypeOptions = [
   "minimal",
   "corporate",
 ];
+
+const HERO_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+const HERO_IMAGE_ACCEPT = ".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp";
+const heroImageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+const heroImageExtensions = new Set(["jpg", "jpeg", "png", "webp"]);
 
 type TimelineItem =
   | {
@@ -281,6 +287,10 @@ function normalizeWebsite(value: string) {
   return `https://${trimmed}`;
 }
 
+function isPreviewableImageUrl(value?: string | null) {
+  return /^https?:\/\//i.test(String(value || "").trim());
+}
+
 function normalizeEmail(value: string) {
   return value.trim();
 }
@@ -307,6 +317,12 @@ function normalizeTemplateTrade(value?: string | null) {
   if (normalized.includes("mechanic")) return "mechanic";
 
   return "plumber";
+}
+
+function isAllowedHeroImageFile(file: File) {
+  const extension = file.name.split(".").pop()?.toLowerCase() || "";
+
+  return heroImageTypes.has(file.type) && heroImageExtensions.has(extension);
 }
 
 function getLatestLeadMessageTime(
@@ -360,6 +376,10 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const [isEditingContact, setIsEditingContact] = useState(false);
   const [savingContact, setSavingContact] = useState(false);
   const [contactError, setContactError] = useState("");
+  const [heroImageFile, setHeroImageFile] = useState<File | null>(null);
+  const [uploadingHeroImage, setUploadingHeroImage] = useState(false);
+  const [heroImageUploadNotice, setHeroImageUploadNotice] = useState("");
+  const [heroImageUploadError, setHeroImageUploadError] = useState("");
   const [contactDraft, setContactDraft] = useState({
     trade: "",
     city: "",
@@ -606,6 +626,12 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       setRedoingOpportunity(false);
     }
   };
+  const resetHeroImageUploadState = () => {
+    setHeroImageFile(null);
+    setUploadingHeroImage(false);
+    setHeroImageUploadNotice("");
+    setHeroImageUploadError("");
+  };
   const handleStartContactEdit = () => {
     if (!lead) return;
 
@@ -621,6 +647,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       heroImageUrl: lead.heroImageUrl || "",
     });
     setContactError("");
+    resetHeroImageUploadState();
     setIsEditingContact(true);
   };
   const handleCancelContactEdit = () => {
@@ -639,7 +666,85 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     }
 
     setContactError("");
+    resetHeroImageUploadState();
     setIsEditingContact(false);
+  };
+  const handleHeroImageFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] || null;
+
+    setHeroImageUploadNotice("");
+    setHeroImageUploadError("");
+
+    if (!file) {
+      setHeroImageFile(null);
+      return;
+    }
+
+    if (!isAllowedHeroImageFile(file)) {
+      setHeroImageFile(null);
+      event.target.value = "";
+      setHeroImageUploadError("Upload a JPG, PNG or WebP hero image.");
+      return;
+    }
+
+    if (file.size > HERO_IMAGE_MAX_BYTES) {
+      setHeroImageFile(null);
+      event.target.value = "";
+      setHeroImageUploadError("Hero image must be 5MB or smaller.");
+      return;
+    }
+
+    setHeroImageFile(file);
+  };
+  const handleUploadHeroImage = async () => {
+    if (!lead) {
+      setHeroImageUploadError("Load a lead before uploading a hero image.");
+      return;
+    }
+
+    if (!heroImageFile) {
+      setHeroImageUploadError("Choose a hero image to upload first.");
+      return;
+    }
+
+    setUploadingHeroImage(true);
+    setHeroImageUploadNotice("Uploading hero image...");
+    setHeroImageUploadError("");
+
+    try {
+      const formData = new FormData();
+      formData.append("file", heroImageFile);
+
+      const res = await fetch(`/api/leads/${lead.slug || lead.id}/hero-image`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to upload hero image");
+      }
+
+      const imageUrl = typeof data.imageUrl === "string" ? data.imageUrl : "";
+
+      if (!imageUrl) {
+        throw new Error("Upload succeeded but no public image URL was returned.");
+      }
+
+      setContactDraft((current) => ({
+        ...current,
+        heroImageUrl: imageUrl,
+      }));
+      setHeroImageFile(null);
+      setHeroImageUploadNotice("Hero image uploaded. Save Business Info to keep it.");
+    } catch (error) {
+      setHeroImageUploadNotice("");
+      setHeroImageUploadError(
+        error instanceof Error ? error.message : "Failed to upload hero image"
+      );
+    } finally {
+      setUploadingHeroImage(false);
+    }
   };
   const handleSaveContactEdit = async () => {
     if (!lead) return;
@@ -707,6 +812,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       setSmsTo(updatedLead.phone || "");
       setEmailTo(updatedLead.email || "");
       setIsEditingContact(false);
+      resetHeroImageUploadState();
     } catch (error) {
       setContactError(
         error instanceof Error
@@ -1389,27 +1495,102 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
               <div>
                 <strong className="text-white">Hero Image:</strong>{" "}
                 {isEditingContact ? (
-                  <input
-                    value={contactDraft.heroImageUrl}
-                    onChange={(event) =>
-                      setContactDraft((current) => ({
-                        ...current,
-                        heroImageUrl: event.target.value,
-                      }))
-                    }
-                    className="mt-2 w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none"
-                    placeholder="https://example.com/hero.jpg"
-                  />
+                  <div className="mt-2 space-y-3">
+                    <input
+                      value={contactDraft.heroImageUrl}
+                      onChange={(event) =>
+                        setContactDraft((current) => ({
+                          ...current,
+                          heroImageUrl: event.target.value,
+                        }))
+                      }
+                      className="w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none"
+                      placeholder="https://example.com/hero.jpg"
+                    />
+
+                    {isPreviewableImageUrl(contactDraft.heroImageUrl) ? (
+                      <div className="overflow-hidden rounded-lg border border-white/10 bg-slate-950">
+                        <Image
+                          src={contactDraft.heroImageUrl}
+                          alt="Hero image preview"
+                          width={640}
+                          height={240}
+                          sizes="(min-width: 1024px) 50vw, 100vw"
+                          className="h-36 w-full object-cover"
+                        />
+                      </div>
+                    ) : null}
+
+                    <div className="rounded-lg border border-white/10 bg-slate-950 p-3">
+                      <label className="grid gap-2 text-sm font-bold text-slate-300">
+                        Upload hero image
+                        <input
+                          type="file"
+                          accept={HERO_IMAGE_ACCEPT}
+                          onChange={handleHeroImageFileChange}
+                          disabled={uploadingHeroImage}
+                          className="block w-full text-sm text-slate-300 file:mr-4 file:rounded-lg file:border-0 file:bg-slate-700 file:px-3 file:py-2 file:text-sm file:font-bold file:text-white hover:file:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
+                        />
+                      </label>
+
+                      <div className="mt-3 flex flex-wrap items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={handleUploadHeroImage}
+                          disabled={uploadingHeroImage || !heroImageFile}
+                          className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          {uploadingHeroImage ? "Uploading..." : "Upload"}
+                        </button>
+
+                        {heroImageFile ? (
+                          <span className="text-xs text-slate-400">
+                            {heroImageFile.name}
+                          </span>
+                        ) : null}
+                      </div>
+
+                      <p className="mt-2 text-xs text-slate-500">
+                        JPG, PNG or WebP. Maximum 5MB.
+                      </p>
+
+                      {heroImageUploadNotice ? (
+                        <p className="mt-2 rounded-lg bg-green-500/10 px-3 py-2 text-xs font-bold text-green-300">
+                          {heroImageUploadNotice}
+                        </p>
+                      ) : null}
+
+                      {heroImageUploadError ? (
+                        <p className="mt-2 rounded-lg bg-red-500/10 px-3 py-2 text-xs font-bold text-red-300">
+                          {heroImageUploadError}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
                 ) : (
                   <>
                     {lead.heroImageUrl ? (
-                      <a
-                        href={lead.heroImageUrl}
-                        target="_blank"
-                        className="text-blue-400 hover:text-blue-300"
-                      >
-                        View Hero Image
-                      </a>
+                      <div className="mt-2 space-y-3">
+                        <a
+                          href={lead.heroImageUrl}
+                          target="_blank"
+                          className="text-blue-400 hover:text-blue-300"
+                        >
+                          View Hero Image
+                        </a>
+                        {isPreviewableImageUrl(lead.heroImageUrl) ? (
+                          <div className="overflow-hidden rounded-lg border border-white/10 bg-slate-950">
+                            <Image
+                              src={lead.heroImageUrl}
+                              alt="Hero image preview"
+                              width={640}
+                              height={240}
+                              sizes="(min-width: 1024px) 50vw, 100vw"
+                              className="h-36 w-full object-cover"
+                            />
+                          </div>
+                        ) : null}
+                      </div>
                     ) : (
                       <span className="text-slate-500">Not set yet</span>
                     )}
