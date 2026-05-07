@@ -20,6 +20,10 @@ function hasOwn(body: Record<string, unknown>, field: string) {
   return Object.prototype.hasOwnProperty.call(body, field);
 }
 
+function isHexColor(value: unknown) {
+  return typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value);
+}
+
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ slug: string }> }
@@ -122,6 +126,27 @@ export async function PATCH(
         typeof body.siteBrandingUrl === "string"
       ) {
         nextLead.siteBrandingUrl = body.siteBrandingUrl;
+      }
+
+      if (hasOwn(body, "design")) {
+        const existingDesign =
+          nextLead.design && typeof nextLead.design === "object"
+            ? (nextLead.design as Record<string, unknown>)
+            : {};
+        const requestedDesign =
+          body.design && typeof body.design === "object"
+            ? (body.design as Record<string, unknown>)
+            : {};
+
+        nextLead.design = {
+          ...existingDesign,
+          ...(isHexColor(requestedDesign.buttonColor)
+            ? { buttonColor: requestedDesign.buttonColor }
+            : {}),
+          ...(isHexColor(requestedDesign.accentTextColor)
+            ? { accentTextColor: requestedDesign.accentTextColor }
+            : {}),
+        };
       }
 
       if (hasOwn(body, "callbackForwardingEnabled")) {

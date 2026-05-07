@@ -36,6 +36,10 @@ type LeadWithGeneratedContent = Lead & {
   displayName?: string;
   heroImageUrl?: string;
   siteBrandingUrl?: string;
+  design?: {
+    buttonColor?: string;
+    accentTextColor?: string;
+  };
   templateTrade?: string;
   templateType?: string;
   headline?: string;
@@ -83,6 +87,8 @@ const heroImageExtensions = new Set(["jpg", "jpeg", "png", "webp"]);
 const BRANDING_IMAGE_MAX_BYTES = 2 * 1024 * 1024;
 const BRANDING_IMAGE_ACCEPT =
   ".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp";
+const DEFAULT_BUTTON_COLOR = "#14b8a6";
+const DEFAULT_ACCENT_TEXT_COLOR = "#0f766e";
 
 type TimelineItem =
   | {
@@ -295,6 +301,10 @@ function isPreviewableImageUrl(value?: string | null) {
   return /^https?:\/\//i.test(String(value || "").trim());
 }
 
+function isHexColor(value: string) {
+  return /^#[0-9a-fA-F]{6}$/.test(value);
+}
+
 function normalizeEmail(value: string) {
   return value.trim();
 }
@@ -397,6 +407,13 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const [savingSiteBranding, setSavingSiteBranding] = useState(false);
   const [siteBrandingNotice, setSiteBrandingNotice] = useState("");
   const [siteBrandingError, setSiteBrandingError] = useState("");
+  const [buttonColor, setButtonColor] = useState(DEFAULT_BUTTON_COLOR);
+  const [accentTextColor, setAccentTextColor] = useState(
+    DEFAULT_ACCENT_TEXT_COLOR
+  );
+  const [savingSiteDesign, setSavingSiteDesign] = useState(false);
+  const [siteDesignNotice, setSiteDesignNotice] = useState("");
+  const [siteDesignError, setSiteDesignError] = useState("");
   const [contactDraft, setContactDraft] = useState({
     trade: "",
     city: "",
@@ -465,6 +482,10 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       });
       setSiteHeroImageUrl(loadedLead.heroImageUrl || "");
       setSiteBrandingUrl(loadedLead.siteBrandingUrl || "");
+      setButtonColor(loadedLead.design?.buttonColor || DEFAULT_BUTTON_COLOR);
+      setAccentTextColor(
+        loadedLead.design?.accentTextColor || DEFAULT_ACCENT_TEXT_COLOR
+      );
       setSmsTo(loadedLead.phone || "");
       setSmsBody(buildOpportunitySms(loadedLead, getPreviewUrl(loadedLead)));
       setSmsBodyEdited(false);
@@ -563,6 +584,10 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     );
     setSiteHeroImageUrl(nextLead.heroImageUrl || "");
     setSiteBrandingUrl(nextLead.siteBrandingUrl || "");
+    setButtonColor(nextLead.design?.buttonColor || DEFAULT_BUTTON_COLOR);
+    setAccentTextColor(
+      nextLead.design?.accentTextColor || DEFAULT_ACCENT_TEXT_COLOR
+    );
 
     if (!smsBodyEdited) {
       setSmsBody(buildOpportunitySms(nextLead, getPreviewUrl(nextLead)));
@@ -914,6 +939,55 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       );
     } finally {
       setSavingSiteHeroImage(false);
+    }
+  };
+  const handleSaveSiteDesign = async () => {
+    if (!lead) return;
+
+    if (!isHexColor(buttonColor) || !isHexColor(accentTextColor)) {
+      setSiteDesignError("Choose valid hex colours before saving.");
+      return;
+    }
+
+    setSavingSiteDesign(true);
+    setSiteDesignNotice("");
+    setSiteDesignError("");
+
+    try {
+      const res = await fetch(`/api/leads/${lead.slug || lead.id}/site-design`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          buttonColor,
+          accentTextColor,
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to save design controls");
+      }
+
+      const updatedLead = data.lead as LeadWithGeneratedContent;
+
+      setLead(updatedLead);
+      setButtonColor(updatedLead.design?.buttonColor || DEFAULT_BUTTON_COLOR);
+      setAccentTextColor(
+        updatedLead.design?.accentTextColor || DEFAULT_ACCENT_TEXT_COLOR
+      );
+      setSiteDesignNotice(
+        data.generatedSite
+          ? "Design saved and preview updated."
+          : "Design saved. Generate a site to see it in the preview."
+      );
+    } catch (error) {
+      setSiteDesignError(
+        error instanceof Error ? error.message : "Failed to save design controls"
+      );
+    } finally {
+      setSavingSiteDesign(false);
     }
   };
   const handleSaveContactEdit = async () => {
@@ -1786,6 +1860,119 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 <span className="text-slate-500">Generate a site first</span>
               )}
             </p>
+
+            <div className="mt-6 rounded-xl border border-white/10 bg-slate-950 p-4">
+              <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="font-bold text-white">Design Colours</h3>
+                  <p className="mt-1 text-sm text-slate-400">
+                    Applied to generated site CTAs and coloured accent text.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleSaveSiteDesign}
+                  disabled={savingSiteDesign}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {savingSiteDesign ? "Saving..." : "Save Colours"}
+                </button>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="grid gap-2 text-sm font-bold text-slate-300">
+                  Button colour
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="color"
+                      value={isHexColor(buttonColor) ? buttonColor : DEFAULT_BUTTON_COLOR}
+                      onChange={(event) => {
+                        setButtonColor(event.target.value);
+                        setSiteDesignNotice("");
+                        setSiteDesignError("");
+                      }}
+                      className="h-11 w-16 cursor-pointer rounded-lg border border-white/10 bg-slate-900 p-1"
+                    />
+                    <input
+                      value={buttonColor}
+                      onChange={(event) => {
+                        setButtonColor(event.target.value);
+                        setSiteDesignNotice("");
+                        setSiteDesignError("");
+                      }}
+                      className="min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none"
+                      placeholder={DEFAULT_BUTTON_COLOR}
+                    />
+                  </div>
+                </label>
+
+                <label className="grid gap-2 text-sm font-bold text-slate-300">
+                  Accent text colour
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="color"
+                      value={
+                        isHexColor(accentTextColor)
+                          ? accentTextColor
+                          : DEFAULT_ACCENT_TEXT_COLOR
+                      }
+                      onChange={(event) => {
+                        setAccentTextColor(event.target.value);
+                        setSiteDesignNotice("");
+                        setSiteDesignError("");
+                      }}
+                      className="h-11 w-16 cursor-pointer rounded-lg border border-white/10 bg-slate-900 p-1"
+                    />
+                    <input
+                      value={accentTextColor}
+                      onChange={(event) => {
+                        setAccentTextColor(event.target.value);
+                        setSiteDesignNotice("");
+                        setSiteDesignError("");
+                      }}
+                      className="min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none"
+                      placeholder={DEFAULT_ACCENT_TEXT_COLOR}
+                    />
+                  </div>
+                </label>
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
+                <span
+                  className="rounded-lg px-3 py-2 font-bold text-white"
+                  style={{
+                    backgroundColor: isHexColor(buttonColor)
+                      ? buttonColor
+                      : DEFAULT_BUTTON_COLOR,
+                  }}
+                >
+                  CTA preview
+                </span>
+                <span
+                  className="font-bold"
+                  style={{
+                    color: isHexColor(accentTextColor)
+                      ? accentTextColor
+                      : DEFAULT_ACCENT_TEXT_COLOR,
+                  }}
+                >
+                  Accent text preview
+                </span>
+              </div>
+
+              {siteDesignNotice ? (
+                <p className="mt-3 rounded-lg bg-green-500/10 px-3 py-2 text-sm font-bold text-green-300">
+                  {siteDesignNotice}
+                </p>
+              ) : null}
+
+              {siteDesignError ? (
+                <p className="mt-3 rounded-lg bg-red-500/10 px-3 py-2 text-sm font-bold text-red-300">
+                  {siteDesignError}
+                </p>
+              ) : null}
+            </div>
 
             <div className="mt-6 rounded-xl border border-white/10 bg-slate-950 p-4">
               <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
