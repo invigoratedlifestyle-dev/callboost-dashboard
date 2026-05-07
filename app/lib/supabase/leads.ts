@@ -14,6 +14,7 @@ export type LeadRow = {
   name?: string | null;
   trade?: string | null;
   city?: string | null;
+  address?: string | null;
   phone?: string | null;
   website?: string | null;
   email?: string | null;
@@ -60,6 +61,14 @@ export function rowToLead(row: LeadRow): LeadRecord {
     businessName: getString(data.businessName) || getString(row.name),
     trade: getString(row.trade) || getString(data.trade),
     city: getString(row.city) || getString(data.city),
+    address:
+      getString(row.address) ||
+      getString(data.address) ||
+      getString(data.formattedAddress),
+    formattedAddress:
+      getString(row.address) ||
+      getString(data.formattedAddress) ||
+      getString(data.address),
     phone: getString(row.phone) || getString(data.phone),
     website: getString(row.website) || getString(data.website),
     email: getString(row.email) || getString(data.email),
@@ -115,6 +124,10 @@ export function leadToRow(lead: LeadRecord) {
       null,
     trade: getString(leadWithDefaults.trade) || null,
     city: getString(leadWithDefaults.city) || null,
+    address:
+      getString(leadWithDefaults.address) ||
+      getString(leadWithDefaults.formattedAddress) ||
+      null,
     phone: getString(leadWithDefaults.phone) || null,
     website: getString(leadWithDefaults.website) || null,
     email: getString(leadWithDefaults.email) || null,

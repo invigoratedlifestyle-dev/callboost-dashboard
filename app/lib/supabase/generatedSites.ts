@@ -556,20 +556,31 @@ function getLocationCoords(location: unknown) {
   return { lat: latNumber, lng: lngNumber };
 }
 
-function getMapEmbedUrl(lead: LeadRecord) {
+function getLeadAddress(lead: LeadRecord) {
+  return (
+    getText(lead.address).trim() ||
+    getText(lead.formattedAddress).trim()
+  );
+}
+
+function getMapEmbedUrl(lead: LeadRecord, businessName: string, city: string) {
+  const address = getLeadAddress(lead);
+
+  if (address) {
+    return `https://www.google.com/maps?q=${encodeURIComponent(address)}&z=14&output=embed`;
+  }
+
   const coords = getLocationCoords(lead.location);
 
   if (coords) {
     return `https://www.google.com/maps?q=${coords.lat},${coords.lng}&z=14&output=embed`;
   }
 
-  const address = getText(lead.formattedAddress);
+  const fallbackQuery = [businessName, city].filter(Boolean).join(" ");
 
-  if (address) {
-    return `https://www.google.com/maps?q=${encodeURIComponent(address)}&z=14&output=embed`;
-  }
-
-  return "";
+  return fallbackQuery
+    ? `https://www.google.com/maps?q=${encodeURIComponent(fallbackQuery)}&z=14&output=embed`
+    : "";
 }
 
 function formatHours(hours: unknown) {
@@ -847,7 +858,8 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
   const hasPhone = Boolean(phoneRaw);
   const email = getText(lead.email).trim();
   const emailHref = email ? `mailto:${encodeURIComponent(email)}` : "";
-  const formattedAddress = getText(lead.formattedAddress).trim();
+  const formattedAddress = getLeadAddress(lead);
+  const footerLocation = formattedAddress || city;
   const rating = getText(lead.rating).trim();
   const reviewCount =
     getText(lead.user_ratings_total).trim() ||
@@ -864,7 +876,7 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
   const reviews = getReviews(lead);
   const hasReviews = reviews.length > 0;
   const usingGoogleReviews = hasReviews && isGoogleReviewSource(lead, reviews);
-  const mapEmbedUrl = getMapEmbedUrl(lead);
+  const mapEmbedUrl = getMapEmbedUrl(lead, businessName, city);
   const hoursLines = formatHours(lead.hours);
   const variant = isPlumberTrade(trade) ? "plumber-classic" : "tradie-classic";
   const heroHeadline = buildHeroHeadline(trade, city);
@@ -987,7 +999,7 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
         : "";
   const mapHtml = mapEmbedUrl
     ? `<div class="map-panel">
-        <h3>Find us in ${escapeHtml(city)}</h3>
+        <h3>${escapeHtml(formattedAddress ? "Find us" : `Find us in ${city}`)}</h3>
         <iframe src="${escapeAttribute(mapEmbedUrl)}" loading="lazy" referrerpolicy="no-referrer-when-downgrade" title="Map showing ${escapeAttribute(businessName)} in ${escapeAttribute(city)}"></iframe>
       </div>`
     : "";
@@ -1250,7 +1262,7 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
           <div class="footer-links">
             ${hasPhone ? `<a href="tel:${escapeAttribute(phoneRaw)}">${escapeHtml(phone)}</a>` : ""}
             ${email ? `<a href="${escapeAttribute(emailHref)}">${escapeHtml(email)}</a>` : ""}
-            <span>${escapeHtml(city)}</span>
+            <span>${escapeHtml(footerLocation)}</span>
           </div>
         </div>
         <div>

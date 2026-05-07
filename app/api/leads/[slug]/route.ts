@@ -93,6 +93,11 @@ export async function PATCH(
         nextLead.city = body.city;
       }
 
+      if (hasOwn(body, "address") && typeof body.address === "string") {
+        nextLead.address = body.address;
+        nextLead.formattedAddress = body.address;
+      }
+
       if (hasOwn(body, "phone") && typeof body.phone === "string") {
         nextLead.phone = body.phone;
       }

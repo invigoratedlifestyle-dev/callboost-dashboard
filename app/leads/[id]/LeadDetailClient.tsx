@@ -34,6 +34,8 @@ import GenerateSiteButton from "./GenerateSiteButton";
 
 type LeadWithGeneratedContent = Lead & {
   displayName?: string;
+  address?: string;
+  formattedAddress?: string;
   heroImageUrl?: string;
   siteBrandingUrl?: string;
   design?: {
@@ -417,6 +419,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const [contactDraft, setContactDraft] = useState({
     trade: "",
     city: "",
+    address: "",
     phone: "",
     email: "",
     website: "",
@@ -469,6 +472,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       setContactDraft({
         trade: loadedLead.trade || "",
         city: loadedLead.city || "",
+        address: loadedLead.address || loadedLead.formattedAddress || "",
         phone: loadedLead.phone || "",
         email: loadedLead.email || "",
         website: loadedLead.website || "",
@@ -676,6 +680,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     setContactDraft({
       trade: lead.trade || "",
       city: lead.city || "",
+      address: lead.address || lead.formattedAddress || "",
       phone: lead.phone || "",
       email: lead.email || "",
       website: lead.website || "",
@@ -691,6 +696,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       setContactDraft({
         trade: lead.trade || "",
         city: lead.city || "",
+        address: lead.address || lead.formattedAddress || "",
         phone: lead.phone || "",
         email: lead.email || "",
         website: lead.website || "",
@@ -995,6 +1001,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
 
     const nextTrade = contactDraft.trade.trim();
     const nextCity = contactDraft.city.trim();
+    const nextAddress = contactDraft.address.trim();
     const nextPhone = normalizePhone(contactDraft.phone);
     const nextEmail = normalizeEmail(contactDraft.email);
     const nextWebsite = normalizeWebsite(contactDraft.website);
@@ -1019,6 +1026,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
         body: JSON.stringify({
           trade: nextTrade,
           city: nextCity,
+          address: nextAddress,
           phone: nextPhone,
           email: nextEmail,
           website: nextWebsite,
@@ -1039,6 +1047,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       setContactDraft({
         trade: updatedLead.trade || "",
         city: updatedLead.city || "",
+        address: updatedLead.address || updatedLead.formattedAddress || "",
         phone: updatedLead.phone || "",
         email: updatedLead.email || "",
         website: updatedLead.website || "",
@@ -1650,6 +1659,31 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                   />
                 ) : (
                   <span>{lead.city || "-"}</span>
+                )}
+              </div>
+
+              <div>
+                <strong className="text-white">Address:</strong>{" "}
+                {isEditingContact ? (
+                  <textarea
+                    value={contactDraft.address}
+                    onChange={(event) =>
+                      setContactDraft((current) => ({
+                        ...current,
+                        address: event.target.value,
+                      }))
+                    }
+                    className="mt-2 min-h-20 w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none"
+                    placeholder="Street address"
+                  />
+                ) : (
+                  <span
+                    className={
+                      lead.address || lead.formattedAddress ? "" : "text-slate-500"
+                    }
+                  >
+                    {lead.address || lead.formattedAddress || "Not found yet"}
+                  </span>
                 )}
               </div>
 

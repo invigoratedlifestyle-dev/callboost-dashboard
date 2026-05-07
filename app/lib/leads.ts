@@ -62,6 +62,8 @@ export type Lead = {
   businessName: string;
   slug: string;
   city: string;
+  address?: string;
+  formattedAddress?: string;
   trade: string;
   phone: string;
   email: string;
