@@ -51,9 +51,15 @@ export function buildFollowUpBody(stage: FollowUpStage, name: string) {
   const firstName = getLeadFirstName(name);
 
   if (stage === 1) {
-    return `Hey ${firstName}, just checking you saw the website preview I sent through.
+    return `Hey ${firstName},
 
-Happy to make a few quick changes if needed 👍`;
+Just checking you saw the website preview I sent through.
+
+Happy to make a couple of quick changes to suit how you want it 👍
+
+Cheers,
+Jamie
+CallBoost Tasmania`;
   }
 
   if (stage === 2) {
