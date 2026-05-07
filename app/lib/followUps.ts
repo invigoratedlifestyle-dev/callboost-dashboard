@@ -47,10 +47,43 @@ export function getLeadFirstName(name: string) {
   return name.trim().split(/\s+/)[0] || "there";
 }
 
-export function buildFollowUpBody(stage: FollowUpStage, name: string) {
+export function buildFollowUpBody(
+  stage: FollowUpStage,
+  name: string,
+  args: {
+    channel?: FollowUpChannel;
+    previewUrl?: string | null;
+  } = {}
+) {
   const firstName = getLeadFirstName(name);
+  const previewUrl = (args.previewUrl || "").trim();
 
   if (stage === 1) {
+    if (previewUrl && args.channel === "sms") {
+      return `Hey ${firstName}, just checking you saw the website preview I sent through:
+${previewUrl}
+
+Happy to make a couple of quick changes if needed 👍
+
+Cheers,
+Jamie
+CallBoost Tasmania`;
+    }
+
+    if (previewUrl) {
+      return `Hey ${firstName},
+
+Just checking you saw the website preview I sent through:
+
+${previewUrl}
+
+Happy to make a couple of quick changes to suit how you want it 👍
+
+Cheers,
+Jamie
+CallBoost Tasmania`;
+    }
+
     return `Hey ${firstName},
 
 Just checking you saw the website preview I sent through.

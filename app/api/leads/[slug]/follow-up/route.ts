@@ -5,6 +5,7 @@ import {
   getLatestOutboundMessageChannel,
 } from "../../../../lib/followUps";
 import { sendEmail, sendSms } from "../../../../lib/outboundMessages";
+import { getPreviewUrl } from "../../../../lib/previewUrls";
 import { appendOptOut } from "../../../../lib/smsOptOut";
 import {
   insertLeadMessage,
@@ -103,7 +104,10 @@ export async function POST(
 
     const { channel, to } = destination;
     const subject = channel === "email" ? "Quick follow-up from CallBoost" : "";
-    const followUpBody = buildFollowUpBody(stage, leadName);
+    const followUpBody = buildFollowUpBody(stage, leadName, {
+      channel,
+      previewUrl: getPreviewUrl(lead, new URL(req.url).origin),
+    });
     const messageBody =
       channel === "sms" ? appendOptOut(followUpBody) : followUpBody;
     let fromAddress = "";

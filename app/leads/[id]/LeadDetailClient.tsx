@@ -16,6 +16,7 @@ import {
   getFollowUpDestination,
   getLatestOutboundMessageChannel,
 } from "../../lib/followUps";
+import { getPreviewUrl } from "../../lib/previewUrls";
 import {
   buildInterestedReplyEmail,
   buildInterestedReplyEmailSubject,
@@ -211,16 +212,6 @@ function getReviewSource(lead: LeadWithGeneratedContent) {
     label: "None",
     badgeClass: "bg-white/10 text-slate-400",
   };
-}
-
-function getPreviewUrl(lead: LeadWithGeneratedContent) {
-  if (lead.generatedSiteUrl) return lead.generatedSiteUrl;
-
-  if (typeof window !== "undefined") {
-    return `${window.location.origin}/sites/${lead.slug || lead.id}`;
-  }
-
-  return "";
 }
 
 function getAppUrl() {
@@ -1316,7 +1307,10 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     }
 
     const leadName = lead.name || lead.businessName || "";
-    const followUpBody = buildFollowUpBody(stage, leadName);
+    const followUpBody = buildFollowUpBody(stage, leadName, {
+      channel: destination.channel,
+      previewUrl: getPreviewUrl(lead),
+    });
 
     setOutreachChannel(destination.channel);
     setPendingFollowUpMetadata({
