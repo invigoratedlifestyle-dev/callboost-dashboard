@@ -117,6 +117,13 @@ export async function PATCH(
         nextLead.heroImageUrl = body.heroImageUrl;
       }
 
+      if (
+        hasOwn(body, "siteBrandingUrl") &&
+        typeof body.siteBrandingUrl === "string"
+      ) {
+        nextLead.siteBrandingUrl = body.siteBrandingUrl;
+      }
+
       if (hasOwn(body, "callbackForwardingEnabled")) {
         nextLead.callbackForwardingEnabled =
           body.callbackForwardingEnabled === true ||
