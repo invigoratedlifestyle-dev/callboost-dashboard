@@ -169,6 +169,77 @@ function formatOpportunityPoints(points: string[]) {
   return `${points[0]} and ${points[1]}`;
 }
 
+function getSoftOpportunityObservation(lead: OutreachLead) {
+  if (hasNoWebsiteOpportunity(lead)) {
+    return "I couldn't find a current site, so I kept the preview focused on making it easy for customers to call or enquire from mobile.";
+  }
+
+  if (hasBrokenWebsiteOpportunity(lead)) {
+    return "I had a bit of trouble loading your current site on mobile, so I kept the preview focused on making it easy for customers to navigate and contact you.";
+  }
+
+  return "I noticed your current site could be a bit easier for customers to navigate and contact you from mobile.";
+}
+
+function getSoftOpportunityFocus(lead: OutreachLead) {
+  const opportunityPoints = getWebsiteOpportunitySalesPoints(lead);
+  const formattedPoints = formatOpportunityPoints(opportunityPoints).toLowerCase();
+  const mentionsMobileContact =
+    /call|contact|enquir|phone|mobile|navigate/.test(formattedPoints);
+  const mentionsFirstImpression =
+    /first impression|trust|faster|local/.test(formattedPoints);
+
+  if (mentionsMobileContact && mentionsFirstImpression) {
+    return "Mainly around improving the first impression and making it quicker for people to call or enquire.";
+  }
+
+  if (mentionsMobileContact) {
+    return "Mainly around making it quicker for people to navigate, call or enquire from mobile.";
+  }
+
+  if (mentionsFirstImpression) {
+    return "Mainly around improving the first impression and making it easier for people to get in touch.";
+  }
+
+  return "Mainly around improving the first impression and making it quicker for people to call or enquire.";
+}
+
+function buildInitialOpportunityOutreachLines(
+  lead: OutreachLead,
+  previewUrl: string
+) {
+  const leadName = getLeadName(lead);
+  const lines = [`Hey ${leadName},`, ""];
+
+  if (previewUrl) {
+    lines.push(
+      "I put together a quick mobile-friendly website preview for you here:",
+      "",
+      previewUrl,
+      ""
+    );
+  } else {
+    lines.push(
+      "I put together a quick mobile-friendly website preview and can send it through if you want to take a look.",
+      ""
+    );
+  }
+
+  lines.push(
+    getSoftOpportunityObservation(lead),
+    "",
+    getSoftOpportunityFocus(lead),
+    "",
+    "Happy to set this up properly for you if you like 👍",
+    "",
+    "Thanks,",
+    "Jamie",
+    "CallBoost Tasmania"
+  );
+
+  return lines;
+}
+
 export function getWebsiteOpportunityIssue(lead: OutreachLead) {
   if (hasBrokenWebsiteOpportunity(lead)) {
     return "I couldn't get your site to load on mobile";
@@ -203,101 +274,9 @@ export function buildOpportunitySms(
   lead: OutreachLead,
   previewUrl: string
 ) {
-  const leadName = getLeadName(lead);
-
-  if (hasNoWebsiteOpportunity(lead)) {
-    const lines = [
-      `Hey ${leadName}, I had a quick look and couldn't find a website for your business.`,
-      "",
-    ];
-
-    if (previewUrl) {
-      lines.push(
-        "I put together a quick mobile-friendly preview here:",
-        previewUrl,
-        ""
-      );
-    } else {
-      lines.push(
-        "I put together a quick mobile-friendly preview and can send it through if you want to take a look.",
-        ""
-      );
-    }
-
-    lines.push(
-      "It's designed to make it easier for people to call or enquire quickly from their phone.",
-      "",
-      "Want me to set this up properly for you?",
-      "",
-      "- Jamie",
-      "CallBoost"
-    );
-
-    return appendOptOut(lines.join("\n"));
-  }
-
-  if (hasBrokenWebsiteOpportunity(lead)) {
-    const lines = [
-      `Hey ${leadName}, I had a quick look and had trouble getting your website to load properly on mobile.`,
-      "",
-    ];
-
-    if (previewUrl) {
-      lines.push(
-        "I put together a quick mobile-friendly preview here:",
-        previewUrl,
-        ""
-      );
-    } else {
-      lines.push(
-        "I put together a quick mobile-friendly preview and can send it through if you want to take a look.",
-        ""
-      );
-    }
-
-    lines.push(
-      "It's designed to make it easier for people to call or enquire quickly from their phone.",
-      "",
-      "Want me to set this up properly for you?",
-      "",
-      "- Jamie",
-      "CallBoost"
-    );
-
-    return appendOptOut(lines.join("\n"));
-  }
-
-  const opportunityPoints = formatOpportunityPoints(
-    getWebsiteOpportunitySalesPoints(lead)
+  return appendOptOut(
+    buildInitialOpportunityOutreachLines(lead, previewUrl).join("\n")
   );
-  const lines = [
-    `Hey ${leadName}, I had a quick look at your website and noticed a few areas that could be improved to help convert more visitors into calls.`,
-    "",
-  ];
-
-  if (previewUrl) {
-    lines.push(
-      "I put together a quick mobile-friendly preview here:",
-      previewUrl,
-      ""
-    );
-  } else {
-    lines.push(
-      "I put together a quick mobile-friendly preview and can send it through if you want to take a look.",
-      ""
-    );
-  }
-
-  lines.push(
-    `Mainly around ${opportunityPoints}.`,
-    "",
-    "Want me to set this up properly for you?",
-    "",
-    "- Jamie",
-    "CallBoost"
-  );
-
-  return appendOptOut(lines.join("\n"));
 }
 
 export function buildOpportunityEmailSubject(
@@ -310,111 +289,7 @@ export function buildOpportunityEmail(
   lead: OutreachLead,
   previewUrl: string
 ) {
-  const leadName = getLeadName(lead);
-
-  if (hasNoWebsiteOpportunity(lead)) {
-    const lines = [
-      `Hey ${leadName},`,
-      "",
-      "I had a quick look and couldn't find a website for your business.",
-      "",
-    ];
-
-    if (previewUrl) {
-      lines.push(
-        "I put together a quick mobile-friendly preview here:",
-        previewUrl,
-        ""
-      );
-    } else {
-      lines.push(
-        "I put together a quick mobile-friendly preview and can send it through if you want to take a look.",
-        ""
-      );
-    }
-
-    lines.push(
-      "It's designed to make it easier for people to call or enquire quickly from their phone.",
-      "",
-      "Want me to set this up properly for you?",
-      "",
-      "Thanks,",
-      "Jamie",
-      "CallBoost"
-    );
-
-    return lines.join("\n");
-  }
-
-  if (hasBrokenWebsiteOpportunity(lead)) {
-    const lines = [
-      `Hey ${leadName},`,
-      "",
-      "I had a quick look and had trouble getting your website to load properly on mobile.",
-      "",
-    ];
-
-    if (previewUrl) {
-      lines.push(
-        "I put together a quick mobile-friendly preview here:",
-        previewUrl,
-        ""
-      );
-    } else {
-      lines.push(
-        "I put together a quick mobile-friendly preview and can send it through if you want to take a look.",
-        ""
-      );
-    }
-
-    lines.push(
-      "It's designed to make it easier for people to call or enquire quickly from their phone.",
-      "",
-      "Want me to set this up properly for you?",
-      "",
-      "Thanks,",
-      "Jamie",
-      "CallBoost"
-    );
-
-    return lines.join("\n");
-  }
-
-  const opportunityPoints = formatOpportunityPoints(
-    getWebsiteOpportunitySalesPoints(lead)
-  );
-
-  const lines = [
-    `Hey ${leadName},`,
-    "",
-    "I had a quick look at your website and noticed a few areas that could be improved to help convert more visitors into calls.",
-    "",
-  ];
-
-  if (previewUrl) {
-    lines.push(
-      "I put together a quick mobile-friendly preview here:",
-      previewUrl,
-      ""
-    );
-  } else {
-    lines.push(
-      "I put together a quick mobile-friendly preview and can send it through if you want to take a look.",
-      ""
-    );
-  }
-
-  lines.push(
-    `Mainly around ${opportunityPoints}.`,
-    "",
-    "Want me to set this up properly for you?",
-    "",
-    "Thanks,",
-    "Jamie",
-    "CallBoost"
-  );
-
-  return lines.join("\n");
+  return buildInitialOpportunityOutreachLines(lead, previewUrl).join("\n");
 }
 
 export function buildInterestedReplySms(
