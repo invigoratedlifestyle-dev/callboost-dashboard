@@ -823,6 +823,8 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
   const seed = `${businessSlug}-${citySlug}-${tradeSlug}`;
   // Business-specific and library imagery can improve trust and conversion. Stock trade imagery remains the safe fallback.
   const heroImage = await getGeneratedHeroImage({ lead, trade, seed });
+  const siteBrandingUrl = getText(lead.siteBrandingUrl).trim();
+  const hasSiteBranding = isValidHttpUrl(siteBrandingUrl);
   const phone = getText(lead.phone).trim();
   const phoneRaw = phoneToTel(phone);
   const hasPhone = Boolean(phoneRaw);
@@ -857,6 +859,10 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
   const navCallHtml = hasPhone
     ? `<a class="nav-call" href="tel:${escapeAttribute(phoneRaw)}">${escapeHtml(phone)}</a>`
     : "";
+  const brandHtml = hasSiteBranding
+    ? `<img class="brand-logo" src="${escapeAttribute(siteBrandingUrl)}" alt="${escapeAttribute(businessName)}" loading="eager" />`
+    : `<strong>${escapeHtml(businessName)}</strong>
+        <span>${escapeHtml(tradeLabel)} in ${escapeHtml(city)}</span>`;
   const callButtonHtml = hasPhone
     ? `<a class="button accent" href="tel:${escapeAttribute(phoneRaw)}">Call Now: ${escapeHtml(phone)}</a>`
     : `<a class="button accent" href="#quote">Call Now</a>`;
@@ -991,6 +997,7 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
     .brand { min-width: 0; color: #111827; text-decoration: none; }
     .brand strong { display: block; max-width: 360px; color: #111827; font-size: 19px; line-height: 1.18; white-space: normal; overflow-wrap: anywhere; }
     .brand span { display: block; margin-top: 4px; color: #667085; font-size: 13px; font-weight: 800; }
+    .brand-logo { display: block; width: auto; max-width: 220px; max-height: 40px; object-fit: contain; }
     .nav-links { display: flex; align-items: center; gap: 24px; color: #344054; font-size: 14px; font-weight: 800; }
     .nav-links a { text-decoration: none; }
     .nav-call { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 10px 17px; border-radius: 10px; background: #0f766e; color: white; text-decoration: none; font-size: 14px; font-weight: 900; white-space: nowrap; }
@@ -1066,15 +1073,14 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
     .footer-bottom { display: flex; justify-content: space-between; gap: 18px; margin-top: 34px; padding-top: 22px; border-top: 1px solid rgba(255, 255, 255, 0.12); color: #94a3b8; font-size: 14px; }
     .mobile-call-bar { display: none; }
     @media (max-width: 980px) { .nav-links { display: none; } .quote-card, .areas-panel, .contact-layout { grid-template-columns: 1fr; } .services-grid, .trust-grid, .review-grid, .faq-grid, .footer-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-    @media (max-width: 700px) { body { padding-bottom: 82px; } .container { width: min(100% - 28px, 1120px); } .nav { min-height: 66px; gap: 12px; } .brand strong { max-width: 230px; font-size: 16px; line-height: 1.2; } .brand span { font-size: 12px; } .nav-call { display: none; } .hero { min-height: auto; padding: 58px 0 86px; } h1 { font-size: clamp(36px, 12vw, 48px); } .hero-subtitle { font-size: 18px; } .hero-bullets { display: grid; grid-template-columns: 1fr 1fr; } .hero-bullets span { border-radius: 12px; } .button, .cta-row, .cta-row a { width: 100%; } .quote-strip { margin-top: -44px; } .quote-card, .contact-panel, .callback-form, .areas-panel { padding: 22px; } .mini-form, .services-grid, .trust-grid, .review-grid, .faq-grid, .footer-grid { grid-template-columns: 1fr; } .section { padding: 58px 0; } .footer { padding-bottom: 32px; } .footer-bottom { display: grid; } .mobile-call-bar { display: block; position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 80; } .mobile-call-bar a { min-height: 58px; display: flex; align-items: center; justify-content: center; border-radius: 12px; background: #14b8a6; color: #042f2e; box-shadow: 0 18px 38px rgba(2, 6, 23, 0.24); font-size: 17px; font-weight: 950; text-decoration: none; } }
+    @media (max-width: 700px) { body { padding-bottom: 82px; } .container { width: min(100% - 28px, 1120px); } .nav { min-height: 66px; gap: 12px; } .brand strong { max-width: 230px; font-size: 16px; line-height: 1.2; } .brand span { font-size: 12px; } .brand-logo { max-width: 180px; max-height: 32px; } .nav-call { display: none; } .hero { min-height: auto; padding: 58px 0 86px; } h1 { font-size: clamp(36px, 12vw, 48px); } .hero-subtitle { font-size: 18px; } .hero-bullets { display: grid; grid-template-columns: 1fr 1fr; } .hero-bullets span { border-radius: 12px; } .button, .cta-row, .cta-row a { width: 100%; } .quote-strip { margin-top: -44px; } .quote-card, .contact-panel, .callback-form, .areas-panel { padding: 22px; } .mini-form, .services-grid, .trust-grid, .review-grid, .faq-grid, .footer-grid { grid-template-columns: 1fr; } .section { padding: 58px 0; } .footer { padding-bottom: 32px; } .footer-bottom { display: grid; } .mobile-call-bar { display: block; position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 80; } .mobile-call-bar a { min-height: 58px; display: flex; align-items: center; justify-content: center; border-radius: 12px; background: #14b8a6; color: #042f2e; box-shadow: 0 18px 38px rgba(2, 6, 23, 0.24); font-size: 17px; font-weight: 950; text-decoration: none; } }
   </style>
 </head>
 <body class="${escapeAttribute(variant)}">
   <header class="site-header">
     <div class="container nav">
       <a class="brand" href="#">
-        <strong>${escapeHtml(businessName)}</strong>
-        <span>${escapeHtml(tradeLabel)} in ${escapeHtml(city)}</span>
+        ${brandHtml}
       </a>
       <nav class="nav-links">
         <a href="#services">Services</a>
