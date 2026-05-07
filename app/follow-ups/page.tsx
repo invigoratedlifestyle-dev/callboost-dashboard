@@ -177,7 +177,7 @@ export default function FollowUpsPage() {
                           </p>
                           <p className="mt-1 text-xs text-slate-400">
                             {item.trade || "Unknown trade"} -{" "}
-                            {item.city || "Unknown city"}
+                            {item.city || "Unknown town/suburb"}
                           </p>
                         </td>
 

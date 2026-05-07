@@ -10,11 +10,9 @@ import {
 } from "../../../lib/leadLifecycle";
 import {
   buildLocalSearchQuery,
-  buildStateWideCityTarget,
   getCityTarget,
   getCityTargetForState,
   getStateTarget,
-  STATE_WIDE_CITY_KEY,
   type CityTarget,
 } from "../../../lib/leadTargeting/cities";
 import {
@@ -137,8 +135,13 @@ function getRequestedCityTarget(args: {
   const stateTarget = args.state ? getStateTarget(args.state) : null;
   const normalizedCity = args.city.trim().toLowerCase();
 
-  if (normalizedCity === STATE_WIDE_CITY_KEY || normalizedCity === "state wide") {
-    return stateTarget ? buildStateWideCityTarget(stateTarget) : null;
+  if (
+    normalizedCity === "state-wide" ||
+    normalizedCity === "statewide" ||
+    normalizedCity === "state wide" ||
+    normalizedCity === "tasmania"
+  ) {
+    return null;
   }
 
   return stateTarget
@@ -522,7 +525,7 @@ export async function POST(req: Request) {
 
     if (!cityTarget) {
       return NextResponse.json(
-        { error: "Invalid city target" },
+        { error: "Invalid Town/Suburb target" },
         { status: 400 }
       );
     }
@@ -537,9 +540,8 @@ export async function POST(req: Request) {
 
     console.log("Lead generation settings:", {
       trade: tradeTarget.key,
-      city: cityTarget.key,
+      townOrSuburb: cityTarget.key,
       state: cityTarget.stateCode,
-      stateWide: Boolean(cityTarget.isStateWide),
       maxLeads,
       enrich,
     });

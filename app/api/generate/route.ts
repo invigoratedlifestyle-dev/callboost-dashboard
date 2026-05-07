@@ -113,7 +113,7 @@ export async function POST(req: Request) {
 
     const trade = body.trade || process.env.LEAD_TRADE || "Plumber";
     const city = body.city || process.env.LEAD_CITY || "Hobart";
-    const query = body.query || `${trade} in ${city}`;
+    const query = body.query || `${trade} in ${city} Tasmania Australia`;
     const limit = Math.max(1, Math.min(body.limit || 10, 20));
 
     const places = await searchText(query, apiKey);

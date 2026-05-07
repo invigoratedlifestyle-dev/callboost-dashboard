@@ -1288,7 +1288,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
               </div>
 
               <div>
-                <strong className="text-white">City:</strong>{" "}
+                <strong className="text-white">Town/Suburb:</strong>{" "}
                 {isEditingContact ? (
                   <input
                     value={contactDraft.city}

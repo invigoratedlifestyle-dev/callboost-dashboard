@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AU_STATE_TARGETS,
   CITY_TARGETS,
-  STATE_WIDE_CITY_KEY,
 } from "./lib/leadTargeting/cities";
 import { TRADE_TARGETS } from "./lib/leadTargeting/trades";
 import type { Lead, LeadStatus, WebsiteEvaluation } from "./lib/leads";
@@ -359,6 +358,7 @@ export default function DashboardPage() {
       CITY_TARGETS.filter((cityTarget) => cityTarget.stateCode === targetStateKey),
     [targetStateKey]
   );
+  const firstCityOptionKey = cityOptions[0]?.key || "hobart";
 
   const loadLeads = useCallback(async (filter: LeadFilter) => {
     const url =
@@ -880,7 +880,7 @@ export default function DashboardPage() {
                     const nextStateKey = event.target.value;
 
                     setTargetStateKey(nextStateKey);
-                    setTargetCityKey(STATE_WIDE_CITY_KEY);
+                    setTargetCityKey(firstCityOptionKey);
                   }}
                   disabled={actionRunning}
                   className="min-w-32 rounded-lg border border-white/10 bg-slate-900 px-3 py-3 text-sm font-bold normal-case tracking-normal text-white outline-none disabled:cursor-not-allowed disabled:opacity-60"
@@ -894,14 +894,13 @@ export default function DashboardPage() {
               </label>
 
               <label className="grid gap-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                City
+                Town/Suburb
                 <select
                   value={targetCityKey}
                   onChange={(event) => setTargetCityKey(event.target.value)}
                   disabled={actionRunning}
                   className="min-w-44 rounded-lg border border-white/10 bg-slate-900 px-3 py-3 text-sm font-bold normal-case tracking-normal text-white outline-none disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  <option value={STATE_WIDE_CITY_KEY}>State-wide</option>
                   {cityOptions.map((cityTarget) => (
                     <option key={cityTarget.key} value={cityTarget.key}>
                       {cityTarget.city}
@@ -1179,7 +1178,8 @@ export default function DashboardPage() {
                             ) : null}
                           </div>
                           <p className="mt-1 text-xs text-slate-400">
-                            {lead.trade || "Unknown trade"} - {lead.city || "Unknown city"}
+                            {lead.trade || "Unknown trade"} -{" "}
+                            {lead.city || "Unknown town/suburb"}
                           </p>
                         </td>
 
