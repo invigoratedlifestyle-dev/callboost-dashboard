@@ -25,18 +25,30 @@ function getMetadata(value: unknown) {
     : {};
 }
 
+function getFollowUpStage(value: unknown) {
+  const stage = Number(value);
+
+  return stage === 1 || stage === 2 || stage === 3 ? stage : null;
+}
+
 function getSafeMessageMetadata(value: unknown) {
   const metadata = getMetadata(value);
+  const stage = getFollowUpStage(
+    metadata.follow_up_stage || metadata.followUpStage || metadata.stage
+  );
+  const reason = String(metadata.reason || metadata.type || "").trim();
 
   if (
-    metadata.reason === "manual_follow_up" &&
-    (metadata.follow_up_stage === 1 ||
-      metadata.follow_up_stage === 2 ||
-      metadata.follow_up_stage === 3)
+    stage &&
+    (reason === "manual_follow_up" ||
+      reason === "follow_up" ||
+      reason === "manualFollowUp" ||
+      metadata.follow_up_stage !== undefined ||
+      metadata.followUpStage !== undefined)
   ) {
     return {
       reason: "manual_follow_up",
-      follow_up_stage: metadata.follow_up_stage,
+      follow_up_stage: stage,
     };
   }
 

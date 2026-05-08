@@ -20,6 +20,8 @@ export type FollowUpMessage = {
   channel?: string | null;
   direction?: string | null;
   status?: string | null;
+  subject?: string | null;
+  body?: string | null;
   createdAt?: string | null;
   metadata?: Record<string, unknown> | null;
 };
@@ -112,16 +114,75 @@ function getIsoTime(time: number) {
   return Number.isFinite(time) && time > 0 ? new Date(time).toISOString() : null;
 }
 
-function getManualFollowUpStage(
+function getNormalizedFollowUpStage(value: unknown): FollowUpStage | null {
+  const stage = Number(value);
+
+  return stage === 1 || stage === 2 || stage === 3 ? stage : null;
+}
+
+function getText(value?: string | null) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function isSentOutboundMessage(message: FollowUpMessage) {
+  return (
+    message.direction === "outbound" &&
+    (!message.status || message.status === "sent")
+  );
+}
+
+function getMetadataFollowUpStage(
   message: FollowUpMessage
 ): FollowUpStage | null {
   const metadata = message.metadata || {};
+  const stage = getNormalizedFollowUpStage(
+    metadata.follow_up_stage || metadata.followUpStage || metadata.stage
+  );
 
-  if (metadata.reason !== "manual_follow_up") return null;
+  if (!stage) return null;
 
-  const stage = Number(metadata.follow_up_stage);
+  const reason = String(metadata.reason || metadata.type || "").trim();
 
-  return stage === 1 || stage === 2 || stage === 3 ? stage : null;
+  if (
+    reason === "manual_follow_up" ||
+    reason === "follow_up" ||
+    reason === "manualFollowUp" ||
+    metadata.follow_up_stage !== undefined ||
+    metadata.followUpStage !== undefined
+  ) {
+    return stage;
+  }
+
+  return null;
+}
+
+function getFallbackFollowUpStage(message: FollowUpMessage): FollowUpStage | null {
+  const subject = getText(message.subject);
+  const body = getText(message.body);
+  const looksLikeFollowUpOneBody =
+    body.includes("just checking you saw the website preview") ||
+    body.includes("happy to make a couple of quick changes");
+
+  if (
+    looksLikeFollowUpOneBody &&
+    (subject.includes("quick follow-up from callboost") ||
+      body.includes("callboost tasmania") ||
+      body.includes("reply stop to opt out"))
+  ) {
+    return 1;
+  }
+
+  return null;
+}
+
+export function getSentFollowUpStage(
+  message: FollowUpMessage
+): FollowUpStage | null {
+  if (!isSentOutboundMessage(message)) {
+    return null;
+  }
+
+  return getMetadataFollowUpStage(message) || getFallbackFollowUpStage(message);
 }
 
 function hasContactMethod(lead: FollowUpLead) {
@@ -137,8 +198,7 @@ export function getLatestOutboundMessageChannel(
   const latestOutbound = messages.reduce<FollowUpMessage | null>(
     (latest, message) => {
       if (
-        message.direction !== "outbound" ||
-        message.status === "failed" ||
+        !isSentOutboundMessage(message) ||
         !message.createdAt
       ) {
         return latest;
@@ -217,13 +277,13 @@ export function getFollowUpDueStatus(
       continue;
     }
 
-    if (message.direction !== "outbound" || message.status === "failed") {
+    if (!isSentOutboundMessage(message)) {
       continue;
     }
 
     latestOutbound = Math.max(latestOutbound, createdAt);
 
-    const stage = getManualFollowUpStage(message);
+    const stage = getSentFollowUpStage(message);
 
     if (stage) {
       followUpSentAt[stage] = Math.max(followUpSentAt[stage] || 0, createdAt);
