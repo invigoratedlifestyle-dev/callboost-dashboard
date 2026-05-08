@@ -138,18 +138,67 @@ export async function PATCH(
           nextLead.design && typeof nextLead.design === "object"
             ? (nextLead.design as Record<string, unknown>)
             : {};
+        const existingGeneratedSiteDesign =
+          nextLead.generated_site_design &&
+          typeof nextLead.generated_site_design === "object"
+            ? (nextLead.generated_site_design as Record<string, unknown>)
+            : {};
         const requestedDesign =
           body.design && typeof body.design === "object"
             ? (body.design as Record<string, unknown>)
             : {};
+        const bodyAccentColor =
+          requestedDesign.bodyAccentColor || requestedDesign.accentTextColor;
 
         nextLead.design = {
           ...existingDesign,
           ...(isHexColor(requestedDesign.buttonColor)
             ? { buttonColor: requestedDesign.buttonColor }
             : {}),
+          ...(isHexColor(requestedDesign.buttonTextColor)
+            ? { buttonTextColor: requestedDesign.buttonTextColor }
+            : {}),
           ...(isHexColor(requestedDesign.accentTextColor)
             ? { accentTextColor: requestedDesign.accentTextColor }
+            : {}),
+          ...(isHexColor(requestedDesign.heroAccentColor)
+            ? { heroAccentColor: requestedDesign.heroAccentColor }
+            : {}),
+          ...(isHexColor(bodyAccentColor)
+            ? {
+                bodyAccentColor,
+                accentTextColor: bodyAccentColor,
+              }
+            : {}),
+          ...(isHexColor(requestedDesign.serviceAreaCardColor)
+            ? { serviceAreaCardColor: requestedDesign.serviceAreaCardColor }
+            : {}),
+          ...(isHexColor(requestedDesign.footerBackgroundColor)
+            ? { footerBackgroundColor: requestedDesign.footerBackgroundColor }
+            : {}),
+        };
+        nextLead.generated_site_design = {
+          ...existingGeneratedSiteDesign,
+          ...(isHexColor(requestedDesign.buttonColor)
+            ? { button_color: requestedDesign.buttonColor }
+            : {}),
+          ...(isHexColor(requestedDesign.buttonTextColor)
+            ? { button_text_color: requestedDesign.buttonTextColor }
+            : {}),
+          ...(isHexColor(bodyAccentColor)
+            ? {
+                accent_text_color: bodyAccentColor,
+                body_accent_color: bodyAccentColor,
+              }
+            : {}),
+          ...(isHexColor(requestedDesign.heroAccentColor)
+            ? { hero_accent_color: requestedDesign.heroAccentColor }
+            : {}),
+          ...(isHexColor(requestedDesign.serviceAreaCardColor)
+            ? { service_area_card_color: requestedDesign.serviceAreaCardColor }
+            : {}),
+          ...(isHexColor(requestedDesign.footerBackgroundColor)
+            ? { footer_background_color: requestedDesign.footerBackgroundColor }
             : {}),
         };
       }

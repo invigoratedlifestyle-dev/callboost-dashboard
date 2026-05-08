@@ -41,7 +41,21 @@ type LeadWithGeneratedContent = Lead & {
   siteBrandingUrl?: string;
   design?: {
     buttonColor?: string;
+    buttonTextColor?: string;
     accentTextColor?: string;
+    heroAccentColor?: string;
+    bodyAccentColor?: string;
+    serviceAreaCardColor?: string;
+    footerBackgroundColor?: string;
+  };
+  generated_site_design?: {
+    button_color?: string;
+    button_text_color?: string;
+    accent_text_color?: string;
+    hero_accent_color?: string;
+    body_accent_color?: string;
+    service_area_card_color?: string;
+    footer_background_color?: string;
   };
   templateTrade?: string;
   templateType?: string;
@@ -91,7 +105,12 @@ const BRANDING_IMAGE_MAX_BYTES = 2 * 1024 * 1024;
 const BRANDING_IMAGE_ACCEPT =
   ".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp";
 const DEFAULT_BUTTON_COLOR = "#14b8a6";
+const DEFAULT_BUTTON_TEXT_COLOR = "#ffffff";
 const DEFAULT_ACCENT_TEXT_COLOR = "#0f766e";
+const DEFAULT_HERO_ACCENT_COLOR = "#a7f3d0";
+const DEFAULT_BODY_ACCENT_COLOR = "#0f766e";
+const DEFAULT_SERVICE_AREA_CARD_COLOR = "#0f766e";
+const DEFAULT_FOOTER_BACKGROUND_COLOR = "#0b1220";
 
 type TimelineItem =
   | {
@@ -298,6 +317,44 @@ function isHexColor(value: string) {
   return /^#[0-9a-fA-F]{6}$/.test(value);
 }
 
+function getLeadSiteDesign(lead: LeadWithGeneratedContent | null) {
+  const design = lead?.design || {};
+  const generatedSiteDesign = lead?.generated_site_design || {};
+  const legacyAccent =
+    design.accentTextColor ||
+    generatedSiteDesign.accent_text_color ||
+    DEFAULT_ACCENT_TEXT_COLOR;
+
+  return {
+    buttonColor:
+      design.buttonColor ||
+      generatedSiteDesign.button_color ||
+      DEFAULT_BUTTON_COLOR,
+    buttonTextColor:
+      design.buttonTextColor ||
+      generatedSiteDesign.button_text_color ||
+      DEFAULT_BUTTON_TEXT_COLOR,
+    heroAccentColor:
+      design.heroAccentColor ||
+      generatedSiteDesign.hero_accent_color ||
+      legacyAccent ||
+      DEFAULT_HERO_ACCENT_COLOR,
+    bodyAccentColor:
+      design.bodyAccentColor ||
+      generatedSiteDesign.body_accent_color ||
+      legacyAccent ||
+      DEFAULT_BODY_ACCENT_COLOR,
+    serviceAreaCardColor:
+      design.serviceAreaCardColor ||
+      generatedSiteDesign.service_area_card_color ||
+      DEFAULT_SERVICE_AREA_CARD_COLOR,
+    footerBackgroundColor:
+      design.footerBackgroundColor ||
+      generatedSiteDesign.footer_background_color ||
+      DEFAULT_FOOTER_BACKGROUND_COLOR,
+  };
+}
+
 function normalizeEmail(value: string) {
   return value.trim();
 }
@@ -401,8 +458,20 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const [siteBrandingNotice, setSiteBrandingNotice] = useState("");
   const [siteBrandingError, setSiteBrandingError] = useState("");
   const [buttonColor, setButtonColor] = useState(DEFAULT_BUTTON_COLOR);
-  const [accentTextColor, setAccentTextColor] = useState(
-    DEFAULT_ACCENT_TEXT_COLOR
+  const [buttonTextColor, setButtonTextColor] = useState(
+    DEFAULT_BUTTON_TEXT_COLOR
+  );
+  const [heroAccentColor, setHeroAccentColor] = useState(
+    DEFAULT_HERO_ACCENT_COLOR
+  );
+  const [bodyAccentColor, setBodyAccentColor] = useState(
+    DEFAULT_BODY_ACCENT_COLOR
+  );
+  const [serviceAreaCardColor, setServiceAreaCardColor] = useState(
+    DEFAULT_SERVICE_AREA_CARD_COLOR
+  );
+  const [footerBackgroundColor, setFooterBackgroundColor] = useState(
+    DEFAULT_FOOTER_BACKGROUND_COLOR
   );
   const [savingSiteDesign, setSavingSiteDesign] = useState(false);
   const [siteDesignNotice, setSiteDesignNotice] = useState("");
@@ -477,10 +546,13 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       });
       setSiteHeroImageUrl(loadedLead.heroImageUrl || "");
       setSiteBrandingUrl(loadedLead.siteBrandingUrl || "");
-      setButtonColor(loadedLead.design?.buttonColor || DEFAULT_BUTTON_COLOR);
-      setAccentTextColor(
-        loadedLead.design?.accentTextColor || DEFAULT_ACCENT_TEXT_COLOR
-      );
+      const siteDesign = getLeadSiteDesign(loadedLead);
+      setButtonColor(siteDesign.buttonColor);
+      setButtonTextColor(siteDesign.buttonTextColor);
+      setHeroAccentColor(siteDesign.heroAccentColor);
+      setBodyAccentColor(siteDesign.bodyAccentColor);
+      setServiceAreaCardColor(siteDesign.serviceAreaCardColor);
+      setFooterBackgroundColor(siteDesign.footerBackgroundColor);
       setSmsTo(loadedLead.phone || "");
       setSmsBody(buildOpportunitySms(loadedLead, getPreviewUrl(loadedLead)));
       setSmsBodyEdited(false);
@@ -579,10 +651,13 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     );
     setSiteHeroImageUrl(nextLead.heroImageUrl || "");
     setSiteBrandingUrl(nextLead.siteBrandingUrl || "");
-    setButtonColor(nextLead.design?.buttonColor || DEFAULT_BUTTON_COLOR);
-    setAccentTextColor(
-      nextLead.design?.accentTextColor || DEFAULT_ACCENT_TEXT_COLOR
-    );
+    const siteDesign = getLeadSiteDesign(nextLead);
+    setButtonColor(siteDesign.buttonColor);
+    setButtonTextColor(siteDesign.buttonTextColor);
+    setHeroAccentColor(siteDesign.heroAccentColor);
+    setBodyAccentColor(siteDesign.bodyAccentColor);
+    setServiceAreaCardColor(siteDesign.serviceAreaCardColor);
+    setFooterBackgroundColor(siteDesign.footerBackgroundColor);
 
     if (!smsBodyEdited) {
       setSmsBody(buildOpportunitySms(nextLead, getPreviewUrl(nextLead)));
@@ -941,7 +1016,14 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const handleSaveSiteDesign = async () => {
     if (!lead) return;
 
-    if (!isHexColor(buttonColor) || !isHexColor(accentTextColor)) {
+    if (
+      !isHexColor(buttonColor) ||
+      !isHexColor(buttonTextColor) ||
+      !isHexColor(heroAccentColor) ||
+      !isHexColor(bodyAccentColor) ||
+      !isHexColor(serviceAreaCardColor) ||
+      !isHexColor(footerBackgroundColor)
+    ) {
       setSiteDesignError("Choose valid hex colours before saving.");
       return;
     }
@@ -958,7 +1040,11 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
         },
         body: JSON.stringify({
           buttonColor,
-          accentTextColor,
+          buttonTextColor,
+          heroAccentColor,
+          bodyAccentColor,
+          serviceAreaCardColor,
+          footerBackgroundColor,
         }),
       });
       const data = await res.json();
@@ -970,10 +1056,13 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       const updatedLead = data.lead as LeadWithGeneratedContent;
 
       setLead(updatedLead);
-      setButtonColor(updatedLead.design?.buttonColor || DEFAULT_BUTTON_COLOR);
-      setAccentTextColor(
-        updatedLead.design?.accentTextColor || DEFAULT_ACCENT_TEXT_COLOR
-      );
+      const siteDesign = getLeadSiteDesign(updatedLead);
+      setButtonColor(siteDesign.buttonColor);
+      setButtonTextColor(siteDesign.buttonTextColor);
+      setHeroAccentColor(siteDesign.heroAccentColor);
+      setBodyAccentColor(siteDesign.bodyAccentColor);
+      setServiceAreaCardColor(siteDesign.serviceAreaCardColor);
+      setFooterBackgroundColor(siteDesign.footerBackgroundColor);
       setSiteDesignNotice(
         data.generatedSite
           ? "Design saved and preview updated."
@@ -1908,7 +1997,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 </button>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <label className="grid gap-2 text-sm font-bold text-slate-300">
                   Button colour
                   <div className="flex items-center gap-3">
@@ -1936,31 +2025,151 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 </label>
 
                 <label className="grid gap-2 text-sm font-bold text-slate-300">
-                  Accent text colour
+                  Button text colour
                   <div className="flex items-center gap-3">
                     <input
                       type="color"
                       value={
-                        isHexColor(accentTextColor)
-                          ? accentTextColor
-                          : DEFAULT_ACCENT_TEXT_COLOR
+                        isHexColor(buttonTextColor)
+                          ? buttonTextColor
+                          : DEFAULT_BUTTON_TEXT_COLOR
                       }
                       onChange={(event) => {
-                        setAccentTextColor(event.target.value);
+                        setButtonTextColor(event.target.value);
                         setSiteDesignNotice("");
                         setSiteDesignError("");
                       }}
                       className="h-11 w-16 cursor-pointer rounded-lg border border-white/10 bg-slate-900 p-1"
                     />
                     <input
-                      value={accentTextColor}
+                      value={buttonTextColor}
                       onChange={(event) => {
-                        setAccentTextColor(event.target.value);
+                        setButtonTextColor(event.target.value);
                         setSiteDesignNotice("");
                         setSiteDesignError("");
                       }}
                       className="min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none"
-                      placeholder={DEFAULT_ACCENT_TEXT_COLOR}
+                      placeholder={DEFAULT_BUTTON_TEXT_COLOR}
+                    />
+                  </div>
+                </label>
+
+                <label className="grid gap-2 text-sm font-bold text-slate-300">
+                  Hero coloured text
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="color"
+                      value={
+                        isHexColor(heroAccentColor)
+                          ? heroAccentColor
+                          : DEFAULT_HERO_ACCENT_COLOR
+                      }
+                      onChange={(event) => {
+                        setHeroAccentColor(event.target.value);
+                        setSiteDesignNotice("");
+                        setSiteDesignError("");
+                      }}
+                      className="h-11 w-16 cursor-pointer rounded-lg border border-white/10 bg-slate-900 p-1"
+                    />
+                    <input
+                      value={heroAccentColor}
+                      onChange={(event) => {
+                        setHeroAccentColor(event.target.value);
+                        setSiteDesignNotice("");
+                        setSiteDesignError("");
+                      }}
+                      className="min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none"
+                      placeholder={DEFAULT_HERO_ACCENT_COLOR}
+                    />
+                  </div>
+                </label>
+
+                <label className="grid gap-2 text-sm font-bold text-slate-300">
+                  Site body coloured text
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="color"
+                      value={
+                        isHexColor(bodyAccentColor)
+                          ? bodyAccentColor
+                          : DEFAULT_BODY_ACCENT_COLOR
+                      }
+                      onChange={(event) => {
+                        setBodyAccentColor(event.target.value);
+                        setSiteDesignNotice("");
+                        setSiteDesignError("");
+                      }}
+                      className="h-11 w-16 cursor-pointer rounded-lg border border-white/10 bg-slate-900 p-1"
+                    />
+                    <input
+                      value={bodyAccentColor}
+                      onChange={(event) => {
+                        setBodyAccentColor(event.target.value);
+                        setSiteDesignNotice("");
+                        setSiteDesignError("");
+                      }}
+                      className="min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none"
+                      placeholder={DEFAULT_BODY_ACCENT_COLOR}
+                    />
+                  </div>
+                </label>
+
+                <label className="grid gap-2 text-sm font-bold text-slate-300">
+                  Service Areas card
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="color"
+                      value={
+                        isHexColor(serviceAreaCardColor)
+                          ? serviceAreaCardColor
+                          : DEFAULT_SERVICE_AREA_CARD_COLOR
+                      }
+                      onChange={(event) => {
+                        setServiceAreaCardColor(event.target.value);
+                        setSiteDesignNotice("");
+                        setSiteDesignError("");
+                      }}
+                      className="h-11 w-16 cursor-pointer rounded-lg border border-white/10 bg-slate-900 p-1"
+                    />
+                    <input
+                      value={serviceAreaCardColor}
+                      onChange={(event) => {
+                        setServiceAreaCardColor(event.target.value);
+                        setSiteDesignNotice("");
+                        setSiteDesignError("");
+                      }}
+                      className="min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none"
+                      placeholder={DEFAULT_SERVICE_AREA_CARD_COLOR}
+                    />
+                  </div>
+                </label>
+
+                <label className="grid gap-2 text-sm font-bold text-slate-300">
+                  Footer background
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="color"
+                      value={
+                        isHexColor(footerBackgroundColor)
+                          ? footerBackgroundColor
+                          : DEFAULT_FOOTER_BACKGROUND_COLOR
+                      }
+                      onChange={(event) => {
+                        setFooterBackgroundColor(event.target.value);
+                        setSiteDesignNotice("");
+                        setSiteDesignError("");
+                      }}
+                      className="h-11 w-16 cursor-pointer rounded-lg border border-white/10 bg-slate-900 p-1"
+                    />
+                    <input
+                      value={footerBackgroundColor}
+                      onChange={(event) => {
+                        setFooterBackgroundColor(event.target.value);
+                        setSiteDesignNotice("");
+                        setSiteDesignError("");
+                      }}
+                      className="min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none"
+                      placeholder={DEFAULT_FOOTER_BACKGROUND_COLOR}
                     />
                   </div>
                 </label>
@@ -1968,11 +2177,14 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
 
               <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
                 <span
-                  className="rounded-lg px-3 py-2 font-bold text-white"
+                  className="rounded-lg px-3 py-2 font-bold"
                   style={{
                     backgroundColor: isHexColor(buttonColor)
                       ? buttonColor
                       : DEFAULT_BUTTON_COLOR,
+                    color: isHexColor(buttonTextColor)
+                      ? buttonTextColor
+                      : DEFAULT_BUTTON_TEXT_COLOR,
                   }}
                 >
                   CTA preview
@@ -1980,12 +2192,42 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 <span
                   className="font-bold"
                   style={{
-                    color: isHexColor(accentTextColor)
-                      ? accentTextColor
-                      : DEFAULT_ACCENT_TEXT_COLOR,
+                    color: isHexColor(heroAccentColor)
+                      ? heroAccentColor
+                      : DEFAULT_HERO_ACCENT_COLOR,
                   }}
                 >
-                  Accent text preview
+                  Hero accent
+                </span>
+                <span
+                  className="font-bold"
+                  style={{
+                    color: isHexColor(bodyAccentColor)
+                      ? bodyAccentColor
+                      : DEFAULT_BODY_ACCENT_COLOR,
+                  }}
+                >
+                  Body accent
+                </span>
+                <span
+                  className="rounded-lg px-3 py-2 font-bold text-white"
+                  style={{
+                    backgroundColor: isHexColor(serviceAreaCardColor)
+                      ? serviceAreaCardColor
+                      : DEFAULT_SERVICE_AREA_CARD_COLOR,
+                  }}
+                >
+                  Service Areas
+                </span>
+                <span
+                  className="rounded-lg px-3 py-2 font-bold text-white"
+                  style={{
+                    backgroundColor: isHexColor(footerBackgroundColor)
+                      ? footerBackgroundColor
+                      : DEFAULT_FOOTER_BACKGROUND_COLOR,
+                  }}
+                >
+                  Footer
                 </span>
               </div>
 
