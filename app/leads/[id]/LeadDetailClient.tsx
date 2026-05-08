@@ -1997,10 +1997,10 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 </button>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                <label className="grid gap-2 text-sm font-bold text-slate-300">
+              <div className="grid w-full gap-4 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
+                <label className="grid w-full min-w-0 gap-1.5 text-sm font-bold text-slate-300">
                   Button colour
-                  <div className="flex items-center gap-3">
+                  <div className="flex w-full min-w-0 items-center gap-2.5">
                     <input
                       type="color"
                       value={isHexColor(buttonColor) ? buttonColor : DEFAULT_BUTTON_COLOR}
@@ -2009,7 +2009,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                         setSiteDesignNotice("");
                         setSiteDesignError("");
                       }}
-                      className="h-11 w-16 cursor-pointer rounded-lg border border-white/10 bg-slate-900 p-1"
+                      className="h-11 w-16 flex-none cursor-pointer rounded-lg border border-white/10 bg-slate-900 p-1"
                     />
                     <input
                       value={buttonColor}
@@ -2018,15 +2018,15 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                         setSiteDesignNotice("");
                         setSiteDesignError("");
                       }}
-                      className="min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none"
+                      className="w-full min-w-0 rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none"
                       placeholder={DEFAULT_BUTTON_COLOR}
                     />
                   </div>
                 </label>
 
-                <label className="grid gap-2 text-sm font-bold text-slate-300">
+                <label className="grid w-full min-w-0 gap-1.5 text-sm font-bold text-slate-300">
                   Button text colour
-                  <div className="flex items-center gap-3">
+                  <div className="flex w-full min-w-0 items-center gap-2.5">
                     <input
                       type="color"
                       value={
@@ -2039,7 +2039,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                         setSiteDesignNotice("");
                         setSiteDesignError("");
                       }}
-                      className="h-11 w-16 cursor-pointer rounded-lg border border-white/10 bg-slate-900 p-1"
+                      className="h-11 w-16 flex-none cursor-pointer rounded-lg border border-white/10 bg-slate-900 p-1"
                     />
                     <input
                       value={buttonTextColor}
@@ -2048,15 +2048,15 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                         setSiteDesignNotice("");
                         setSiteDesignError("");
                       }}
-                      className="min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none"
+                      className="w-full min-w-0 rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none"
                       placeholder={DEFAULT_BUTTON_TEXT_COLOR}
                     />
                   </div>
                 </label>
 
-                <label className="grid gap-2 text-sm font-bold text-slate-300">
+                <label className="grid w-full min-w-0 gap-1.5 text-sm font-bold text-slate-300">
                   Hero coloured text
-                  <div className="flex items-center gap-3">
+                  <div className="flex w-full min-w-0 items-center gap-2.5">
                     <input
                       type="color"
                       value={
@@ -2069,7 +2069,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                         setSiteDesignNotice("");
                         setSiteDesignError("");
                       }}
-                      className="h-11 w-16 cursor-pointer rounded-lg border border-white/10 bg-slate-900 p-1"
+                      className="h-11 w-16 flex-none cursor-pointer rounded-lg border border-white/10 bg-slate-900 p-1"
                     />
                     <input
                       value={heroAccentColor}
@@ -2078,15 +2078,15 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                         setSiteDesignNotice("");
                         setSiteDesignError("");
                       }}
-                      className="min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none"
+                      className="w-full min-w-0 rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none"
                       placeholder={DEFAULT_HERO_ACCENT_COLOR}
                     />
                   </div>
                 </label>
 
-                <label className="grid gap-2 text-sm font-bold text-slate-300">
+                <label className="grid w-full min-w-0 gap-1.5 text-sm font-bold text-slate-300">
                   Site body coloured text
-                  <div className="flex items-center gap-3">
+                  <div className="flex w-full min-w-0 items-center gap-2.5">
                     <input
                       type="color"
                       value={
@@ -2099,7 +2099,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                         setSiteDesignNotice("");
                         setSiteDesignError("");
                       }}
-                      className="h-11 w-16 cursor-pointer rounded-lg border border-white/10 bg-slate-900 p-1"
+                      className="h-11 w-16 flex-none cursor-pointer rounded-lg border border-white/10 bg-slate-900 p-1"
                     />
                     <input
                       value={bodyAccentColor}
@@ -2108,15 +2108,15 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                         setSiteDesignNotice("");
                         setSiteDesignError("");
                       }}
-                      className="min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none"
+                      className="w-full min-w-0 rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none"
                       placeholder={DEFAULT_BODY_ACCENT_COLOR}
                     />
                   </div>
                 </label>
 
-                <label className="grid gap-2 text-sm font-bold text-slate-300">
+                <label className="grid w-full min-w-0 gap-1.5 text-sm font-bold text-slate-300">
                   Service Areas card
-                  <div className="flex items-center gap-3">
+                  <div className="flex w-full min-w-0 items-center gap-2.5">
                     <input
                       type="color"
                       value={
@@ -2129,7 +2129,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                         setSiteDesignNotice("");
                         setSiteDesignError("");
                       }}
-                      className="h-11 w-16 cursor-pointer rounded-lg border border-white/10 bg-slate-900 p-1"
+                      className="h-11 w-16 flex-none cursor-pointer rounded-lg border border-white/10 bg-slate-900 p-1"
                     />
                     <input
                       value={serviceAreaCardColor}
@@ -2138,15 +2138,15 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                         setSiteDesignNotice("");
                         setSiteDesignError("");
                       }}
-                      className="min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none"
+                      className="w-full min-w-0 rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none"
                       placeholder={DEFAULT_SERVICE_AREA_CARD_COLOR}
                     />
                   </div>
                 </label>
 
-                <label className="grid gap-2 text-sm font-bold text-slate-300">
+                <label className="grid w-full min-w-0 gap-1.5 text-sm font-bold text-slate-300">
                   Footer background
-                  <div className="flex items-center gap-3">
+                  <div className="flex w-full min-w-0 items-center gap-2.5">
                     <input
                       type="color"
                       value={
@@ -2159,7 +2159,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                         setSiteDesignNotice("");
                         setSiteDesignError("");
                       }}
-                      className="h-11 w-16 cursor-pointer rounded-lg border border-white/10 bg-slate-900 p-1"
+                      className="h-11 w-16 flex-none cursor-pointer rounded-lg border border-white/10 bg-slate-900 p-1"
                     />
                     <input
                       value={footerBackgroundColor}
@@ -2168,7 +2168,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                         setSiteDesignNotice("");
                         setSiteDesignError("");
                       }}
-                      className="min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none"
+                      className="w-full min-w-0 rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none"
                       placeholder={DEFAULT_FOOTER_BACKGROUND_COLOR}
                     />
                   </div>
