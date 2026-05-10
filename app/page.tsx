@@ -8,6 +8,7 @@ import {
 } from "./lib/leadTargeting/cities";
 import { TRADE_TARGETS } from "./lib/leadTargeting/trades";
 import type { Lead, LeadStatus, WebsiteEvaluation } from "./lib/leads";
+import { CALLBOOST_MONTHLY_RECURRING_REVENUE } from "./lib/pricing";
 
 type LeadPriority = "high" | "medium" | "low";
 type WebsiteStatus = "no_website" | "weak_website" | "has_website";
@@ -723,7 +724,7 @@ export default function DashboardPage() {
 
     return {
       activeClients: payingClients.length,
-      mrr: payingClients.length * 99,
+      mrr: payingClients.length * CALLBOOST_MONTHLY_RECURRING_REVENUE,
     };
   }, [clientRevenueLeads]);
 
@@ -968,7 +969,11 @@ export default function DashboardPage() {
               MRR
             </p>
             <p className="mt-1 text-2xl font-black">
-              ${revenueSummary.mrr.toLocaleString()}
+              $
+              {revenueSummary.mrr.toLocaleString(undefined, {
+                maximumFractionDigits: 2,
+                minimumFractionDigits: 2,
+              })}
             </p>
             <p className="mt-1 text-xs font-bold text-green-200/80">
               Active Clients: {revenueSummary.activeClients}

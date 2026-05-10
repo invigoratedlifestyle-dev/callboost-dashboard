@@ -1,4 +1,8 @@
 import Link from "next/link";
+import {
+  CALLBOOST_MONTHLY_RECURRING_LABEL,
+  CALLBOOST_SETUP_FEE_LABEL,
+} from "../../lib/pricing";
 
 const trades = [
   "Plumbers",
@@ -105,7 +109,7 @@ export default function MarketingPage() {
               </div>
               <div className="rounded-lg bg-white/10 p-4">
                 <p className="text-sm font-bold text-white">
-                  Hosting and support
+                  Managed hosting & support
                 </p>
                 <p className="mt-1 text-sm text-slate-400">
                   Your site stays online and managed.
@@ -113,9 +117,11 @@ export default function MarketingPage() {
               </div>
             </div>
             <div className="mt-5 rounded-lg bg-blue-600 p-4">
-              <p className="text-3xl font-black">$99 setup</p>
+              <p className="text-3xl font-black">
+                {CALLBOOST_SETUP_FEE_LABEL} setup
+              </p>
               <p className="mt-1 text-sm font-bold text-blue-100">
-                then $99/month
+                then {CALLBOOST_MONTHLY_RECURRING_LABEL}
               </p>
             </div>
           </div>
@@ -172,8 +178,8 @@ export default function MarketingPage() {
                 Ready for a website customers can actually use?
               </h2>
               <p className="mt-3 max-w-2xl text-slate-300">
-                Start with a one-time $99 setup, then $99/month for hosting,
-                support, and basic updates.
+                Start with a one-time $199.95 setup, then $49.95/month for
+                managed hosting & support and basic updates.
               </p>
             </div>
             <Link

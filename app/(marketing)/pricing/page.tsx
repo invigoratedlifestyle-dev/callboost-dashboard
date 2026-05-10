@@ -1,4 +1,8 @@
 import Link from "next/link";
+import {
+  CALLBOOST_MONTHLY_RECURRING_LABEL,
+  CALLBOOST_SETUP_FEE_LABEL,
+} from "../../lib/pricing";
 
 const included = [
   "Website setup",
@@ -6,14 +10,14 @@ const included = [
   "Hosted website",
   "Enquiry/callback form",
   "Basic updates",
-  "Ongoing hosting/support",
+  "Managed hosting & support",
   "Domain setup handled for you",
 ];
 
 export const metadata = {
   title: "Pricing | CallBoost",
   description:
-    "CallBoost Website pricing: $99 setup and $99/month for a hosted trade business website.",
+    "CallBoost Website pricing: $199.95 setup and $49.95/month for a managed business website.",
 };
 
 export default function PricingPage() {
@@ -52,9 +56,11 @@ export default function PricingPage() {
               </p>
               <h2 className="mt-3 text-3xl font-black">CallBoost Website</h2>
               <div className="mt-6 rounded-xl border border-blue-400/20 bg-slate-900 p-5">
-                <p className="text-4xl font-black">$99 setup</p>
+                <p className="text-4xl font-black">
+                  {CALLBOOST_SETUP_FEE_LABEL} setup
+                </p>
                 <p className="mt-2 text-2xl font-black text-blue-300">
-                  $99/month
+                  {CALLBOOST_MONTHLY_RECURRING_LABEL}
                 </p>
               </div>
               <Link
@@ -64,7 +70,8 @@ export default function PricingPage() {
                 Get started
               </Link>
               <p className="mt-3 text-sm text-slate-500">
-                Stripe checkout will be connected later.
+                Stripe checkout includes a $199.95 setup fee and $49.95/month
+                recurring managed hosting & support.
               </p>
             </div>
 

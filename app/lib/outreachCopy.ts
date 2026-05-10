@@ -1,5 +1,6 @@
 import type { Lead } from "./leads";
 import { appendOptOut } from "./smsOptOut";
+import { CALLBOOST_PRICE_SUMMARY } from "./pricing";
 
 type OutreachLead = Pick<
   Lead,
@@ -164,9 +165,9 @@ export function buildInterestedReplySms(
   return appendOptOut([
     "Glad you like it 👍",
     "",
-    "It's $99 setup + $99/month ongoing.",
+    `It's ${CALLBOOST_PRICE_SUMMARY}.`,
     "",
-    "I handle everything including domain setup, hosting, updates and any small changes needed.",
+    "I handle everything including domain setup, managed hosting & support, updates and any small changes needed.",
     "",
     "If you'd like to go ahead, I can send through the payment link and get everything set up for you.",
     "",
@@ -191,9 +192,9 @@ export function buildInterestedReplyEmail(
   const lines = [
     "Glad you like it.",
     "",
-    "It's $99 setup + $99/month ongoing.",
+    `It's ${CALLBOOST_PRICE_SUMMARY}.`,
     "",
-    `I handle everything including domain setup, hosting, updates and any small changes needed for ${websiteNoun}.`,
+    `I handle everything including domain setup, managed hosting & support, updates and any small changes needed for ${websiteNoun}.`,
     "",
   ];
 

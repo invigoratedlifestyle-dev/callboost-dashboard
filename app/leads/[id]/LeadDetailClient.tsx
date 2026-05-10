@@ -11,6 +11,7 @@ import type {
   WebsiteEvaluation,
 } from "../../lib/leads";
 import { hasUsableFollowUpContact } from "../../lib/contactMethods";
+import { CALLBOOST_CHECKOUT_SUMMARY } from "../../lib/pricing";
 import {
   buildFollowUpBody,
   getFollowUpDestination,
@@ -2539,6 +2540,9 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 <p className="mb-2 text-sm font-bold text-green-300">
                   Payment Link URL
                 </p>
+                <p className="mb-3 text-sm text-green-100">
+                  Checkout summary: {CALLBOOST_CHECKOUT_SUMMARY}.
+                </p>
                 <a
                   href={brandedPaymentUrl || checkoutUrl}
                   target="_blank"
@@ -2775,13 +2779,21 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
           ) : null}
 
           {brandedPaymentUrl ? (
-            <a
-              href={brandedPaymentUrl}
-              target="_blank"
-              className="mb-4 block break-all text-sm text-blue-300 hover:text-blue-200"
-            >
-              {brandedPaymentUrl}
-            </a>
+            <div className="mb-4 rounded-xl border border-green-400/20 bg-green-500/10 p-4">
+              <p className="mb-2 text-sm font-bold text-green-300">
+                Checkout summary
+              </p>
+              <p className="mb-3 text-sm text-green-100">
+                {CALLBOOST_CHECKOUT_SUMMARY}.
+              </p>
+              <a
+                href={brandedPaymentUrl}
+                target="_blank"
+                className="block break-all text-sm text-blue-300 hover:text-blue-200"
+              >
+                {brandedPaymentUrl}
+              </a>
+            </div>
           ) : null}
 
           <div className="flex flex-wrap gap-3">

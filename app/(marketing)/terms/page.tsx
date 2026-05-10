@@ -11,11 +11,11 @@ const terms = [
   },
   {
     title: "Fees",
-    copy: "Customers pay a setup fee and an ongoing monthly fee. The standard offer is $99 setup and $99 per month unless a different written agreement applies.",
+    copy: "Customers pay a setup fee and an ongoing monthly fee. The standard offer is $199.95 setup and $49.95 per month unless a different written agreement applies.",
   },
   {
     title: "Payment",
-    copy: "The monthly fee covers ongoing hosting, support, and basic updates. Service can be suspended for failed payment until the account is brought up to date.",
+    copy: "The monthly fee covers managed hosting & support and basic updates. Service can be suspended for failed payment until the account is brought up to date.",
   },
   {
     title: "Customer information",
