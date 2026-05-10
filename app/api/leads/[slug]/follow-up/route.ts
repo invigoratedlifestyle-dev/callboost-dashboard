@@ -105,6 +105,7 @@ export async function POST(
     const { channel, to } = destination;
     const subject = channel === "email" ? "Quick follow-up from CallBoost" : "";
     const followUpBody = buildFollowUpBody(stage, leadName, {
+      businessName: getString(lead.businessName),
       channel,
       previewUrl: getPreviewUrl(lead, new URL(req.url).origin),
     });

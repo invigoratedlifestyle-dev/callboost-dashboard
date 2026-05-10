@@ -3,6 +3,10 @@ import {
   getUsableAustralianMobile,
   getUsableEmail,
 } from "./contactMethods";
+import {
+  CALLBOOST_MONTHLY_RECURRING_LABEL,
+  CALLBOOST_SETUP_FEE_LABEL,
+} from "./pricing";
 
 export type FollowUpStage = 1 | 2 | 3;
 export type FollowUpChannel = "sms" | "email";
@@ -53,11 +57,14 @@ export function buildFollowUpBody(
   stage: FollowUpStage,
   name: string,
   args: {
+    businessName?: string | null;
     channel?: FollowUpChannel;
     previewUrl?: string | null;
   } = {}
 ) {
   const firstName = getLeadFirstName(name);
+  const businessName = (args.businessName || "").trim();
+  const stageTwoName = businessName || name.trim() || "there";
   const previewUrl = (args.previewUrl || "").trim();
 
   if (stage === 1) {
@@ -98,7 +105,23 @@ CallBoost Tasmania`;
   }
 
   if (stage === 2) {
-    return `Hey ${firstName}, no worries if now isn't the right time — just wanted to check if you wanted me to keep the preview live for you?`;
+    return `Hey ${stageTwoName},
+
+Just checking in regarding the website preview I put together for you.
+
+A lot of local customers now search online before calling, so even a simple professional website can make a big difference in trust and enquiries.
+
+Your preview is still live at the moment:
+
+${previewUrl}
+
+I’ll likely remove inactive previews soon as I continue building sites for other local businesses.
+
+If you'd like me to keep it active or make any changes, just reply here and I can sort it out for you.
+
+The full setup is ${CALLBOOST_SETUP_FEE_LABEL} with ongoing managed hosting & support at ${CALLBOOST_MONTHLY_RECURRING_LABEL}.
+
+Happy to make adjustments if there’s anything you’d like changed.`;
   }
 
   return `Last one from me — I'll leave this for now, but if you want the website preview switched on later just reply here 👍`;

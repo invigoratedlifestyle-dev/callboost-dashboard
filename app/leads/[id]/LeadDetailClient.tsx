@@ -1398,6 +1398,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
 
     const leadName = lead.name || lead.businessName || "";
     const followUpBody = buildFollowUpBody(stage, leadName, {
+      businessName: lead.businessName,
       channel: destination.channel,
       previewUrl: getPreviewUrl(lead),
     });
