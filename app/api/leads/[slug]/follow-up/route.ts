@@ -4,6 +4,7 @@ import {
   getFollowUpDestination,
   getLatestOutboundMessageChannel,
 } from "../../../../lib/followUps";
+import { appendEmailUnsubscribeFooter } from "../../../../lib/emailUnsubscribe";
 import { sendEmail, sendSms } from "../../../../lib/outboundMessages";
 import { getPreviewUrl } from "../../../../lib/previewUrls";
 import { appendOptOut } from "../../../../lib/smsOptOut";
@@ -110,7 +111,9 @@ export async function POST(
       previewUrl: getPreviewUrl(lead, new URL(req.url).origin),
     });
     const messageBody =
-      channel === "sms" ? appendOptOut(followUpBody) : followUpBody;
+      channel === "sms"
+        ? appendOptOut(followUpBody)
+        : appendEmailUnsubscribeFooter(followUpBody);
     let fromAddress = "";
     let providerMessageId = "";
     const provider = channel === "sms" ? "twilio" : "resend";

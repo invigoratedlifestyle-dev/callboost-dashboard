@@ -234,7 +234,7 @@ export async function listUnreadReplyNotifications(limit = 20) {
   const supabase = getSupabaseAdmin();
   const { data: messages, error } = await supabase
     .from("lead_messages")
-    .select("id, lead_id, slug, channel, body, subject, created_at")
+    .select("id, lead_id, slug, channel, body, subject, metadata, created_at")
     .eq("direction", "inbound")
     .is("read_at", null)
     .order("created_at", { ascending: false })
@@ -242,7 +242,9 @@ export async function listUnreadReplyNotifications(limit = 20) {
 
   if (error) throw error;
 
-  const messageRows = (messages || []) as LeadMessageRow[];
+  const messageRows = ((messages || []) as LeadMessageRow[]).filter(
+    (message) => message.metadata?.reason !== "email_unsubscribe"
+  );
   const leadIds = Array.from(
     new Set(
       messageRows

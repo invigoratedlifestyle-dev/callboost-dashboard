@@ -1,4 +1,5 @@
 import type { Lead } from "./leads";
+import { appendEmailUnsubscribeFooter } from "./emailUnsubscribe";
 import { appendOptOut } from "./smsOptOut";
 import { CALLBOOST_PRICE_SUMMARY } from "./pricing";
 
@@ -154,7 +155,9 @@ export function buildOpportunityEmail(
   lead: OutreachLead,
   previewUrl: string
 ) {
-  return buildInitialOpportunityOutreachLines(lead, previewUrl).join("\n");
+  return appendEmailUnsubscribeFooter(
+    buildInitialOpportunityOutreachLines(lead, previewUrl).join("\n")
+  );
 }
 
 export function buildInterestedReplySms(
@@ -210,7 +213,7 @@ export function buildInterestedReplyEmail(
     "CallBoost"
   );
 
-  return lines.join("\n");
+  return appendEmailUnsubscribeFooter(lines.join("\n"));
 }
 
 export function buildPaymentSms(paymentLink: string) {
@@ -227,7 +230,7 @@ export function buildPaymentEmailSubject() {
 }
 
 export function buildPaymentEmail(paymentLink: string) {
-  return [
+  return appendEmailUnsubscribeFooter([
     "Perfect - here's the secure payment link to get started:",
     "",
     paymentLink,
@@ -236,5 +239,5 @@ export function buildPaymentEmail(paymentLink: string) {
     "",
     "Thanks,",
     "Jamie",
-  ].join("\n");
+  ].join("\n"));
 }

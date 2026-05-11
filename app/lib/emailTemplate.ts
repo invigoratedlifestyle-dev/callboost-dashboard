@@ -1,4 +1,5 @@
 import type { Lead } from "./leads";
+import { appendEmailUnsubscribeFooter } from "./emailUnsubscribe";
 
 function slugify(value: string) {
   return value
@@ -101,7 +102,7 @@ export function generateOfferEmail(lead: Lead) {
   const websiteEvaluation = lead.websiteEvaluation;
 
   if (websiteEvaluation?.quality === "none") {
-    return `Hey ${lead.businessName},
+    return appendEmailUnsubscribeFooter(`Hey ${lead.businessName},
 
 I couldn't find a proper website for your business, so I put together a quick preview for you:
 
@@ -111,12 +112,12 @@ It's designed to help you get more calls from people searching locally.
 
 If you like it, I can set it up properly for you.
 
-- Jamie`;
+- Jamie`);
   }
 
   const issueBullets = getIssueBullets(websiteEvaluation?.issues);
 
-  return `Hey ${lead.businessName},
+  return appendEmailUnsubscribeFooter(`Hey ${lead.businessName},
 
 I took a quick look at your website and noticed a couple of things that might be costing you calls:
 
@@ -129,5 +130,5 @@ It's designed to make it easier for people to call you quickly from mobile.
 
 If you like it, I can set it up properly for you.
 
-- Jamie`;
+- Jamie`);
 }

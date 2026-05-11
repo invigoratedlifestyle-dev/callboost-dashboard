@@ -11,6 +11,7 @@ import type {
   WebsiteEvaluation,
 } from "../../lib/leads";
 import { hasUsableFollowUpContact } from "../../lib/contactMethods";
+import { appendEmailUnsubscribeFooter } from "../../lib/emailUnsubscribe";
 import { CALLBOOST_CHECKOUT_SUMMARY } from "../../lib/pricing";
 import {
   buildFollowUpBody,
@@ -1402,6 +1403,10 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       channel: destination.channel,
       previewUrl: getPreviewUrl(lead),
     });
+    const composerFollowUpBody =
+      destination.channel === "email"
+        ? appendEmailUnsubscribeFooter(followUpBody)
+        : followUpBody;
 
     setOutreachChannel(destination.channel);
     setPendingFollowUpMetadata({
@@ -1412,12 +1417,12 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
 
     if (destination.channel === "sms") {
       setSmsTo(destination.to);
-      setSmsBody(followUpBody);
+      setSmsBody(composerFollowUpBody);
       setSmsBodyEdited(true);
     } else {
       setEmailTo(destination.to);
       setEmailSubject("Quick follow-up from CallBoost");
-      setEmailOfferBody(followUpBody);
+      setEmailOfferBody(composerFollowUpBody);
       setEmailSubjectEdited(true);
       setEmailBodyEdited(true);
     }

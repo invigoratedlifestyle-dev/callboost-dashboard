@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { isEmailUnsubscribeIntent } from "../../../lib/emailUnsubscribe";
 import {
   insertLeadMessage,
   listRecentOutboundEmailMessages,
@@ -8,6 +9,7 @@ import {
   listLeadRows,
   rowToLead,
   type LeadRow,
+  updateLeadStatusBySlug,
 } from "../../../lib/supabase/leads";
 
 type InboundEmailMatch = {
@@ -223,6 +225,7 @@ export async function POST(req: Request) {
     const rawBody =
       fullEmail?.text?.trim() || stripHtml(fullEmail?.html || "") || "";
     const body = cleanReplyBody(rawBody) || "(No message body)";
+    const isUnsubscribe = isEmailUnsubscribeIntent({ subject, body });
 
     if (body === "(No message body)") {
       console.log("No inbound email body field found", { emailId });
@@ -262,7 +265,44 @@ export async function POST(req: Request) {
       status: "received",
       provider: "resend",
       providerMessageId: getString(data.message_id || emailId),
+      metadata: isUnsubscribe
+        ? {
+            reason: "email_unsubscribe",
+            emailUnsubscribe: true,
+            action: "archived_on_email_unsubscribe",
+          }
+        : undefined,
     });
+
+    if (isUnsubscribe) {
+      console.log("Inbound email unsubscribe detected", {
+        from,
+        leadId: match.leadId,
+        slug: match.slug,
+      });
+
+      if (!match.slug) {
+        console.log(
+          "Inbound email unsubscribe archive skipped: matched lead has no slug",
+          {
+            from,
+            leadId: match.leadId,
+          }
+        );
+        return new Response("ok", { status: 200 });
+      }
+
+      try {
+        await updateLeadStatusBySlug(match.slug, "archived");
+      } catch (archiveError) {
+        console.error("Inbound email unsubscribe archive update failed", {
+          from,
+          leadId: match.leadId,
+          slug: match.slug,
+          error: archiveError,
+        });
+      }
+    }
 
     return new Response("ok", { status: 200 });
   } catch (error) {

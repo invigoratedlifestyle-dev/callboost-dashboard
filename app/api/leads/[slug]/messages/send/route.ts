@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import Twilio from "twilio";
+import { appendEmailUnsubscribeFooter } from "../../../../../lib/emailUnsubscribe";
 import { appendOptOut } from "../../../../../lib/smsOptOut";
 import { insertLeadMessage } from "../../../../../lib/supabase/leadMessages";
 import {
@@ -146,7 +147,9 @@ export async function POST(
     const messageBody = getString(body.body);
     const metadata = getSafeMessageMetadata(body.metadata);
     const outboundBody =
-      channel === "sms" ? appendOptOut(messageBody) : messageBody;
+      channel === "sms"
+        ? appendOptOut(messageBody)
+        : appendEmailUnsubscribeFooter(messageBody);
 
     if (!isChannel(channel)) {
       return NextResponse.json({ error: "Invalid channel" }, { status: 400 });
@@ -171,7 +174,7 @@ export async function POST(
       );
     }
 
-    if (!outboundBody) {
+    if (!messageBody) {
       return NextResponse.json(
         { error: "Message body is required" },
         { status: 400 }
