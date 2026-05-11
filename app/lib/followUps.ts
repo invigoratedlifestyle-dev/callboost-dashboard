@@ -68,6 +68,18 @@ function cleanIssue(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function isPlaceholderWebsiteIssue(issue: string) {
+  const normalizedIssue = issue
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return /^(no|missing)\s+(current\s+)?(website|site)\s+(found|detected)?$/.test(
+    normalizedIssue
+  ) || /^(website|site)\s+(not\s+found|missing)$/.test(normalizedIssue);
+}
+
 function humanizeWebsiteOpportunityIssue(issue: string) {
   const lowerIssue = issue.toLowerCase();
 
@@ -150,6 +162,7 @@ function getWebsiteOpportunityIssues(args: {
   return rawIssues
     .map(cleanIssue)
     .filter(Boolean)
+    .filter((issue) => !isPlaceholderWebsiteIssue(issue))
     .map(humanizeWebsiteOpportunityIssue)
     .filter((issue) => {
       const key = issue.toLowerCase();
