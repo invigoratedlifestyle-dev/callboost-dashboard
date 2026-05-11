@@ -9,6 +9,7 @@ import FaviconRefresh from "./FaviconRefresh";
 
 type GeneratedSitePageProps = {
   params: Promise<{ slug: string }>;
+  searchParams?: Promise<{ debugIcon?: string | string[] }>;
 };
 
 export const dynamic = "force-dynamic";
@@ -47,8 +48,10 @@ export async function generateMetadata({
 
 export default async function GeneratedSitePage({
   params,
+  searchParams,
 }: GeneratedSitePageProps) {
   const { slug } = await params;
+  const query = searchParams ? await searchParams : {};
 
   if (!/^[a-z0-9-]+$/i.test(slug)) {
     notFound();
@@ -66,6 +69,18 @@ export default async function GeneratedSitePage({
   }
 
   const siteIconUrl = getOuterSiteIconUrl(context);
+  const resolvedIconPath = `/sites/${encodeURIComponent(slug)}/icon`;
+  const resolvedAppleIconPath = `/sites/${encodeURIComponent(slug)}/apple-icon`;
+  const showIconDebug =
+    process.env.NODE_ENV === "development" || query.debugIcon === "1";
+  const faviconRefreshRendered = Boolean(siteIconUrl);
+
+  if (faviconRefreshRendered) {
+    console.log("SITES_FAVICON_REFRESH_RENDERED", {
+      slug,
+      siteIconUrl,
+    });
+  }
 
   return (
     <>
@@ -73,6 +88,33 @@ export default async function GeneratedSitePage({
         <FaviconRefresh iconUrl={siteIconUrl} />
       ) : null}
       <main className="min-h-screen bg-white">
+        {showIconDebug ? (
+          <aside className="fixed left-4 top-4 z-50 max-w-xl rounded-xl border border-slate-300 bg-white/95 p-4 text-xs text-slate-900 shadow-2xl">
+            <h1 className="mb-2 text-sm font-bold">Site Icon Debug</h1>
+            <dl className="grid gap-2">
+              <div>
+                <dt className="font-bold">resolved siteIconUrl</dt>
+                <dd className="break-all">{siteIconUrl || "none"}</dd>
+              </div>
+              <div>
+                <dt className="font-bold">resolved icon route</dt>
+                <dd className="break-all">{resolvedIconPath}</dd>
+              </div>
+              <div>
+                <dt className="font-bold">resolved apple icon route</dt>
+                <dd className="break-all">{resolvedAppleIconPath}</dd>
+              </div>
+              <div>
+                <dt className="font-bold">generated metadata icon URL</dt>
+                <dd className="break-all">{siteIconUrl || "none"}</dd>
+              </div>
+              <div>
+                <dt className="font-bold">FaviconRefresh rendered</dt>
+                <dd>{faviconRefreshRendered ? "yes" : "no"}</dd>
+              </div>
+            </dl>
+          </aside>
+        ) : null}
         <iframe
           title={`${String(lead.businessName || lead.name || slug)} website preview`}
           srcDoc={generatedSite.html}
