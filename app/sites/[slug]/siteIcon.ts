@@ -65,8 +65,8 @@ export function getOuterSiteIconUrl({
   }
 
   const version =
-    String(generatedSite?.updated_at || "").trim() ||
     String(lead.updatedAt || "").trim() ||
+    String(generatedSite?.updated_at || "").trim() ||
     String(generatedSite?.created_at || "").trim();
 
   return appendUrlVersion(String(lead.siteIconUrl), version);

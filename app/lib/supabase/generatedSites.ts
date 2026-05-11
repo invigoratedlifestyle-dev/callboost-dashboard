@@ -1129,7 +1129,9 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
   const hasSiteBranding = isValidHttpUrl(siteBrandingUrl);
   const siteIconUrl = getText(lead.siteIconUrl).trim();
   const siteIconVersion =
-    getText(lead.aiGeneratedAt).trim() || getText(lead.updatedAt).trim();
+    getText(lead.updatedAt).trim() ||
+    getText(lead.aiGeneratedAt).trim() ||
+    getText(lead.createdAt).trim();
   const siteIconHref = isValidHttpUrl(siteIconUrl)
     ? appendUrlVersion(siteIconUrl, siteIconVersion)
     : "";

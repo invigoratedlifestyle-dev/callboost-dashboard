@@ -91,8 +91,8 @@ export function rowToLead(row: LeadRow): LeadRecord {
           ? row.opportunity_score
           : data.leadScore,
     status,
-    createdAt: getString(data.createdAt) || getString(row.created_at),
-    updatedAt: getString(data.updatedAt) || getString(row.updated_at),
+    createdAt: getString(row.created_at) || getString(data.createdAt),
+    updatedAt: getString(row.updated_at) || getString(data.updatedAt),
     stripeCustomerId:
       getString(row.stripe_customer_id) || getString(data.stripeCustomerId),
     stripeCheckoutSessionId:
@@ -239,14 +239,19 @@ export async function insertLead(lead: LeadRecord) {
 
 export async function updateLeadBySlug(slug: string, lead: LeadRecord) {
   const supabase = getSupabaseAdmin();
+  const now = new Date().toISOString();
   const row = leadToRow({
     ...lead,
     slug,
     id: getString(lead.id) || slug,
+    updatedAt: now,
   });
   const { data, error } = await supabase
     .from("leads")
-    .update(row)
+    .update({
+      ...row,
+      updated_at: now,
+    })
     .eq("slug", slug)
     .select("*")
     .single();
