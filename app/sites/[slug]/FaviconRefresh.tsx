@@ -14,23 +14,18 @@ export default function FaviconRefresh({ iconUrl }: FaviconRefreshProps) {
   var iconUrl = ${JSON.stringify(iconUrl)};
   if (!/^https?:\\/\\//i.test(iconUrl)) return;
   var rels = ["icon", "shortcut icon", "apple-touch-icon"];
-  document
-    .querySelectorAll('link[rel~="icon"], link[rel="shortcut icon"], link[rel="apple-touch-icon"], link[href*="/favicon.ico"]')
-    .forEach(function (link) {
-      link.parentNode && link.parentNode.removeChild(link);
-    });
-  rels.forEach(function (rel) {
-    var link = document.createElement("link");
-    link.rel = rel;
-    link.href = iconUrl;
-    document.head.appendChild(link);
-  });
-  if (new URLSearchParams(window.location.search).get("debugIcon") === "1") {
+  var selector = 'link[rel~="icon"], link[rel="shortcut icon"], link[rel="apple-touch-icon"], link[href*="/favicon.ico"]';
+  var debugIcon = new URLSearchParams(window.location.search).get("debugIcon") === "1";
+
+  function getIconLinks() {
+    return Array.from(document.querySelectorAll(selector));
+  }
+
+  function logIconLinks() {
+    if (!debugIcon) return;
     console.log(
       "SITES_FAVICON_REFRESH_FINAL_LINKS",
-      Array.from(
-        document.querySelectorAll('link[rel~="icon"], link[rel="shortcut icon"], link[rel="apple-touch-icon"], link[href*="/favicon.ico"]')
-      ).map(function (link) {
+      getIconLinks().map(function (link) {
         return {
           rel: link.getAttribute("rel"),
           href: link.getAttribute("href"),
@@ -38,6 +33,43 @@ export default function FaviconRefresh({ iconUrl }: FaviconRefreshProps) {
       })
     );
   }
+
+  function refreshFaviconLinks() {
+    getIconLinks().forEach(function (link) {
+      link.parentNode && link.parentNode.removeChild(link);
+    });
+    rels.forEach(function (rel) {
+      var link = document.createElement("link");
+      link.rel = rel;
+      link.href = iconUrl;
+      document.head.appendChild(link);
+    });
+    logIconLinks();
+  }
+
+  refreshFaviconLinks();
+  requestAnimationFrame(refreshFaviconLinks);
+  setTimeout(refreshFaviconLinks, 250);
+  setTimeout(refreshFaviconLinks, 1000);
+
+  var observer = new MutationObserver(function (mutations) {
+    var shouldRefresh = mutations.some(function (mutation) {
+      return Array.from(mutation.addedNodes).some(function (node) {
+        return (
+          node instanceof HTMLLinkElement &&
+          typeof node.href === "string" &&
+          node.href.indexOf("/favicon.ico") !== -1
+        );
+      });
+    });
+
+    if (shouldRefresh) refreshFaviconLinks();
+  });
+
+  observer.observe(document.head, { childList: true });
+  setTimeout(function () {
+    observer.disconnect();
+  }, 2000);
 })();`;
 
   return (
