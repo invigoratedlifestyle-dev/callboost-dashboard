@@ -980,16 +980,12 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
   const reviewsHtml = reviews
     .map((review) => {
       const stars = renderStars(review.rating);
-      const time = review.relativeTimeDescription
-        ? `<small>${escapeHtml(review.relativeTimeDescription)}</small>`
-        : "";
 
       return `
         <article class="review-card">
           ${stars ? `<div class="stars">${stars}</div>` : ""}
           <p>"${escapeHtml(review.text)}"</p>
           <small>${escapeHtml(review.author)}</small>
-          ${time}
         </article>`;
     })
     .join("");
@@ -1105,7 +1101,7 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
     .trust-card h3 { color: var(--body-accent-color); }
     .review-summary { margin-bottom: 16px; color: var(--body-accent-color); font-weight: 950; text-align: center; }
     .stars { margin-bottom: 10px; color: #f59e0b; font-size: 17px; letter-spacing: 0; }
-    .review-card small { display: block; margin-top: 10px; color: #667085; font-weight: 800; }
+    .review-card small { display: block; margin-top: 12px; color: #667085; font-weight: 900; }
     .faq-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .faq-item { padding: 0; overflow: hidden; }
     .faq-item summary { cursor: pointer; padding: 19px 20px; color: #111827; font-size: 17px; font-weight: 950; list-style: none; }
