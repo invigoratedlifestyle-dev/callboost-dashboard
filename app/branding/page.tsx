@@ -23,12 +23,30 @@ type Lead = {
   siteBrandingUrl?: string | null;
   heroImageUrl?: string | null;
   siteIconUrl?: string | null;
+  design?: SiteDesignColours;
+  generated_site_design?: {
+    button_color?: string;
+    button_text_color?: string;
+    hero_accent_color?: string;
+    body_accent_color?: string;
+    service_area_card_color?: string;
+    footer_background_color?: string;
+  };
   status?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
 };
 
-type WorkflowKey = "navigation" | "hero" | "icon";
+type WorkflowKey = "navigation" | "hero" | "icon" | "design";
+
+type SiteDesignColours = {
+  buttonColor?: string;
+  buttonTextColor?: string;
+  heroAccentColor?: string;
+  bodyAccentColor?: string;
+  serviceAreaCardColor?: string;
+  footerBackgroundColor?: string;
+};
 
 type WorkflowState = {
   file: File | null;
@@ -76,6 +94,7 @@ const workflowLabels: Record<WorkflowKey, string> = {
   navigation: "Navigation Branding",
   hero: "Hero Image Cleanup",
   icon: "Site Icon",
+  design: "Design Colours",
 };
 
 const selectableLeadStatuses = new Set(["lead", "contacted", "client"]);
@@ -214,6 +233,43 @@ function getSiteIconSource(args: {
   return null;
 }
 
+function isHexColor(value: unknown) {
+  return typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value);
+}
+
+function getCurrentDesignColours(lead?: Lead | null): Required<SiteDesignColours> {
+  const design = lead?.design || {};
+  const generatedDesign = lead?.generated_site_design || {};
+
+  return {
+    buttonColor:
+      design.buttonColor || generatedDesign.button_color || "#14b8a6",
+    buttonTextColor:
+      design.buttonTextColor || generatedDesign.button_text_color || "#ffffff",
+    heroAccentColor:
+      design.heroAccentColor || generatedDesign.hero_accent_color || "#a7f3d0",
+    bodyAccentColor:
+      design.bodyAccentColor || generatedDesign.body_accent_color || "#0f766e",
+    serviceAreaCardColor:
+      design.serviceAreaCardColor ||
+      generatedDesign.service_area_card_color ||
+      "#0f766e",
+    footerBackgroundColor:
+      design.footerBackgroundColor ||
+      generatedDesign.footer_background_color ||
+      "#0b1220",
+  };
+}
+
+const designColourLabels: Array<[keyof Required<SiteDesignColours>, string]> = [
+  ["buttonColor", "Button"],
+  ["buttonTextColor", "Button Text"],
+  ["heroAccentColor", "Hero Accent"],
+  ["bodyAccentColor", "Body Accent"],
+  ["serviceAreaCardColor", "Service Areas Card"],
+  ["footerBackgroundColor", "Footer Background"],
+];
+
 function FieldLabel({
   children,
   label,
@@ -302,6 +358,41 @@ function SavedAssetPanel({
   );
 }
 
+function DesignColoursPanel({ colours }: { colours: Required<SiteDesignColours> }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-slate-950 p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h3 className="text-sm font-black text-white">Current Design Colours</h3>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {designColourLabels.map(([key, label]) => {
+          const value = colours[key];
+
+          return (
+            <div
+              key={key}
+              className="flex items-center gap-3 rounded-lg bg-white/5 p-3"
+            >
+              <span
+                className="h-10 w-10 shrink-0 rounded-lg border border-white/10"
+                style={{ backgroundColor: isHexColor(value) ? value : "#0f172a" }}
+              />
+              <span className="min-w-0">
+                <span className="block text-xs font-bold uppercase tracking-wide text-slate-500">
+                  {label}
+                </span>
+                <span className="block font-mono text-sm text-slate-200">
+                  {value}
+                </span>
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function BrandingPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loadingLeads, setLoadingLeads] = useState(true);
@@ -314,6 +405,7 @@ export default function BrandingPage() {
     navigation: { ...emptyWorkflow },
     hero: { ...emptyWorkflow },
     icon: { ...emptyWorkflow },
+    design: { ...emptyWorkflow },
   });
   const selectedLead = useMemo(
     () => leads.find((lead) => getLeadSlug(lead) === selectedLeadSlug) || null,
@@ -323,16 +415,22 @@ export default function BrandingPage() {
   const selectedLeadWebsiteLabel = getWebsiteLabel(selectedLead?.website);
   const currentNavigationBrandingUrl = selectedLead?.siteBrandingUrl || "";
   const currentHeroImageUrl = selectedLead?.heroImageUrl || "";
+  const currentDesignColours = getCurrentDesignColours(selectedLead);
   const siteIconSource = getSiteIconSource({
     navigationWorkflow: workflows.navigation,
     savedNavigationBrandingUrl: currentNavigationBrandingUrl,
   });
   const sourcePreview =
+    activeTab === "design"
+      ? currentNavigationBrandingUrl
+      :
     activeTab === "icon"
       ? siteIconSource?.preview || ""
       : getFilePreview(activeWorkflow.file) || activeWorkflow.imageUrl || "";
   const sourcePreviewTitle =
-    activeTab === "icon" && siteIconSource
+    activeTab === "design"
+      ? "Navigation Branding source"
+      : activeTab === "icon" && siteIconSource
       ? `Source preview - ${siteIconSource.label}`
       : "Source preview";
 
@@ -407,6 +505,11 @@ export default function BrandingPage() {
       icon: {
         ...current.icon,
         savedUrl: selectedLead.siteIconUrl || "",
+      },
+      design: {
+        ...current.design,
+        notice: "",
+        error: "",
       },
     }));
   }, [selectedLeadSlug, selectedLead]);
@@ -553,6 +656,68 @@ export default function BrandingPage() {
     void callImageRoute(tab, "/api/branding/save", formData);
   }
 
+  async function generateDesignColours() {
+    if (!selectedLeadSlug) {
+      updateWorkflow("design", { error: "Select a lead first.", notice: "" });
+      return;
+    }
+
+    if (!currentNavigationBrandingUrl) {
+      updateWorkflow("design", {
+        error: "Add navigation branding first, then generate design colours.",
+        notice: "",
+      });
+      return;
+    }
+
+    setBusyAction("design:/api/branding/design-colours");
+    updateWorkflow("design", { error: "", notice: "" });
+
+    try {
+      const res = await fetch("/api/branding/design-colours", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ leadSlug: selectedLeadSlug }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(
+          data.error || data.details || "Failed to generate design colours"
+        );
+      }
+
+      if (data.lead) {
+        setLeads((current) =>
+          getSelectableBrandingLeads(
+            current.map((lead) =>
+              getLeadSlug(lead) === getLeadSlug(data.lead)
+                ? { ...lead, ...data.lead }
+                : lead
+            )
+          )
+        );
+      }
+
+      updateWorkflow("design", {
+        notice: "Design colours generated and saved.",
+        error: "",
+      });
+    } catch (error) {
+      updateWorkflow("design", {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to generate design colours",
+        notice: "",
+      });
+    } finally {
+      setBusyAction("");
+    }
+  }
+
   const isBusy = Boolean(busyAction);
 
   return (
@@ -680,7 +845,7 @@ export default function BrandingPage() {
         </section>
 
         <div className="mb-6 flex flex-wrap gap-3">
-          {(["navigation", "hero", "icon"] as WorkflowKey[]).map((tab) => (
+          {(["navigation", "hero", "icon", "design"] as WorkflowKey[]).map((tab) => (
             <button
               key={tab}
               type="button"
@@ -705,7 +870,9 @@ export default function BrandingPage() {
                   ? "Create transparent horizontal branding for the generated-site navigation area."
                   : activeTab === "hero"
                     ? "Clean up hero images by removing visible text, banners, labels and overlays."
-                    : "Create a square favicon-style mark from the current branding output."}
+                    : activeTab === "icon"
+                      ? "Create a square favicon-style mark from the current branding output."
+                      : "Generate generated-site design colours from the saved navigation branding image."}
               </p>
             </div>
 
@@ -723,7 +890,7 @@ export default function BrandingPage() {
 
           <div className="grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
             <div className="space-y-4">
-              {activeTab !== "icon" ? (
+              {activeTab !== "icon" && activeTab !== "design" ? (
                 <>
                   <FieldLabel label="Upload Image">
                     <input
@@ -750,28 +917,46 @@ export default function BrandingPage() {
                     />
                   </FieldLabel>
                 </>
-              ) : (
+              ) : activeTab === "icon" ? (
                 <p className="rounded-xl border border-white/10 bg-slate-950 p-4 text-sm text-slate-400">
                   Site icon generation uses the current Navigation Branding
                   output first, then the saved Navigation Branding URL for this
                   lead.
                 </p>
+              ) : (
+                <div className="grid gap-4">
+                  <p className="rounded-xl border border-white/10 bg-slate-950 p-4 text-sm text-slate-400">
+                    Design Colours uses the saved Navigation Branding image for
+                    this lead and applies the generated palette to the same
+                    generated-site design fields used by Lead Detail.
+                  </p>
+                  <div className="rounded-xl border border-white/10 bg-slate-950 p-4 text-sm text-slate-300">
+                    <span className="block text-xs font-bold uppercase tracking-wide text-slate-500">
+                      Selected Lead
+                    </span>
+                    <span className="mt-1 block font-bold">
+                      {getLeadName(selectedLead) || "No lead selected"}
+                    </span>
+                  </div>
+                </div>
               )}
 
-              <FieldLabel label="Prompt / Instructions">
-                <textarea
-                  value={activeWorkflow.prompt}
-                  onChange={(event) =>
-                    updateWorkflow(activeTab, {
-                      prompt: event.target.value,
-                      notice: "",
-                      error: "",
-                    })
-                  }
-                  className="min-h-32 rounded-lg border border-white/10 bg-slate-900 px-3 py-3 text-sm normal-case tracking-normal text-white outline-none"
-                  placeholder="Describe the desired cleanup, logo style, colours or icon direction..."
-                />
-              </FieldLabel>
+              {activeTab !== "design" ? (
+                <FieldLabel label="Prompt / Instructions">
+                  <textarea
+                    value={activeWorkflow.prompt}
+                    onChange={(event) =>
+                      updateWorkflow(activeTab, {
+                        prompt: event.target.value,
+                        notice: "",
+                        error: "",
+                      })
+                    }
+                    className="min-h-32 rounded-lg border border-white/10 bg-slate-900 px-3 py-3 text-sm normal-case tracking-normal text-white outline-none"
+                    placeholder="Describe the desired cleanup, logo style, colours or icon direction..."
+                  />
+                </FieldLabel>
+              ) : null}
 
               {activeTab === "navigation" ? (
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -875,7 +1060,7 @@ export default function BrandingPage() {
                       Save as Hero Image
                     </button>
                   </>
-                ) : (
+                ) : activeTab === "icon" ? (
                   <>
                     <button
                       type="button"
@@ -910,12 +1095,23 @@ export default function BrandingPage() {
                       Save as Site Icon
                     </button>
                   </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => void generateDesignColours()}
+                    disabled={isBusy || !selectedLeadSlug || !currentNavigationBrandingUrl}
+                    className="rounded-lg bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Generate Design Colours
+                  </button>
                 )}
               </div>
 
               {isBusy ? (
                 <p className="rounded-lg bg-blue-500/10 px-3 py-2 text-sm font-bold text-blue-300">
-                  Working on image...
+                  {activeTab === "design"
+                    ? "Generating design colours..."
+                    : "Working on image..."}
                 </p>
               ) : null}
 
@@ -928,6 +1124,12 @@ export default function BrandingPage() {
               {activeWorkflow.error ? (
                 <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">
                   {activeWorkflow.error}
+                </p>
+              ) : null}
+
+              {activeTab === "design" && !currentNavigationBrandingUrl ? (
+                <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-sm font-bold text-amber-200">
+                  Add navigation branding first, then generate design colours.
                 </p>
               ) : null}
 
@@ -958,12 +1160,23 @@ export default function BrandingPage() {
                   url={currentHeroImageUrl}
                 />
               ) : null}
+              {activeTab === "design" ? (
+                <>
+                  <SavedAssetPanel
+                    title="Current Navigation Branding"
+                    url={currentNavigationBrandingUrl}
+                  />
+                  <DesignColoursPanel colours={currentDesignColours} />
+                </>
+              ) : null}
               <PreviewPanel title={sourcePreviewTitle} image={sourcePreview} />
-              <PreviewPanel
-                title="Output preview"
-                image={activeWorkflow.outputImageData}
-                sizeBytes={activeWorkflow.outputSizeBytes}
-              />
+              {activeTab !== "design" ? (
+                <PreviewPanel
+                  title="Output preview"
+                  image={activeWorkflow.outputImageData}
+                  sizeBytes={activeWorkflow.outputSizeBytes}
+                />
+              ) : null}
               {activeTab === "navigation" ? (
                 <div className="rounded-xl border border-white/10 bg-slate-950 p-4 text-sm text-slate-400">
                   Nav fit target: desktop around 460px x 62px, mobile around
