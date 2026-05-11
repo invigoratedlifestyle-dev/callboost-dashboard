@@ -10,7 +10,10 @@ import type {
   LeadStatus,
   WebsiteEvaluation,
 } from "../../lib/leads";
-import { hasUsableFollowUpContact } from "../../lib/contactMethods";
+import {
+  formatAustralianPhoneNumber,
+  hasUsableFollowUpContact,
+} from "../../lib/contactMethods";
 import { appendEmailUnsubscribeFooter } from "../../lib/emailUnsubscribe";
 import { CALLBOOST_CHECKOUT_SUMMARY } from "../../lib/pricing";
 import {
@@ -1795,7 +1798,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                     placeholder="0400 000 000"
                   />
                 ) : (
-                  lead.phone || "Not found"
+                  formatAustralianPhoneNumber(lead.phone || "") || "Not found"
                 )}
               </div>
 

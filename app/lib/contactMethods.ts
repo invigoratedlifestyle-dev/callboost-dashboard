@@ -31,6 +31,30 @@ export function getUsableAustralianMobile(value: unknown) {
   return isAustralianMobileNumber(phone) ? phone : "";
 }
 
+export function formatAustralianPhoneNumber(phone: string) {
+  const trimmedPhone = String(phone || "").trim();
+  const digits = trimmedPhone.replace(/\D/g, "");
+  let localDigits = "";
+
+  if (/^0\d{9}$/.test(digits)) {
+    localDigits = digits;
+  } else if (/^61\d{9}$/.test(digits)) {
+    localDigits = `0${digits.slice(2)}`;
+  } else {
+    return trimmedPhone;
+  }
+
+  if (/^04\d{8}$/.test(localDigits)) {
+    return `${localDigits.slice(0, 4)} ${localDigits.slice(4, 7)} ${localDigits.slice(7)}`;
+  }
+
+  if (/^0[2378]\d{8}$/.test(localDigits)) {
+    return `${localDigits.slice(0, 2)} ${localDigits.slice(2, 6)} ${localDigits.slice(6)}`;
+  }
+
+  return trimmedPhone;
+}
+
 export function hasUsableFollowUpContact(args: {
   phone?: unknown;
   email?: unknown;

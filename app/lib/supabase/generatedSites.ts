@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from "./server";
 import type { LeadRecord } from "../leadLifecycle";
+import { formatAustralianPhoneNumber } from "../contactMethods";
 import { getRandomHeroImage } from "../siteAssets";
 
 export type GeneratedSiteRow = {
@@ -886,6 +887,7 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
   );
   const phone = getText(lead.phone).trim();
   const phoneRaw = phoneToTel(phone);
+  const phoneDisplay = formatAustralianPhoneNumber(phone);
   const hasPhone = Boolean(phoneRaw);
   const email = getText(lead.email).trim();
   const emailHref = email ? `mailto:${encodeURIComponent(email)}` : "";
@@ -917,7 +919,7 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
     `${businessName} provides local ${tradeLabel} services in ${city}. Call directly or request a callback.`;
 
   const navCallHtml = hasPhone
-    ? `<a class="nav-call" href="tel:${escapeAttribute(phoneRaw)}">${escapeHtml(phone)}</a>`
+    ? `<a class="nav-call" href="tel:${escapeAttribute(phoneRaw)}">${escapeHtml(phoneDisplay)}</a>`
     : "";
   const brandClassName = hasSiteBranding ? "brand has-logo" : "brand";
   const brandHtml = hasSiteBranding
@@ -925,7 +927,7 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
     : `<strong>${escapeHtml(businessName)}</strong>
         <span>${escapeHtml(tradeLabel)} in ${escapeHtml(city)}</span>`;
   const callButtonHtml = hasPhone
-    ? `<a class="button accent" href="tel:${escapeAttribute(phoneRaw)}">Call Now: ${escapeHtml(phone)}</a>`
+    ? `<a class="button accent" href="tel:${escapeAttribute(phoneRaw)}">Call Now: ${escapeHtml(phoneDisplay)}</a>`
     : `<a class="button accent" href="#quote">Call Now</a>`;
   const ratingBadgeHtml = hasStrongHeroRating
     ? `<div class="hero-rating">Rated ${escapeHtml(rating)}&#9733; from ${escapeHtml(reviewCount)} local reviews</div>`
@@ -937,7 +939,7 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
     ? `<p class="hero-urgency">Available today for urgent ${escapeHtml(tradeLabel.toLowerCase())} issues</p>`
     : "";
   const contactPhoneHtml = hasPhone
-    ? `<p><span>Phone</span><a href="tel:${escapeAttribute(phoneRaw)}">${escapeHtml(phone)}</a></p>`
+    ? `<p><span>Phone</span><a href="tel:${escapeAttribute(phoneRaw)}">${escapeHtml(phoneDisplay)}</a></p>`
     : "";
   const emailHtml = email
     ? `<p><span>Email</span><a href="${escapeAttribute(emailHref)}">${escapeHtml(email)}</a></p>`
@@ -946,7 +948,7 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
     ? `<p><span>Address</span>${escapeHtml(formattedAddress)}</p>`
     : "";
   const mobileCallHtml = hasPhone
-    ? `<div class="mobile-call-bar"><a href="tel:${escapeAttribute(phoneRaw)}">Call ${escapeHtml(phone)}</a></div>`
+    ? `<div class="mobile-call-bar"><a href="tel:${escapeAttribute(phoneRaw)}">Call ${escapeHtml(phoneDisplay)}</a></div>`
     : "";
   const servicesHtml = services
     .map(
@@ -1291,7 +1293,7 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
         <div>
           <h4>Contact</h4>
           <div class="footer-links">
-            ${hasPhone ? `<a href="tel:${escapeAttribute(phoneRaw)}">${escapeHtml(phone)}</a>` : ""}
+            ${hasPhone ? `<a href="tel:${escapeAttribute(phoneRaw)}">${escapeHtml(phoneDisplay)}</a>` : ""}
             ${email ? `<a href="${escapeAttribute(emailHref)}">${escapeHtml(email)}</a>` : ""}
             <span>${escapeHtml(footerLocation)}</span>
           </div>
