@@ -72,6 +72,7 @@ type WebsiteClassification = {
 };
 
 type BusinessPresenceMetadata = {
+  originalWebsiteUrl?: string;
   canonicalWebsiteUrl?: string;
   primaryBusinessPresenceUrl?: string;
   primaryBusinessPresenceType?: PrimaryBusinessPresenceType;
@@ -82,6 +83,7 @@ type BusinessPresenceMetadata = {
   sourceType?: PrimaryBusinessPresenceType;
   extractedEmail?: string;
   extractedPhone?: string;
+  extraPhones?: string[];
   extractedAddress?: string;
   extractedSocials?: {
     facebook?: string;
@@ -163,7 +165,11 @@ function getRecord(value: unknown) {
 function getExistingPrimaryPresenceUrl(lead: Record<string, unknown>) {
   const presence = getRecord(lead.business_presence);
 
-  return getString(presence.primaryBusinessPresenceUrl) || getString(presence.sourceUrl);
+  return (
+    getString(presence.primaryBusinessPresenceUrl) ||
+    getString(presence.sourceUrl) ||
+    getString(presence.originalWebsiteUrl)
+  );
 }
 
 function isBadDomain(url: string) {
@@ -212,6 +218,20 @@ function getBusinessPresenceType(url: string): PrimaryBusinessPresenceType {
   } catch {
     return "unknown";
   }
+}
+
+function isFacebookUrl(url: string) {
+  return getBusinessPresenceType(url) === "facebook";
+}
+
+function isInstagramUrl(url: string) {
+  return getBusinessPresenceType(url) === "instagram";
+}
+
+function isSocialOrDirectoryUrl(url: string) {
+  return ["facebook", "instagram", "directory", "google_business"].includes(
+    getBusinessPresenceType(url)
+  );
 }
 
 function isCanonicalWebsitePresence(url: string) {
@@ -295,10 +315,48 @@ function extractCandidateImages(html: string, baseUrl: string) {
 function extractAddress(html: string) {
   const text = stripHtml(html);
   const addressMatch = text.match(
-    /\b\d{1,5}\s+[A-Za-z0-9.' -]+(?:street|st|road|rd|avenue|ave|drive|dr|lane|ln|court|ct|place|pl|crescent|cres|highway|hwy)\b[^,\n]*(?:,\s*[A-Za-z ]+)?(?:,\s*(?:tas|tasmania|vic|victoria|nsw|qld|sa|wa|nt|act))?/i
+    /\b\d{1,5}\s+[A-Za-z0-9.' -]+(?:street|st|road|rd|avenue|ave|drive|dr|lane|ln|court|ct|place|pl|crescent|cres|highway|hwy)\b[^,\n]*(?:,\s*[A-Za-z ]+){0,3}(?:,\s*(?:tas|tasmania|vic|victoria|nsw|qld|sa|wa|nt|act|australia)){0,2}(?:,\s*\d{4})?/i
   );
 
   return addressMatch?.[0]?.trim() || "";
+}
+
+function extractStateFromText(value: string) {
+  const text = value.toLowerCase();
+
+  if (/\b(tas|tasmania)\b/.test(text)) return "Tasmania";
+  if (/\b(vic|victoria)\b/.test(text)) return "Victoria";
+  if (/\b(nsw|new south wales)\b/.test(text)) return "NSW";
+  if (/\b(qld|queensland)\b/.test(text)) return "Queensland";
+  if (/\b(sa|south australia)\b/.test(text)) return "South Australia";
+  if (/\b(wa|western australia)\b/.test(text)) return "Western Australia";
+  if (/\b(nt|northern territory)\b/.test(text)) return "Northern Territory";
+  if (/\b(act|australian capital territory)\b/.test(text)) return "ACT";
+
+  return "";
+}
+
+function extractCountryFromText(value: string) {
+  const text = value.toLowerCase();
+
+  if (/\b(australia|tasmania|victoria|new south wales|queensland)\b/.test(text)) {
+    return "Australia";
+  }
+
+  if (/\b(united states|usa|canada|new zealand|uk|united kingdom)\b/.test(text)) {
+    return text.match(/\b(united states|usa|canada|new zealand|uk|united kingdom)\b/i)?.[0] || "";
+  }
+
+  return "";
+}
+
+function extractCityFromAddress(value: string) {
+  const parts = value
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  return parts.length >= 2 ? parts[1] : "";
 }
 
 async function checkInferredCanonicalWebsite(args: {
@@ -885,6 +943,22 @@ function extractSocial(html: string, platform: "facebook" | "instagram") {
   return match?.[0] || "";
 }
 
+function extractInstagramPresence(html: string) {
+  const instagramUrl = extractSocial(html, "instagram");
+
+  if (instagramUrl) return instagramUrl;
+
+  const text = stripHtml(html);
+  const handleMatch =
+    text.match(/(?:instagram|insta|ig)\s*(?:[:@-]|\bat\b)?\s*@?([A-Za-z0-9._]{3,30})/i) ||
+    text.match(/@([A-Za-z0-9._]{3,30})\b/);
+  const handle = handleMatch?.[1]?.replace(/[.]+$/g, "");
+
+  if (!handle) return "";
+
+  return `https://www.instagram.com/${handle}/`;
+}
+
 function decodeHtml(value: string) {
   return value
     .replace(/&amp;/g, "&")
@@ -1119,6 +1193,8 @@ function buildBusinessInfoMatch(args: {
       phone: getString(args.existingLead.phone),
       email: getString(args.existingLead.email),
       website: getString(args.existingLead.website),
+      sourceUrl: getExistingPrimaryPresenceUrl(args.existingLead),
+      primaryBusinessPresenceUrl: getExistingPrimaryPresenceUrl(args.existingLead),
       city: getString(args.existingLead.city),
       suburb: getString(args.existingLead.suburb),
       town: getString(args.existingLead.town),
@@ -1133,6 +1209,7 @@ function buildBusinessInfoMatch(args: {
       email: args.candidateEmail,
       website: args.candidateWebsite || args.candidateUrl,
       url: args.candidateUrl || args.candidateWebsite,
+      sourceUrl: args.candidateUrl || args.candidateWebsite,
       city: args.candidateCity,
       state: args.candidateState,
       country: args.candidateCountry,
@@ -1166,6 +1243,7 @@ function buildNoReliableBusinessInfoMatch(
       phone: false,
       email: false,
       domain: false,
+      source: false,
       name: false,
       location: false,
       trade: false,
@@ -1187,6 +1265,7 @@ function buildBusinessPresenceMetadata(args: {
   sourceType?: PrimaryBusinessPresenceType;
   extractedEmail?: string;
   extractedPhone?: string;
+  extraPhones?: string[];
   extractedAddress?: string;
   extractedSocials?: {
     facebook?: string;
@@ -1222,6 +1301,7 @@ function buildBusinessPresenceMetadata(args: {
     ...(args.sourceType ? { sourceType: args.sourceType } : {}),
     ...(args.extractedEmail ? { extractedEmail: args.extractedEmail } : {}),
     ...(args.extractedPhone ? { extractedPhone: args.extractedPhone } : {}),
+    ...(args.extraPhones?.length ? { extraPhones: args.extraPhones } : {}),
     ...(args.extractedAddress ? { extractedAddress: args.extractedAddress } : {}),
     ...(args.extractedSocials ? { extractedSocials: args.extractedSocials } : {}),
     ...(args.candidateImages?.length
@@ -1229,6 +1309,12 @@ function buildBusinessPresenceMetadata(args: {
       : {}),
     updatedAt: new Date().toISOString(),
   } satisfies BusinessPresenceMetadata;
+}
+
+function getExtraPhones(existingPhone: string, extractedPhone: string) {
+  if (!existingPhone || !extractedPhone) return [];
+
+  return existingPhone.trim() === extractedPhone.trim() ? [] : [extractedPhone];
 }
 
 function buildQualifiedLead(args: {
@@ -1260,6 +1346,10 @@ function buildQualifiedLead(args: {
   const highConfidenceBusinessInfo = args.businessInfoMatch.confidence === "high";
   const existingFacebook = getString(args.existingLead.facebook);
   const existingInstagram = getString(args.existingLead.instagram);
+  const existingPhone = getString(args.existingLead.phone);
+  const existingEmail = getString(args.existingLead.email);
+  const nextPhone = existingPhone || (highConfidenceBusinessInfo ? args.phone : "");
+  const nextEmail = existingEmail || (highConfidenceBusinessInfo ? args.email : "");
   const nextWebsite =
     getString(args.existingLead.website) ||
     (highConfidenceBusinessInfo ? args.website : "");
@@ -1288,8 +1378,8 @@ function buildQualifiedLead(args: {
   return {
     ...withLifecycleDefaults(args.existingLead),
     website: nextWebsite,
-    phone: args.phone,
-    email: args.email,
+    phone: nextPhone,
+    email: nextEmail,
     address: nextAddress,
     formattedAddress: nextAddress,
     contactPage: args.contactPage || getString(args.existingLead.contactPage),
@@ -1316,6 +1406,7 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
 
   const existingWebsite = getString(existingLead.website);
   const existingPrimaryPresenceUrl = getExistingPrimaryPresenceUrl(existingLead);
+  const originalPresenceUrl = existingPrimaryPresenceUrl || existingWebsite || providedWebsite || "";
   let normalizedWebsite = normalizeUrl(existingWebsite || providedWebsite);
   if (!normalizedWebsite && existingPrimaryPresenceUrl) {
     normalizedWebsite = normalizeUrl(existingPrimaryPresenceUrl);
@@ -1363,8 +1454,10 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
 
   if (normalizedWebsite) {
     console.log("BUSINESS_PRESENCE start", {
+      originalWebsiteUrl: originalPresenceUrl,
       sourceUrl: normalizedWebsite,
       sourceType: getBusinessPresenceType(normalizedWebsite),
+      candidateSourceIncluded: true,
     });
   }
 
@@ -1406,7 +1499,8 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
     return { success: true, lead: savedLead } satisfies EnrichLeadResult;
   }
 
-  const badDomainDetected = isBadDomain(normalizedWebsite);
+  const badDomainDetected =
+    isSocialOrDirectoryUrl(normalizedWebsite) || isBadDomain(normalizedWebsite);
 
   if (badDomainDetected) {
     const presenceType = getBusinessPresenceType(normalizedWebsite);
@@ -1428,20 +1522,21 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
     const extractedPhone = presenceHtml ? extractPhone(presenceHtml) : "";
     const extractedAddress = presenceHtml ? extractAddress(presenceHtml) : "";
     const facebook =
-      presenceType === "facebook"
+      isFacebookUrl(normalizedWebsite)
         ? normalizedWebsite
         : presenceHtml
           ? extractSocial(presenceHtml, "facebook")
           : "";
     const instagram =
-      presenceType === "instagram"
+      isInstagramUrl(normalizedWebsite)
         ? normalizedWebsite
         : presenceHtml
-          ? extractSocial(presenceHtml, "instagram")
+          ? extractInstagramPresence(presenceHtml)
           : "";
     const candidateImages = presenceHtml
       ? extractCandidateImages(presenceHtml, normalizedWebsite)
       : [];
+    const candidateAddress = extractedAddress || placesAddress;
     const email = getString(existingLead.email) || googleSearchEmail || extractedEmail;
     const inferredWebsite = await checkInferredCanonicalWebsite({
       email,
@@ -1454,15 +1549,15 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
       candidateName: businessName,
       candidateEmail: extractedEmail || googleSearchEmail,
       candidatePhone: extractedPhone || placesPhone,
-      candidateCity: placesAddress || undefined,
-      candidateState: placesAddress || undefined,
-      candidateCountry: placesAddress ? "Australia" : undefined,
+      candidateCity: extractCityFromAddress(candidateAddress) || undefined,
+      candidateState: extractStateFromText(candidateAddress) || undefined,
+      candidateCountry: extractCountryFromText(candidateAddress) || undefined,
       candidateTrade: placesCategory,
       official: false,
       candidateData: {
         email: extractedEmail || googleSearchEmail,
         phone: extractedPhone || placesPhone,
-        address: extractedAddress || placesAddress,
+        address: candidateAddress,
         facebook,
         instagram,
         candidateImages,
@@ -1482,7 +1577,11 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
       sourceType: presenceType,
       extractedEmail: extractedEmail || googleSearchEmail,
       extractedPhone: extractedPhone || placesPhone,
-      extractedAddress: extractedAddress || placesAddress,
+      extraPhones: getExtraPhones(
+        getString(existingLead.phone),
+        extractedPhone || placesPhone
+      ),
+      extractedAddress: candidateAddress,
       extractedSocials: {
         facebook,
         instagram,
@@ -1493,6 +1592,10 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
     console.log("BUSINESS_PRESENCE result", {
       sourceUrl: normalizedWebsite,
       sourceType: presenceType,
+      extractedEmail: extractedEmail || googleSearchEmail,
+      extractedPhone: extractedPhone || placesPhone,
+      extractedAddress: candidateAddress,
+      extractedSocials: { facebook, instagram },
       inferredDomain: inferredWebsite.inferredDomain,
       inferredDomainResponded: inferredWebsite.responded,
       confidence: businessInfoMatch.confidence,
@@ -1537,6 +1640,16 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
         facebook,
         instagram,
       },
+    });
+
+    console.log("BUSINESS_PRESENCE final fields applied", {
+      website: getString(updatedLead.website),
+      facebook: getString(updatedLead.facebook),
+      instagram: getString(updatedLead.instagram),
+      email: getString(updatedLead.email),
+      phone: getString(updatedLead.phone),
+      primaryBusinessPresenceUrl: businessPresence.primaryBusinessPresenceUrl,
+      primaryBusinessPresenceType: businessPresence.primaryBusinessPresenceType,
     });
 
     const savedLead = await updateLeadBySlug(slug, updatedLead);
@@ -1641,10 +1754,11 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
   const extractedPhone = extractPhone(combinedHtml);
   const extractedAddress = extractAddress(combinedHtml);
   const facebook = extractSocial(combinedHtml, "facebook");
-  const instagram = extractSocial(combinedHtml, "instagram");
+  const instagram = extractInstagramPresence(combinedHtml);
   const email = getString(existingLead.email) || googleSearchEmail || extractedEmail || "";
   const phone = getString(existingLead.phone) || placesPhone || extractedPhone || "";
   const candidateImages = extractCandidateImages(combinedHtml, normalizedWebsite);
+  const candidateAddress = extractedAddress || placesAddress;
   const socials = {
     facebook: facebook || getString(existingLead.facebook),
     instagram: instagram || getString(existingLead.instagram),
@@ -1672,16 +1786,16 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
     candidateWebsite: normalizedWebsite,
     candidateEmail: extractedEmail || googleSearchEmail,
     candidatePhone: extractedPhone || placesPhone,
-    candidateCity: placesAddress || undefined,
-    candidateState: placesAddress || undefined,
-    candidateCountry: placesAddress ? "Australia" : undefined,
+    candidateCity: extractCityFromAddress(candidateAddress) || undefined,
+    candidateState: extractStateFromText(candidateAddress) || undefined,
+    candidateCountry: extractCountryFromText(candidateAddress) || undefined,
     candidateTrade: placesCategory,
     official: true,
     candidateData: {
       contactPage: savedContactPage,
       email: extractedEmail || googleSearchEmail,
       phone: extractedPhone || placesPhone,
-      address: extractedAddress || placesAddress,
+      address: candidateAddress,
       facebook,
       instagram,
       candidateImages,
@@ -1708,7 +1822,11 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
     sourceType: "website",
     extractedEmail: extractedEmail || googleSearchEmail,
     extractedPhone: extractedPhone || placesPhone,
-    extractedAddress: extractedAddress || placesAddress,
+    extraPhones: getExtraPhones(
+      getString(existingLead.phone),
+      extractedPhone || placesPhone
+    ),
+    extractedAddress: candidateAddress,
     extractedSocials: {
       facebook,
       instagram,
@@ -1719,6 +1837,9 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
   console.log("BUSINESS_PRESENCE result", {
     sourceUrl: normalizedWebsite,
     sourceType: "website",
+    extractedEmail: extractedEmail || googleSearchEmail,
+    extractedPhone: extractedPhone || placesPhone,
+    extractedAddress: candidateAddress,
     inferredDomain: inferredWebsite.inferredDomain,
     inferredDomainResponded: inferredWebsite.responded,
     confidence: businessInfoMatch.confidence,

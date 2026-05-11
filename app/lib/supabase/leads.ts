@@ -99,25 +99,33 @@ export function rowToLead(row: LeadRow): LeadRecord {
     canonicalWebsite ||
     (rowWebsitePresenceType === "website" ? rowWebsite : "");
   const nextBusinessPresence =
-    Object.keys(businessPresence).length ||
-    rowWebsitePresenceType === "website" ||
-    !rowWebsite
-      ? businessPresence
-      : {
-          primaryBusinessPresenceUrl: rowWebsite,
+    rowWebsitePresenceType !== "website" && rowWebsite
+      ? {
+          ...businessPresence,
+          originalWebsiteUrl: getString(businessPresence.originalWebsiteUrl) || rowWebsite,
+          primaryBusinessPresenceUrl:
+            getString(businessPresence.primaryBusinessPresenceUrl) || rowWebsite,
           primaryBusinessPresenceType:
-            rowWebsitePresenceType === "social"
-              ? rowWebsite.includes("instagram.com")
+            getString(businessPresence.primaryBusinessPresenceType) ||
+            (rowWebsitePresenceType === "social"
+              ? rowWebsite.toLowerCase().includes("instagram.com")
                 ? "instagram"
                 : "facebook"
-              : rowWebsitePresenceType,
-          sourceUrl: rowWebsite,
+              : rowWebsitePresenceType),
+          sourceUrl: getString(businessPresence.sourceUrl) || rowWebsite,
           sourceType:
-            rowWebsitePresenceType === "social"
-              ? rowWebsite.includes("instagram.com")
+            getString(businessPresence.sourceType) ||
+            (rowWebsitePresenceType === "social"
+              ? rowWebsite.toLowerCase().includes("instagram.com")
                 ? "instagram"
                 : "facebook"
-              : rowWebsitePresenceType,
+              : rowWebsitePresenceType),
+        }
+      : {
+          ...businessPresence,
+          ...(rowWebsite && rowWebsitePresenceType === "website"
+            ? { canonicalWebsiteUrl: canonicalWebsite || rowWebsite }
+            : {}),
         };
 
   return withLifecycleDefaults({

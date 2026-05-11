@@ -8,6 +8,7 @@ export type BusinessInfoMatch = {
     phone: boolean;
     email: boolean;
     domain: boolean;
+    source: boolean;
     name: boolean;
     location: boolean;
     trade: boolean;
@@ -25,6 +26,8 @@ export type LeadMatchInput = {
   phone?: string;
   email?: string;
   website?: string;
+  sourceUrl?: string;
+  primaryBusinessPresenceUrl?: string;
   city?: string;
   suburb?: string;
   town?: string;
@@ -89,6 +92,33 @@ export function normalizeDomain(value: unknown) {
       .replace(/^https?:\/\//i, "")
       .replace(/^www\./i, "")
       .split(/[/?#]/)[0]
+      .toLowerCase();
+  }
+}
+
+function normalizeComparableUrl(value: unknown) {
+  const text = String(value || "").trim();
+
+  if (!text) return "";
+
+  try {
+    const url = new URL(/^https?:\/\//i.test(text) ? text : `https://${text}`);
+    url.hash = "";
+
+    for (const key of [...url.searchParams.keys()]) {
+      if (/^utm_/i.test(key) || ["fbclid", "gclid"].includes(key.toLowerCase())) {
+        url.searchParams.delete(key);
+      }
+    }
+
+    return `${url.hostname.replace(/^www\./i, "").toLowerCase()}${url.pathname
+      .replace(/\/+$/g, "")
+      .toLowerCase()}${url.search}`;
+  } catch {
+    return text
+      .replace(/^https?:\/\//i, "")
+      .replace(/^www\./i, "")
+      .replace(/\/+$/g, "")
       .toLowerCase();
   }
 }
@@ -194,6 +224,10 @@ export function scoreBusinessInfoCandidate(
   const candidateEmail = normalizeEmail(candidate.email);
   const leadDomain = normalizeDomain(lead.website);
   const candidateDomain = normalizeDomain(candidate.website || candidate.url);
+  const leadSourceUrl = normalizeComparableUrl(
+    lead.primaryBusinessPresenceUrl || lead.sourceUrl
+  );
+  const candidateSourceUrl = normalizeComparableUrl(candidate.url || candidate.sourceUrl);
   const leadName = getLeadName(lead);
   const candidateName = getLeadName(candidate);
   const leadCity = getCityish(lead);
@@ -208,6 +242,9 @@ export function scoreBusinessInfoCandidate(
     phone: Boolean(leadPhone && candidatePhone && leadPhone === candidatePhone),
     email: Boolean(leadEmail && candidateEmail && leadEmail === candidateEmail),
     domain: Boolean(leadDomain && candidateDomain && leadDomain === candidateDomain),
+    source: Boolean(
+      leadSourceUrl && candidateSourceUrl && leadSourceUrl === candidateSourceUrl
+    ),
     name: false,
     location: false,
     trade: false,
@@ -226,6 +263,11 @@ export function scoreBusinessInfoCandidate(
   if (matched.domain) {
     score += 100;
     reasons.push("Exact domain match");
+  }
+
+  if (matched.source) {
+    score += 100;
+    reasons.push("Exact saved business presence URL match");
   }
 
   const nameOverlap = tokenOverlap(leadName, candidateName);
@@ -268,7 +310,7 @@ export function scoreBusinessInfoCandidate(
     reasons.push("Official-looking source");
   }
 
-  const strongMatch = matched.phone || matched.email || matched.domain;
+  const strongMatch = matched.phone || matched.email || matched.domain || matched.source;
   let strongContradiction = false;
 
   if (candidateCountry && leadCountry && candidateCountry !== leadCountry) {
