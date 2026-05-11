@@ -17,7 +17,7 @@ const included = [
 export const metadata = {
   title: "Pricing | CallBoost",
   description:
-    "CallBoost Website pricing: $199.95 setup and $49.95/month for a managed business website.",
+    "CallBoost Website pricing: $199 setup and $49.95/month for a managed business website.",
 };
 
 export default function PricingPage() {
@@ -70,7 +70,7 @@ export default function PricingPage() {
                 Get started
               </Link>
               <p className="mt-3 text-sm text-slate-500">
-                Stripe checkout includes a $199.95 setup fee and $49.95/month
+                Stripe checkout includes a $199 setup fee and $49.95/month
                 recurring managed hosting & support.
               </p>
             </div>

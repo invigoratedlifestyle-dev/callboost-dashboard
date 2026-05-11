@@ -178,7 +178,7 @@ export default function MarketingPage() {
                 Ready for a website customers can actually use?
               </h2>
               <p className="mt-3 max-w-2xl text-slate-300">
-                Start with a one-time $199.95 setup, then $49.95/month for
+                Start with a one-time $199 setup, then $49.95/month for
                 managed hosting & support and basic updates.
               </p>
             </div>

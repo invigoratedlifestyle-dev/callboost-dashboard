@@ -11,7 +11,7 @@ const terms = [
   },
   {
     title: "Fees",
-    copy: "Customers pay a setup fee and an ongoing monthly fee. The standard offer is $199.95 setup and $49.95 per month unless a different written agreement applies.",
+    copy: "Customers pay a setup fee and an ongoing monthly fee. The standard offer is $199 setup and $49.95 per month unless a different written agreement applies.",
   },
   {
     title: "Payment",

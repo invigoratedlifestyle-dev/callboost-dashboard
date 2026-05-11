@@ -521,7 +521,7 @@ Evaluate this local business website as an opportunity for CallBoost.
 
 CallBoost offer:
 - Simple professional local business website
-- $199.95 setup + $49.95/month
+- $199 setup + $49.95/month
 - Best targets have no website, broken websites, outdated websites, weak conversion, generic DIY sites, poor local positioning, hidden phone/contact CTAs, or poor mobile signals.
 
 Business:
