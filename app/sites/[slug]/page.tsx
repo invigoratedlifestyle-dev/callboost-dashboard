@@ -14,6 +14,35 @@ type GeneratedSitePageProps = {
 
 export const dynamic = "force-dynamic";
 
+function getMetadataText(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function getBusinessTitle(lead: NonNullable<Awaited<ReturnType<typeof getGeneratedSiteContext>>["lead"]>) {
+  return (
+    getMetadataText(lead.displayName) ||
+    getMetadataText(lead.businessName) ||
+    getMetadataText(lead.name) ||
+    "CallBoost"
+  );
+}
+
+function getBusinessDescription(
+  lead: NonNullable<Awaited<ReturnType<typeof getGeneratedSiteContext>>["lead"]>
+) {
+  const city =
+    getMetadataText(lead.city) ||
+    getMetadataText(lead.region) ||
+    getMetadataText(lead.state) ||
+    "Tasmania";
+  const trade = getMetadataText(lead.trade) || "plumbing";
+
+  return (
+    getMetadataText(lead.description) ||
+    `Trusted ${trade} services in ${city}`
+  );
+}
+
 export async function generateMetadata({
   params,
 }: GeneratedSitePageProps): Promise<Metadata> {
@@ -28,6 +57,10 @@ export async function generateMetadata({
   if (!context.lead || isArchivedLead(context.lead)) return {};
 
   const siteIconUrl = getOuterSiteIconUrl(context);
+  const title = getBusinessTitle(context.lead);
+  const description = getBusinessDescription(context.lead);
+  const heroImageUrl = getMetadataText(context.lead.heroImageUrl);
+  const images = heroImageUrl ? [{ url: heroImageUrl }] : undefined;
 
   console.log("SITES_METADATA_ICON_DEBUG", {
     slug,
@@ -35,13 +68,23 @@ export async function generateMetadata({
     source: context.leadSource,
   });
 
-  if (!siteIconUrl) return {};
-
   return {
+    title,
+    description,
     icons: {
-      icon: [{ url: siteIconUrl }],
-      shortcut: [{ url: siteIconUrl }],
-      apple: [{ url: siteIconUrl }],
+      ...(siteIconUrl ? { icon: [{ url: siteIconUrl }] } : {}),
+      ...(siteIconUrl ? { shortcut: [{ url: siteIconUrl }] } : {}),
+      ...(siteIconUrl ? { apple: [{ url: siteIconUrl }] } : {}),
+    },
+    openGraph: {
+      title,
+      description,
+      ...(images ? { images } : {}),
+    },
+    twitter: {
+      title,
+      description,
+      ...(heroImageUrl ? { images: [heroImageUrl] } : {}),
     },
   };
 }
