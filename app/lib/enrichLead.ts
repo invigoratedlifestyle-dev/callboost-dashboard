@@ -5,6 +5,7 @@ import {
   normalizeGoogleReviews,
 } from "./googleReviews";
 import {
+  normalizeDomain,
   scoreBusinessInfoCandidate,
   type BusinessInfoMatch,
 } from "./businessInfoMatch";
@@ -12,8 +13,6 @@ import { withLifecycleDefaults } from "./leadLifecycle";
 import { getLeadBySlug, updateLeadBySlug } from "./supabase/leads";
 const ignoredSearchDomains = [
   "google.com",
-  "facebook.com",
-  "instagram.com",
   "yelp.com",
   "tripadvisor.com",
 ];
@@ -41,6 +40,14 @@ const CTA_TERMS = [
 
 type WebsiteStatus = "no_website" | "weak_website" | "has_website";
 
+type PrimaryBusinessPresenceType =
+  | "website"
+  | "facebook"
+  | "instagram"
+  | "directory"
+  | "google_business"
+  | "unknown";
+
 type PlacesSearchResponse = {
   places?: Array<{
     id?: string;
@@ -49,6 +56,10 @@ type PlacesSearchResponse = {
     };
     websiteUri?: string;
     nationalPhoneNumber?: string;
+    formattedAddress?: string;
+    primaryTypeDisplayName?: {
+      text?: string;
+    };
   }>;
   error?: {
     message?: string;
@@ -58,6 +69,26 @@ type PlacesSearchResponse = {
 type WebsiteClassification = {
   websiteStatus: WebsiteStatus;
   reasons: string[];
+};
+
+type BusinessPresenceMetadata = {
+  canonicalWebsiteUrl?: string;
+  primaryBusinessPresenceUrl?: string;
+  primaryBusinessPresenceType?: PrimaryBusinessPresenceType;
+  inferredDomain?: string;
+  inferredDomainChecked?: boolean;
+  inferredDomainResponded?: boolean;
+  sourceUrl?: string;
+  sourceType?: PrimaryBusinessPresenceType;
+  extractedEmail?: string;
+  extractedPhone?: string;
+  extractedAddress?: string;
+  extractedSocials?: {
+    facebook?: string;
+    instagram?: string;
+  };
+  candidateImages?: string[];
+  updatedAt: string;
 };
 
 type WebsiteEvaluationQuality =
@@ -125,6 +156,16 @@ function getString(value: unknown) {
   return typeof value === "string" ? value : "";
 }
 
+function getRecord(value: unknown) {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+function getExistingPrimaryPresenceUrl(lead: Record<string, unknown>) {
+  const presence = getRecord(lead.business_presence);
+
+  return getString(presence.primaryBusinessPresenceUrl) || getString(presence.sourceUrl);
+}
+
 function isBadDomain(url: string) {
   try {
     const parsedUrl = new URL(normalizeUrl(url));
@@ -137,6 +178,188 @@ function isBadDomain(url: string) {
   } catch {
     return true;
   }
+}
+
+function getBusinessPresenceType(url: string): PrimaryBusinessPresenceType {
+  if (!url) return "unknown";
+
+  try {
+    const parsedUrl = new URL(normalizeUrl(url));
+    const host = parsedUrl.hostname.replace(/^www\./i, "").toLowerCase();
+
+    if (host.includes("facebook.com") || host.includes("fb.com")) return "facebook";
+    if (host.includes("instagram.com")) return "instagram";
+    if (host.includes("google.com") || host.includes("maps.app.goo.gl")) {
+      return "google_business";
+    }
+
+    if (
+      [
+        "linkedin.com",
+        "yelp",
+        "yellowpages",
+        "truelocal",
+        "wordofmouth",
+        "hipages",
+        "oneflare",
+        "tripadvisor",
+      ].some((domain) => host.includes(domain) || parsedUrl.href.includes(domain))
+    ) {
+      return "directory";
+    }
+
+    return "website";
+  } catch {
+    return "unknown";
+  }
+}
+
+function isCanonicalWebsitePresence(url: string) {
+  return Boolean(url) && getBusinessPresenceType(url) === "website";
+}
+
+function getEmailDomain(email: string) {
+  const domain = email.trim().toLowerCase().split("@")[1] || "";
+
+  if (!domain || ["gmail.com", "outlook.com", "hotmail.com", "icloud.com", "yahoo.com"].includes(domain)) {
+    return "";
+  }
+
+  return normalizeDomain(domain);
+}
+
+function getInferredWebsiteCandidates(email: string) {
+  const domain = getEmailDomain(email);
+
+  if (!domain) return [];
+
+  return [`https://${domain}`, `https://www.${domain}`];
+}
+
+function getUrlOrigin(url: string) {
+  try {
+    const parsedUrl = new URL(normalizeUrl(url));
+
+    return parsedUrl.origin;
+  } catch {
+    return "";
+  }
+}
+
+function extractMetaContent(html: string, property: string) {
+  const escaped = property.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const regex = new RegExp(
+    `<meta[^>]+(?:property|name)=["']${escaped}["'][^>]+content=["']([^"']+)["'][^>]*>`,
+    "i"
+  );
+  const reverseRegex = new RegExp(
+    `<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${escaped}["'][^>]*>`,
+    "i"
+  );
+
+  return html.match(regex)?.[1] || html.match(reverseRegex)?.[1] || "";
+}
+
+function toAbsoluteUrl(url: string, baseUrl: string) {
+  if (!url) return "";
+
+  try {
+    return new URL(url, normalizeUrl(baseUrl)).toString();
+  } catch {
+    return "";
+  }
+}
+
+function extractCandidateImages(html: string, baseUrl: string) {
+  const images = new Set<string>();
+  const ogImage = extractMetaContent(html, "og:image");
+  const twitterImage = extractMetaContent(html, "twitter:image");
+
+  for (const image of [ogImage, twitterImage]) {
+    const absoluteUrl = toAbsoluteUrl(image, baseUrl);
+    if (absoluteUrl) images.add(absoluteUrl);
+  }
+
+  const imageRegex = /<img\b[^>]*src=["']([^"']+)["'][^>]*>/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = imageRegex.exec(html)) && images.size < 8) {
+    const absoluteUrl = toAbsoluteUrl(match[1], baseUrl);
+
+    if (absoluteUrl) images.add(absoluteUrl);
+  }
+
+  return [...images].slice(0, 8);
+}
+
+function extractAddress(html: string) {
+  const text = stripHtml(html);
+  const addressMatch = text.match(
+    /\b\d{1,5}\s+[A-Za-z0-9.' -]+(?:street|st|road|rd|avenue|ave|drive|dr|lane|ln|court|ct|place|pl|crescent|cres|highway|hwy)\b[^,\n]*(?:,\s*[A-Za-z ]+)?(?:,\s*(?:tas|tasmania|vic|victoria|nsw|qld|sa|wa|nt|act))?/i
+  );
+
+  return addressMatch?.[0]?.trim() || "";
+}
+
+async function checkInferredCanonicalWebsite(args: {
+  email: string;
+  businessName: string;
+}) {
+  const candidates = getInferredWebsiteCandidates(args.email);
+  const inferredDomain = candidates[0] ? normalizeDomain(candidates[0]) : "";
+
+  if (!candidates.length) {
+    return {
+      inferredDomain,
+      checked: false,
+      responded: false,
+      canonicalWebsiteUrl: "",
+    };
+  }
+
+  for (const candidate of candidates) {
+    try {
+      const html = await fetchHtml(candidate);
+      const normalizedCandidate = normalizeUrl(candidate);
+      const meaningfulParts = getMeaningfulBusinessNameParts(args.businessName);
+      const lowerHtml = html.toLowerCase();
+      const appearsRelevant =
+        meaningfulParts.length === 0 ||
+        meaningfulParts.some((part) => lowerHtml.includes(part)) ||
+        normalizeDomain(candidate).includes(meaningfulParts[0] || "");
+
+      console.log("BUSINESS_PRESENCE inferred domain check", {
+        inferredDomain,
+        candidate: normalizedCandidate,
+        responded: true,
+        appearsRelevant,
+      });
+
+      if (appearsRelevant) {
+        return {
+          inferredDomain,
+          checked: true,
+          responded: true,
+          canonicalWebsiteUrl: getUrlOrigin(normalizedCandidate),
+          html,
+        };
+      }
+    } catch (error) {
+      console.log("BUSINESS_PRESENCE inferred domain check", {
+        inferredDomain,
+        candidate,
+        responded: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
+  return {
+    inferredDomain,
+    checked: true,
+    responded: false,
+    canonicalWebsiteUrl: "",
+  };
 }
 
 function getMeaningfulBusinessNameParts(businessName: string) {
@@ -784,7 +1007,7 @@ async function findWebsiteFromPlacesApi(businessName?: string, city?: string) {
         "Content-Type": "application/json",
         "X-Goog-Api-Key": apiKey,
         "X-Goog-FieldMask":
-          "places.id,places.displayName,places.websiteUri,places.nationalPhoneNumber",
+          "places.id,places.displayName,places.websiteUri,places.nationalPhoneNumber,places.formattedAddress,places.primaryTypeDisplayName",
       },
       body: JSON.stringify({
         textQuery: query,
@@ -805,15 +1028,17 @@ async function findWebsiteFromPlacesApi(businessName?: string, city?: string) {
     const place = data.places?.find((item) => item.websiteUri);
     const website = normalizeUrl(place?.websiteUri);
     const phone = place?.nationalPhoneNumber || "";
+    const address = place?.formattedAddress || "";
+    const category = place?.primaryTypeDisplayName?.text || "";
 
-    console.log("Places fallback:", { businessName, website, phone });
+    console.log("Places fallback:", { businessName, website, phone, address });
 
-    return { website, phone, placeId: place?.id || "" };
+    return { website, phone, placeId: place?.id || "", address, category };
   } catch (error) {
     console.error("Failed to find website from Places API:", error);
     console.log("Places fallback:", { businessName, website: "", phone: "" });
 
-    return { website: "", phone: "", placeId: "" };
+    return { website: "", phone: "", placeId: "", address: "", category: "" };
   }
 }
 
@@ -950,6 +1175,62 @@ function buildNoReliableBusinessInfoMatch(
   };
 }
 
+function buildBusinessPresenceMetadata(args: {
+  existingLead: Record<string, unknown>;
+  canonicalWebsiteUrl?: string;
+  primaryBusinessPresenceUrl?: string;
+  primaryBusinessPresenceType?: PrimaryBusinessPresenceType;
+  inferredDomain?: string;
+  inferredDomainChecked?: boolean;
+  inferredDomainResponded?: boolean;
+  sourceUrl?: string;
+  sourceType?: PrimaryBusinessPresenceType;
+  extractedEmail?: string;
+  extractedPhone?: string;
+  extractedAddress?: string;
+  extractedSocials?: {
+    facebook?: string;
+    instagram?: string;
+  };
+  candidateImages?: string[];
+}) {
+  const existingPresence =
+    args.existingLead.business_presence &&
+    typeof args.existingLead.business_presence === "object"
+      ? (args.existingLead.business_presence as Partial<BusinessPresenceMetadata>)
+      : {};
+
+  return {
+    ...existingPresence,
+    ...(args.canonicalWebsiteUrl
+      ? { canonicalWebsiteUrl: args.canonicalWebsiteUrl }
+      : {}),
+    ...(args.primaryBusinessPresenceUrl
+      ? { primaryBusinessPresenceUrl: args.primaryBusinessPresenceUrl }
+      : {}),
+    ...(args.primaryBusinessPresenceType
+      ? { primaryBusinessPresenceType: args.primaryBusinessPresenceType }
+      : {}),
+    ...(args.inferredDomain ? { inferredDomain: args.inferredDomain } : {}),
+    ...(typeof args.inferredDomainChecked === "boolean"
+      ? { inferredDomainChecked: args.inferredDomainChecked }
+      : {}),
+    ...(typeof args.inferredDomainResponded === "boolean"
+      ? { inferredDomainResponded: args.inferredDomainResponded }
+      : {}),
+    ...(args.sourceUrl ? { sourceUrl: args.sourceUrl } : {}),
+    ...(args.sourceType ? { sourceType: args.sourceType } : {}),
+    ...(args.extractedEmail ? { extractedEmail: args.extractedEmail } : {}),
+    ...(args.extractedPhone ? { extractedPhone: args.extractedPhone } : {}),
+    ...(args.extractedAddress ? { extractedAddress: args.extractedAddress } : {}),
+    ...(args.extractedSocials ? { extractedSocials: args.extractedSocials } : {}),
+    ...(args.candidateImages?.length
+      ? { candidateImages: args.candidateImages }
+      : {}),
+    updatedAt: new Date().toISOString(),
+  } satisfies BusinessPresenceMetadata;
+}
+
 function buildQualifiedLead(args: {
   existingLead: Record<string, unknown>;
   website: string;
@@ -963,6 +1244,7 @@ function buildQualifiedLead(args: {
   homepageScrapeFailed: boolean;
   googleReviewFields: Record<string, unknown>;
   businessInfoMatch: BusinessInfoMatch;
+  businessPresence: BusinessPresenceMetadata;
 }) {
   const socials = args.socials || {
     facebook: getString(args.existingLead.facebook),
@@ -987,6 +1269,12 @@ function buildQualifiedLead(args: {
   const nextInstagram =
     existingInstagram ||
     (highConfidenceBusinessInfo ? socials.instagram || "" : "");
+  const existingAddress =
+    getString(args.existingLead.address) ||
+    getString(args.existingLead.formattedAddress);
+  const extractedAddress = args.businessPresence.extractedAddress || "";
+  const nextAddress =
+    existingAddress || (highConfidenceBusinessInfo ? extractedAddress : "");
 
   logQualification({
     websiteStatus: classification.websiteStatus,
@@ -1002,10 +1290,13 @@ function buildQualifiedLead(args: {
     website: nextWebsite,
     phone: args.phone,
     email: args.email,
+    address: nextAddress,
+    formattedAddress: nextAddress,
     contactPage: args.contactPage || getString(args.existingLead.contactPage),
     facebook: nextFacebook,
     instagram: nextInstagram,
     business_info_match: args.businessInfoMatch,
+    business_presence: args.businessPresence,
     websiteEvaluation: args.websiteEvaluation,
     ...args.googleReviewFields,
     websiteStatus: classification.websiteStatus,
@@ -1024,12 +1315,20 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
   }
 
   const existingWebsite = getString(existingLead.website);
+  const existingPrimaryPresenceUrl = getExistingPrimaryPresenceUrl(existingLead);
   let normalizedWebsite = normalizeUrl(existingWebsite || providedWebsite);
+  if (!normalizedWebsite && existingPrimaryPresenceUrl) {
+    normalizedWebsite = normalizeUrl(existingPrimaryPresenceUrl);
+  }
   let googleSearchEmail = "";
   let placesPhone = "";
+  let placesAddress = "";
+  let placesCategory = "";
   let placesPlaceId = getString(existingLead.googlePlaceId) || getString(existingLead.placeId);
   let businessInfoCandidateSource = existingWebsite
     ? "existing_lead_website"
+    : existingPrimaryPresenceUrl
+      ? "existing_business_presence"
     : providedWebsite
       ? "provided_website"
       : "";
@@ -1042,6 +1341,8 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
     );
     normalizedWebsite = placesResult.website;
     placesPhone = placesResult.phone;
+    placesAddress = placesResult.address || "";
+    placesCategory = placesResult.category || "";
     placesPlaceId = placesPlaceId || placesResult.placeId;
     if (placesResult.website) {
       businessInfoCandidateSource = "google_places";
@@ -1061,7 +1362,10 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
   }
 
   if (normalizedWebsite) {
-    console.log("Auto-found website:", normalizedWebsite);
+    console.log("BUSINESS_PRESENCE start", {
+      sourceUrl: normalizedWebsite,
+      sourceType: getBusinessPresenceType(normalizedWebsite),
+    });
   }
 
   if (!normalizedWebsite) {
@@ -1076,6 +1380,14 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
       homepageHtml: "",
       isWorking: null,
     });
+    const noReliableMatch = buildNoReliableBusinessInfoMatch("no_website");
+    const businessPresence = buildBusinessPresenceMetadata({
+      existingLead,
+      extractedEmail: googleSearchEmail,
+      extractedPhone: placesPhone,
+      extractedAddress: placesAddress,
+      sourceType: "unknown",
+    });
     const updatedLead = buildQualifiedLead({
       existingLead,
       website: "",
@@ -1086,7 +1398,8 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
       googleReviewFields,
       badDomainDetected: false,
       homepageScrapeFailed: true,
-      businessInfoMatch: buildNoReliableBusinessInfoMatch("no_website"),
+      businessInfoMatch: noReliableMatch,
+      businessPresence,
     });
 
     const savedLead = await updateLeadBySlug(slug, updatedLead);
@@ -1096,6 +1409,103 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
   const badDomainDetected = isBadDomain(normalizedWebsite);
 
   if (badDomainDetected) {
+    const presenceType = getBusinessPresenceType(normalizedWebsite);
+    let presenceHtml = "";
+    let presenceFetchFailed = false;
+
+    try {
+      presenceHtml = await fetchHtml(normalizedWebsite);
+    } catch (error) {
+      presenceFetchFailed = true;
+      console.log("BUSINESS_PRESENCE profile fetch limited", {
+        sourceUrl: normalizedWebsite,
+        sourceType: presenceType,
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+
+    const extractedEmail = presenceHtml ? extractEmail(presenceHtml) : "";
+    const extractedPhone = presenceHtml ? extractPhone(presenceHtml) : "";
+    const extractedAddress = presenceHtml ? extractAddress(presenceHtml) : "";
+    const facebook =
+      presenceType === "facebook"
+        ? normalizedWebsite
+        : presenceHtml
+          ? extractSocial(presenceHtml, "facebook")
+          : "";
+    const instagram =
+      presenceType === "instagram"
+        ? normalizedWebsite
+        : presenceHtml
+          ? extractSocial(presenceHtml, "instagram")
+          : "";
+    const candidateImages = presenceHtml
+      ? extractCandidateImages(presenceHtml, normalizedWebsite)
+      : [];
+    const email = getString(existingLead.email) || googleSearchEmail || extractedEmail;
+    const inferredWebsite = await checkInferredCanonicalWebsite({
+      email,
+      businessName,
+    });
+    const businessInfoMatch = buildBusinessInfoMatch({
+      existingLead,
+      candidateUrl: normalizedWebsite,
+      candidateSource: businessInfoCandidateSource || presenceType,
+      candidateName: businessName,
+      candidateEmail: extractedEmail || googleSearchEmail,
+      candidatePhone: extractedPhone || placesPhone,
+      candidateCity: placesAddress || undefined,
+      candidateState: placesAddress || undefined,
+      candidateCountry: placesAddress ? "Australia" : undefined,
+      candidateTrade: placesCategory,
+      official: false,
+      candidateData: {
+        email: extractedEmail || googleSearchEmail,
+        phone: extractedPhone || placesPhone,
+        address: extractedAddress || placesAddress,
+        facebook,
+        instagram,
+        candidateImages,
+      },
+    });
+    const businessPresence = buildBusinessPresenceMetadata({
+      existingLead,
+      canonicalWebsiteUrl: inferredWebsite.canonicalWebsiteUrl,
+      primaryBusinessPresenceUrl:
+        businessInfoMatch.confidence === "high" ? normalizedWebsite : undefined,
+      primaryBusinessPresenceType:
+        businessInfoMatch.confidence === "high" ? presenceType : undefined,
+      inferredDomain: inferredWebsite.inferredDomain,
+      inferredDomainChecked: inferredWebsite.checked,
+      inferredDomainResponded: inferredWebsite.responded,
+      sourceUrl: normalizedWebsite,
+      sourceType: presenceType,
+      extractedEmail: extractedEmail || googleSearchEmail,
+      extractedPhone: extractedPhone || placesPhone,
+      extractedAddress: extractedAddress || placesAddress,
+      extractedSocials: {
+        facebook,
+        instagram,
+      },
+      candidateImages,
+    });
+
+    console.log("BUSINESS_PRESENCE result", {
+      sourceUrl: normalizedWebsite,
+      sourceType: presenceType,
+      inferredDomain: inferredWebsite.inferredDomain,
+      inferredDomainResponded: inferredWebsite.responded,
+      confidence: businessInfoMatch.confidence,
+      score: businessInfoMatch.score,
+      reasons: businessInfoMatch.reasons,
+      action:
+        businessInfoMatch.confidence === "high"
+          ? "auto_applied_primary_presence"
+          : businessInfoMatch.confidence === "medium"
+            ? "stored_for_review"
+            : "rejected_or_fallback",
+    });
+
     const googleReviewFields = await getGoogleReviewFields({
       existingLead,
       businessName,
@@ -1113,15 +1523,20 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
     });
     const updatedLead = buildQualifiedLead({
       existingLead,
-      website: normalizedWebsite,
-      homepageHtml: "",
-      email: getString(existingLead.email) || googleSearchEmail,
-      phone: getString(existingLead.phone) || placesPhone,
+      website: inferredWebsite.canonicalWebsiteUrl,
+      homepageHtml: inferredWebsite.html || "",
+      email,
+      phone: getString(existingLead.phone) || placesPhone || extractedPhone,
       websiteEvaluation,
       googleReviewFields,
       badDomainDetected,
-      homepageScrapeFailed: false,
-      businessInfoMatch: buildNoReliableBusinessInfoMatch("bad_domain"),
+      homepageScrapeFailed: presenceFetchFailed,
+      businessInfoMatch,
+      businessPresence,
+      socials: {
+        facebook,
+        instagram,
+      },
     });
 
     const savedLead = await updateLeadBySlug(slug, updatedLead);
@@ -1153,15 +1568,48 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
       candidateWebsite: normalizedWebsite,
       candidateEmail: googleSearchEmail,
       candidatePhone: placesPhone,
-      official: false,
+      candidateCity: placesAddress || undefined,
+      candidateState: placesAddress || undefined,
+      candidateCountry: placesAddress ? "Australia" : undefined,
+      candidateTrade: placesCategory,
+      official: isCanonicalWebsitePresence(normalizedWebsite),
       candidateData: {
         email: googleSearchEmail,
         phone: placesPhone,
+        address: placesAddress,
       },
+    });
+    const inferredWebsite = await checkInferredCanonicalWebsite({
+      email: getString(existingLead.email) || googleSearchEmail,
+      businessName,
+    });
+    const businessPresence = buildBusinessPresenceMetadata({
+      existingLead,
+      canonicalWebsiteUrl:
+        businessInfoMatch.confidence === "high"
+          ? normalizedWebsite
+          : inferredWebsite.canonicalWebsiteUrl,
+      primaryBusinessPresenceUrl:
+        businessInfoMatch.confidence === "high" ? normalizedWebsite : undefined,
+      primaryBusinessPresenceType:
+        businessInfoMatch.confidence === "high"
+          ? getBusinessPresenceType(normalizedWebsite)
+          : undefined,
+      inferredDomain: inferredWebsite.inferredDomain,
+      inferredDomainChecked: inferredWebsite.checked,
+      inferredDomainResponded: inferredWebsite.responded,
+      sourceUrl: normalizedWebsite,
+      sourceType: getBusinessPresenceType(normalizedWebsite),
+      extractedEmail: googleSearchEmail,
+      extractedPhone: placesPhone,
+      extractedAddress: placesAddress,
     });
     const updatedLead = buildQualifiedLead({
       existingLead,
-      website: normalizedWebsite,
+      website:
+        businessInfoMatch.confidence === "high"
+          ? normalizedWebsite
+          : inferredWebsite.canonicalWebsiteUrl,
       homepageHtml: "",
       email: getString(existingLead.email) || googleSearchEmail,
       phone: getString(existingLead.phone) || placesPhone,
@@ -1170,6 +1618,7 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
       badDomainDetected,
       homepageScrapeFailed: true,
       businessInfoMatch,
+      businessPresence,
     });
 
     const savedLead = await updateLeadBySlug(slug, updatedLead);
@@ -1190,10 +1639,12 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
   const combinedHtml = `${homeHtml}\n${contactHtml}`;
   const extractedEmail = extractEmail(combinedHtml);
   const extractedPhone = extractPhone(combinedHtml);
+  const extractedAddress = extractAddress(combinedHtml);
   const facebook = extractSocial(combinedHtml, "facebook");
   const instagram = extractSocial(combinedHtml, "instagram");
   const email = getString(existingLead.email) || googleSearchEmail || extractedEmail || "";
   const phone = getString(existingLead.phone) || placesPhone || extractedPhone || "";
+  const candidateImages = extractCandidateImages(combinedHtml, normalizedWebsite);
   const socials = {
     facebook: facebook || getString(existingLead.facebook),
     instagram: instagram || getString(existingLead.instagram),
@@ -1221,18 +1672,71 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
     candidateWebsite: normalizedWebsite,
     candidateEmail: extractedEmail || googleSearchEmail,
     candidatePhone: extractedPhone || placesPhone,
+    candidateCity: placesAddress || undefined,
+    candidateState: placesAddress || undefined,
+    candidateCountry: placesAddress ? "Australia" : undefined,
+    candidateTrade: placesCategory,
     official: true,
     candidateData: {
       contactPage: savedContactPage,
       email: extractedEmail || googleSearchEmail,
       phone: extractedPhone || placesPhone,
+      address: extractedAddress || placesAddress,
+      facebook,
+      instagram,
+      candidateImages,
+    },
+  });
+  const inferredWebsite = await checkInferredCanonicalWebsite({
+    email,
+    businessName,
+  });
+  const businessPresence = buildBusinessPresenceMetadata({
+    existingLead,
+    canonicalWebsiteUrl:
+      businessInfoMatch.confidence === "high"
+        ? normalizedWebsite
+        : inferredWebsite.canonicalWebsiteUrl,
+    primaryBusinessPresenceUrl:
+      businessInfoMatch.confidence === "high" ? normalizedWebsite : undefined,
+    primaryBusinessPresenceType:
+      businessInfoMatch.confidence === "high" ? "website" : undefined,
+    inferredDomain: inferredWebsite.inferredDomain,
+    inferredDomainChecked: inferredWebsite.checked,
+    inferredDomainResponded: inferredWebsite.responded,
+    sourceUrl: normalizedWebsite,
+    sourceType: "website",
+    extractedEmail: extractedEmail || googleSearchEmail,
+    extractedPhone: extractedPhone || placesPhone,
+    extractedAddress: extractedAddress || placesAddress,
+    extractedSocials: {
       facebook,
       instagram,
     },
+    candidateImages,
+  });
+
+  console.log("BUSINESS_PRESENCE result", {
+    sourceUrl: normalizedWebsite,
+    sourceType: "website",
+    inferredDomain: inferredWebsite.inferredDomain,
+    inferredDomainResponded: inferredWebsite.responded,
+    confidence: businessInfoMatch.confidence,
+    score: businessInfoMatch.score,
+    reasons: businessInfoMatch.reasons,
+    action:
+      businessInfoMatch.confidence === "high"
+        ? "auto_applied_canonical_website"
+        : businessInfoMatch.confidence === "medium"
+          ? "stored_for_review"
+          : "rejected_or_fallback",
   });
   const updatedLead = buildQualifiedLead({
     existingLead,
-    website: normalizedWebsite,
+    website:
+      businessInfoMatch.confidence === "high"
+        ? normalizedWebsite
+        : inferredWebsite.canonicalWebsiteUrl,
     homepageHtml: homeHtml,
     email,
     phone,
@@ -1243,6 +1747,7 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
     badDomainDetected,
     homepageScrapeFailed: false,
     businessInfoMatch,
+    businessPresence,
   });
 
   const savedLead = await updateLeadBySlug(slug, updatedLead);

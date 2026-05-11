@@ -47,13 +47,78 @@ function getNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function getBusinessPresenceType(url: string) {
+  try {
+    const parsedUrl = new URL(/^https?:\/\//i.test(url) ? url : `https://${url}`);
+    const host = parsedUrl.hostname.replace(/^www\./i, "").toLowerCase();
+
+    if (host.includes("facebook.com") || host.includes("instagram.com")) {
+      return "social";
+    }
+
+    if (host.includes("google.com") || host.includes("maps.app.goo.gl")) {
+      return "google_business";
+    }
+
+    if (
+      [
+        "linkedin.com",
+        "yelp",
+        "yellowpages",
+        "truelocal",
+        "wordofmouth",
+        "hipages",
+        "oneflare",
+        "tripadvisor",
+      ].some((domain) => host.includes(domain) || parsedUrl.href.includes(domain))
+    ) {
+      return "directory";
+    }
+
+    return "website";
+  } catch {
+    return "unknown";
+  }
+}
+
 export function rowToLead(row: LeadRow): LeadRecord {
   const data = row.data && typeof row.data === "object" ? row.data : {};
+  const businessPresence =
+    data.business_presence && typeof data.business_presence === "object"
+      ? (data.business_presence as Record<string, unknown>)
+      : {};
   const slug = getString(row.slug) || getString(data.slug);
   const status = getLeadStatus({
     ...data,
     status: row.status || data.status,
   });
+  const rowWebsite = getString(row.website) || getString(data.website);
+  const canonicalWebsite = getString(businessPresence.canonicalWebsiteUrl);
+  const rowWebsitePresenceType = getBusinessPresenceType(rowWebsite);
+  const displayWebsite =
+    canonicalWebsite ||
+    (rowWebsitePresenceType === "website" ? rowWebsite : "");
+  const nextBusinessPresence =
+    Object.keys(businessPresence).length ||
+    rowWebsitePresenceType === "website" ||
+    !rowWebsite
+      ? businessPresence
+      : {
+          primaryBusinessPresenceUrl: rowWebsite,
+          primaryBusinessPresenceType:
+            rowWebsitePresenceType === "social"
+              ? rowWebsite.includes("instagram.com")
+                ? "instagram"
+                : "facebook"
+              : rowWebsitePresenceType,
+          sourceUrl: rowWebsite,
+          sourceType:
+            rowWebsitePresenceType === "social"
+              ? rowWebsite.includes("instagram.com")
+                ? "instagram"
+                : "facebook"
+              : rowWebsitePresenceType,
+        };
 
   return withLifecycleDefaults({
     ...data,
@@ -74,7 +139,8 @@ export function rowToLead(row: LeadRow): LeadRecord {
       getString(data.formattedAddress) ||
       getString(data.address),
     phone: getString(row.phone) || getString(data.phone),
-    website: getString(row.website) || getString(data.website),
+    website: displayWebsite,
+    business_presence: nextBusinessPresence,
     email: getString(row.email) || getString(data.email),
     rating:
       row.rating !== null && row.rating !== undefined

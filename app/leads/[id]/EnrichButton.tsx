@@ -36,10 +36,10 @@ export function EnrichButton({ lead, onEnriched }: Props) {
         onEnriched(data.lead);
       }
 
-      alert("Lead enriched successfully.");
+      alert("Business info updated.");
     } catch (error) {
       console.error("Enrich error:", error);
-      alert("Failed to enrich lead.");
+      alert("No reliable business info found.");
     } finally {
       setLoading(false);
     }
@@ -51,7 +51,7 @@ export function EnrichButton({ lead, onEnriched }: Props) {
       disabled={loading}
       className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-bold text-white hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-60"
     >
-      {loading ? "Finding..." : "Find Website"}
+      {loading ? "Finding business info..." : "Find Business Info"}
     </button>
   );
 }
