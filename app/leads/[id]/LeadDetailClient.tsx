@@ -2145,75 +2145,77 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
             </p>
 
             <div className="mt-6 rounded-xl border border-blue-400/20 bg-blue-500/10 p-4">
-              <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <label className="grid gap-2 text-sm font-bold text-slate-300">
-                    Template Trade
-                    <select
-                      value={templateTrade}
-                      onChange={(event) => setTemplateTrade(event.target.value)}
-                      className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none"
-                    >
-                      {templateTradeOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {formatTemplateTradeLabel(option)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+              <div className="grid gap-4 lg:grid-cols-[minmax(220px,1fr)_minmax(180px,0.75fr)_auto_auto] lg:items-end">
+                <label className="grid min-w-0 gap-2 text-sm font-bold text-slate-300">
+                  Template Trade
+                  <select
+                    value={templateTrade}
+                    onChange={(event) => setTemplateTrade(event.target.value)}
+                    className="min-h-10 w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none"
+                  >
+                    {templateTradeOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {formatTemplateTradeLabel(option)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
 
-                  <label className="grid gap-2 text-sm font-bold text-slate-300">
-                    Template Type
-                    <select
-                      value={templateType}
-                      onChange={(event) => setTemplateType(event.target.value)}
-                      className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none"
-                    >
-                      {templateTypeOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
+                <label className="grid min-w-0 gap-2 text-sm font-bold text-slate-300">
+                  Template Type
+                  <select
+                    value={templateType}
+                    onChange={(event) => setTemplateType(event.target.value)}
+                    className="min-h-10 w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none"
+                  >
+                    {templateTypeOptions.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </label>
 
-                <div className="flex flex-wrap items-center gap-3 lg:justify-end">
-                  {isLeadArchived ? (
-                    <p className="w-full rounded-lg bg-amber-500/10 px-3 py-2 text-sm font-bold text-amber-200 lg:max-w-xs">
-                      Generated site disabled because this lead is archived.
-                    </p>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        if (!generatedSiteUrl) {
-                          alert("Generate a site first.");
-                          return;
-                        }
+                {isLeadArchived ? (
+                  <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-sm font-bold text-amber-200 lg:col-span-2">
+                    Generated site disabled because this lead is archived.
+                  </p>
+                ) : (
+                  <button
+                    onClick={() => {
+                      if (!generatedSiteUrl) {
+                        alert("Generate a site first.");
+                        return;
+                      }
 
-                        window.open(
-                          generatedSiteUrl,
-                          "_blank",
-                          "noopener,noreferrer"
-                        );
-                      }}
-                      className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-bold hover:bg-slate-600"
-                    >
-                      View Page
-                    </button>
-                  )}
+                      window.open(
+                        generatedSiteUrl,
+                        "_blank",
+                        "noopener,noreferrer"
+                      );
+                    }}
+                    className="min-h-10 w-full whitespace-nowrap rounded-lg bg-slate-700 px-4 py-2 text-sm font-bold hover:bg-slate-600 lg:w-auto"
+                  >
+                    View Page
+                  </button>
+                )}
 
+                <div className="w-full [&>button]:min-h-10 [&>button]:w-full [&>button]:whitespace-nowrap lg:w-auto lg:[&>button]:w-auto">
                   <EnrichButton lead={lead} onEnriched={handleLeadUpdated} />
+                </div>
+              </div>
 
-                  {!isLeadArchived ? (
+              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+                {!isLeadArchived ? (
+                  <div className="w-full [&>button]:min-h-11 [&>button]:w-full [&>button]:bg-blue-600 [&>button]:px-5 [&>button]:py-3 [&>button]:text-base [&>button]:hover:bg-blue-500 sm:w-auto sm:[&>button]:w-auto">
                     <GenerateSiteButton
                       lead={lead}
                       templateTrade={templateTrade}
                       templateType={templateType}
                       onGenerated={handleLeadUpdated}
                     />
-                  ) : null}
-                </div>
+                  </div>
+                ) : null}
               </div>
 
               <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-white/10 pt-4">
