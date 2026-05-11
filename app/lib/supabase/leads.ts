@@ -105,6 +105,9 @@ export function rowToLead(row: LeadRow): LeadRecord {
     paidAt: getString(row.paid_at) || getString(data.paidAt),
     clientStartedAt:
       getString(row.client_started_at) || getString(data.clientStartedAt),
+    siteBrandingUrl: getString(data.siteBrandingUrl),
+    heroImageUrl: getString(data.heroImageUrl),
+    siteIconUrl: getString(data.siteIconUrl),
   });
 }
 

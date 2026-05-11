@@ -1,13 +1,53 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { isArchivedLead } from "../../lib/leadLifecycle";
 import { getGeneratedSiteBySlug } from "../../lib/supabase/generatedSites";
 import { getLeadBySlug } from "../../lib/supabase/leads";
 
+type GeneratedSitePageProps = {
+  params: Promise<{ slug: string }>;
+};
+
+function isValidHttpUrl(value: unknown) {
+  if (typeof value !== "string") return false;
+
+  try {
+    const url = new URL(value);
+
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+export async function generateMetadata({
+  params,
+}: GeneratedSitePageProps): Promise<Metadata> {
+  const { slug } = await params;
+
+  if (!/^[a-z0-9-]+$/i.test(slug)) {
+    return {};
+  }
+
+  const lead = await getLeadBySlug(slug);
+
+  if (!lead || isArchivedLead(lead) || !isValidHttpUrl(lead.siteIconUrl)) {
+    return {};
+  }
+
+  const siteIconUrl = String(lead.siteIconUrl);
+
+  return {
+    icons: {
+      icon: siteIconUrl,
+      apple: siteIconUrl,
+    },
+  };
+}
+
 export default async function GeneratedSitePage({
   params,
-}: {
-  params: Promise<{ slug: string }>;
-}) {
+}: GeneratedSitePageProps) {
   const { slug } = await params;
 
   if (!/^[a-z0-9-]+$/i.test(slug)) {

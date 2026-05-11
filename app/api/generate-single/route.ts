@@ -100,6 +100,12 @@ function normalizeTemplateType(value: unknown) {
   return templateTypeOptions.includes(normalized) ? normalized : "modern";
 }
 
+function getStringField(record: Record<string, unknown>, field: string) {
+  const value = record[field];
+
+  return typeof value === "string" ? value : "";
+}
+
 export async function POST(req: Request) {
   try {
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
@@ -122,6 +128,10 @@ export async function POST(req: Request) {
     }
 
     const existingLead = rowToLead(leadRow);
+    const requestLead =
+      body.lead && typeof body.lead === "object"
+        ? (body.lead as Record<string, unknown>)
+        : {};
 
     if (isArchivedLead(existingLead)) {
       return NextResponse.json({ error: "Lead not found" }, { status: 404 });
@@ -177,6 +187,15 @@ Return ONLY valid JSON:
     const publicUrl = getPublicUrl(req, slug);
     const updatedLead = withLifecycleDefaults({
       ...existingLead,
+      siteBrandingUrl:
+        getStringField(existingLead, "siteBrandingUrl") ||
+        getStringField(requestLead, "siteBrandingUrl"),
+      heroImageUrl:
+        getStringField(existingLead, "heroImageUrl") ||
+        getStringField(requestLead, "heroImageUrl"),
+      siteIconUrl:
+        getStringField(existingLead, "siteIconUrl") ||
+        getStringField(requestLead, "siteIconUrl"),
       templateTrade,
       templateType,
       description: ai.description,
@@ -188,6 +207,13 @@ Return ONLY valid JSON:
       generatedSiteUrl: publicUrl,
       aiGeneratedAt: new Date().toISOString(),
     });
+
+    console.log("GENERATE_SITE_ASSETS", {
+      siteBrandingUrl: getStringField(updatedLead, "siteBrandingUrl"),
+      heroImageUrl: getStringField(updatedLead, "heroImageUrl"),
+      siteIconUrl: getStringField(updatedLead, "siteIconUrl"),
+    });
+
     const html = await buildGeneratedSiteHtml(updatedLead);
     const generatedSite = await saveGeneratedSite({
       leadId: leadRow.id || null,
