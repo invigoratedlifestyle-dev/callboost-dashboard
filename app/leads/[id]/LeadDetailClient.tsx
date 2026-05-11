@@ -10,6 +10,7 @@ import type {
   LeadStatus,
   WebsiteEvaluation,
 } from "../../lib/leads";
+import type { BusinessInfoMatch } from "../../lib/businessInfoMatch";
 import {
   formatAustralianPhoneNumber,
   hasUsableFollowUpContact,
@@ -74,6 +75,7 @@ type LeadWithGeneratedContent = Lead & {
     issues?: string[];
     summary?: string;
   };
+  business_info_match?: BusinessInfoMatch;
 };
 
 type OutreachChannel = "sms" | "email";
@@ -204,6 +206,26 @@ function getRecommendationBadgeClass(recommendation?: string) {
   if (recommendation === "maybe") return "bg-yellow-500/15 text-yellow-300";
   if (recommendation === "skip") return "bg-green-500/15 text-green-300";
   return "bg-white/10 text-slate-400";
+}
+
+function getBusinessInfoMatchLabel(match?: BusinessInfoMatch) {
+  if (!match) return "No match data";
+  if (match.confidence === "high") return "High confidence match";
+  if (match.confidence === "medium") {
+    return "Medium confidence - review suggested";
+  }
+  if (match.confidence === "rejected") return "Rejected - no reliable match";
+
+  return "Low confidence - fallback branding used";
+}
+
+function getBusinessInfoMatchBadgeClass(match?: BusinessInfoMatch) {
+  if (!match) return "bg-white/10 text-slate-400";
+  if (match.confidence === "high") return "bg-green-500/15 text-green-300";
+  if (match.confidence === "medium") return "bg-yellow-500/15 text-yellow-300";
+  if (match.confidence === "rejected") return "bg-red-500/15 text-red-300";
+
+  return "bg-slate-500/15 text-slate-300";
 }
 
 function getPaymentStatusBadgeClass(paymentStatus?: string | null) {
@@ -3531,6 +3553,38 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
             <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">
               {opportunityError}
             </p>
+          ) : null}
+
+          {lead.business_info_match ? (
+            <div className="mb-4 rounded-xl border border-white/10 bg-slate-950/60 p-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <span
+                  className={`rounded-full px-3 py-1 text-xs font-bold ${getBusinessInfoMatchBadgeClass(
+                    lead.business_info_match
+                  )}`}
+                >
+                  {getBusinessInfoMatchLabel(lead.business_info_match)}
+                </span>
+                <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-200">
+                  Score {lead.business_info_match.score}
+                </span>
+                {lead.business_info_match.candidate_source ? (
+                  <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-300">
+                    Source {lead.business_info_match.candidate_source}
+                  </span>
+                ) : null}
+              </div>
+
+              {lead.business_info_match.reasons?.length ? (
+                <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-300">
+                  {lead.business_info_match.reasons
+                    .slice(0, 4)
+                    .map((reason) => (
+                      <li key={reason}>{reason}</li>
+                    ))}
+                </ul>
+              ) : null}
+            </div>
           ) : null}
 
           {websiteEvaluation ? (

@@ -4,6 +4,10 @@ import {
   fetchGooglePlaceDetails,
   normalizeGoogleReviews,
 } from "./googleReviews";
+import {
+  scoreBusinessInfoCandidate,
+  type BusinessInfoMatch,
+} from "./businessInfoMatch";
 import { withLifecycleDefaults } from "./leadLifecycle";
 import { getLeadBySlug, updateLeadBySlug } from "./supabase/leads";
 const ignoredSearchDomains = [
@@ -607,6 +611,18 @@ function extractEmail(html: string) {
   return matches?.[0] || "";
 }
 
+function extractPhone(html: string) {
+  const telMatch = html.match(/tel:([^"'\s<>]+)/i);
+
+  if (telMatch?.[1]) return telMatch[1];
+
+  const matches = stripHtml(html).match(
+    /(?:\+?61[\s.-]?)?(?:0[\s.-]?)?(?:4\d{2}[\s.-]?\d{3}[\s.-]?\d{3}|[2378][\s.-]?\d{4}[\s.-]?\d{4})/
+  );
+
+  return matches?.[0] || "";
+}
+
 function extractLinks(html: string) {
   const links: string[] = [];
   const regex = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
@@ -855,6 +871,85 @@ function logQualification(args: {
   console.log("Homepage scrape failed:", args.homepageScrapeFailed);
 }
 
+function buildBusinessInfoMatch(args: {
+  existingLead: Record<string, unknown>;
+  candidateUrl?: string;
+  candidateSource: string;
+  candidateName?: string;
+  candidateWebsite?: string;
+  candidateEmail?: string;
+  candidatePhone?: string;
+  candidateCity?: string;
+  candidateState?: string;
+  candidateCountry?: string;
+  candidateTrade?: string;
+  official?: boolean;
+  candidateData?: Record<string, unknown>;
+}) {
+  const match = scoreBusinessInfoCandidate(
+    {
+      businessName: getString(args.existingLead.businessName),
+      displayName: getString(args.existingLead.displayName),
+      name: getString(args.existingLead.name),
+      phone: getString(args.existingLead.phone),
+      email: getString(args.existingLead.email),
+      website: getString(args.existingLead.website),
+      city: getString(args.existingLead.city),
+      suburb: getString(args.existingLead.suburb),
+      town: getString(args.existingLead.town),
+      state: getString(args.existingLead.state),
+      region: getString(args.existingLead.region),
+      country: getString(args.existingLead.country) || "Australia",
+      trade: getString(args.existingLead.trade),
+    },
+    {
+      businessName: args.candidateName,
+      phone: args.candidatePhone,
+      email: args.candidateEmail,
+      website: args.candidateWebsite || args.candidateUrl,
+      url: args.candidateUrl || args.candidateWebsite,
+      city: args.candidateCity,
+      state: args.candidateState,
+      country: args.candidateCountry,
+      trade: args.candidateTrade,
+      source: args.candidateSource,
+      official: args.official,
+      data: args.candidateData,
+    }
+  );
+
+  console.log("BUSINESS_INFO_MATCH", {
+    candidateUrl: match.candidate_url,
+    candidateSource: match.candidate_source,
+    score: match.score,
+    confidence: match.confidence,
+    reasons: match.reasons,
+    autoApplied: match.confidence === "high",
+  });
+
+  return match;
+}
+
+function buildNoReliableBusinessInfoMatch(
+  candidateSource: string
+): BusinessInfoMatch {
+  return {
+    confidence: "low",
+    score: 0,
+    reasons: ["No reliable external business profile candidate found"],
+    matched_fields: {
+      phone: false,
+      email: false,
+      domain: false,
+      name: false,
+      location: false,
+      trade: false,
+    },
+    candidate_source: candidateSource,
+    requires_review: true,
+  };
+}
+
 function buildQualifiedLead(args: {
   existingLead: Record<string, unknown>;
   website: string;
@@ -867,6 +962,7 @@ function buildQualifiedLead(args: {
   badDomainDetected: boolean;
   homepageScrapeFailed: boolean;
   googleReviewFields: Record<string, unknown>;
+  businessInfoMatch: BusinessInfoMatch;
 }) {
   const socials = args.socials || {
     facebook: getString(args.existingLead.facebook),
@@ -879,6 +975,18 @@ function buildQualifiedLead(args: {
   });
   const leadScore = args.websiteEvaluation.score;
   const priority = getPriority(leadScore);
+  const highConfidenceBusinessInfo = args.businessInfoMatch.confidence === "high";
+  const existingFacebook = getString(args.existingLead.facebook);
+  const existingInstagram = getString(args.existingLead.instagram);
+  const nextWebsite =
+    getString(args.existingLead.website) ||
+    (highConfidenceBusinessInfo ? args.website : "");
+  const nextFacebook =
+    existingFacebook ||
+    (highConfidenceBusinessInfo ? socials.facebook || "" : "");
+  const nextInstagram =
+    existingInstagram ||
+    (highConfidenceBusinessInfo ? socials.instagram || "" : "");
 
   logQualification({
     websiteStatus: classification.websiteStatus,
@@ -891,12 +999,13 @@ function buildQualifiedLead(args: {
 
   return {
     ...withLifecycleDefaults(args.existingLead),
-    website: getString(args.existingLead.website) || args.website,
+    website: nextWebsite,
     phone: args.phone,
     email: args.email,
     contactPage: args.contactPage || getString(args.existingLead.contactPage),
-    facebook: socials.facebook || "",
-    instagram: socials.instagram || "",
+    facebook: nextFacebook,
+    instagram: nextInstagram,
+    business_info_match: args.businessInfoMatch,
     websiteEvaluation: args.websiteEvaluation,
     ...args.googleReviewFields,
     websiteStatus: classification.websiteStatus,
@@ -914,10 +1023,16 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
     throw new Error("Lead not found");
   }
 
-  let normalizedWebsite = normalizeUrl(getString(existingLead.website) || providedWebsite);
+  const existingWebsite = getString(existingLead.website);
+  let normalizedWebsite = normalizeUrl(existingWebsite || providedWebsite);
   let googleSearchEmail = "";
   let placesPhone = "";
   let placesPlaceId = getString(existingLead.googlePlaceId) || getString(existingLead.placeId);
+  let businessInfoCandidateSource = existingWebsite
+    ? "existing_lead_website"
+    : providedWebsite
+      ? "provided_website"
+      : "";
   const businessName = getString(existingLead.businessName);
 
   if (!normalizedWebsite) {
@@ -928,6 +1043,9 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
     normalizedWebsite = placesResult.website;
     placesPhone = placesResult.phone;
     placesPlaceId = placesPlaceId || placesResult.placeId;
+    if (placesResult.website) {
+      businessInfoCandidateSource = "google_places";
+    }
   }
 
   if (!normalizedWebsite) {
@@ -937,6 +1055,9 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
     );
     normalizedWebsite = googleSearchResult.website;
     googleSearchEmail = googleSearchResult.email;
+    if (googleSearchResult.website) {
+      businessInfoCandidateSource = "google_search";
+    }
   }
 
   if (normalizedWebsite) {
@@ -965,6 +1086,7 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
       googleReviewFields,
       badDomainDetected: false,
       homepageScrapeFailed: true,
+      businessInfoMatch: buildNoReliableBusinessInfoMatch("no_website"),
     });
 
     const savedLead = await updateLeadBySlug(slug, updatedLead);
@@ -999,6 +1121,7 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
       googleReviewFields,
       badDomainDetected,
       homepageScrapeFailed: false,
+      businessInfoMatch: buildNoReliableBusinessInfoMatch("bad_domain"),
     });
 
     const savedLead = await updateLeadBySlug(slug, updatedLead);
@@ -1023,6 +1146,19 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
       homepageHtml: "",
       isWorking: false,
     });
+    const businessInfoMatch = buildBusinessInfoMatch({
+      existingLead,
+      candidateUrl: normalizedWebsite,
+      candidateSource: businessInfoCandidateSource || "website_fetch_failed",
+      candidateWebsite: normalizedWebsite,
+      candidateEmail: googleSearchEmail,
+      candidatePhone: placesPhone,
+      official: false,
+      candidateData: {
+        email: googleSearchEmail,
+        phone: placesPhone,
+      },
+    });
     const updatedLead = buildQualifiedLead({
       existingLead,
       website: normalizedWebsite,
@@ -1033,6 +1169,7 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
       googleReviewFields,
       badDomainDetected,
       homepageScrapeFailed: true,
+      businessInfoMatch,
     });
 
     const savedLead = await updateLeadBySlug(slug, updatedLead);
@@ -1052,10 +1189,11 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
 
   const combinedHtml = `${homeHtml}\n${contactHtml}`;
   const extractedEmail = extractEmail(combinedHtml);
+  const extractedPhone = extractPhone(combinedHtml);
   const facebook = extractSocial(combinedHtml, "facebook");
   const instagram = extractSocial(combinedHtml, "instagram");
   const email = getString(existingLead.email) || googleSearchEmail || extractedEmail || "";
-  const phone = getString(existingLead.phone) || placesPhone || "";
+  const phone = getString(existingLead.phone) || placesPhone || extractedPhone || "";
   const socials = {
     facebook: facebook || getString(existingLead.facebook),
     instagram: instagram || getString(existingLead.instagram),
@@ -1075,6 +1213,23 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
     homepageHtml: homeHtml,
     isWorking: true,
   });
+  const businessInfoMatch = buildBusinessInfoMatch({
+    existingLead,
+    candidateUrl: normalizedWebsite,
+    candidateSource: businessInfoCandidateSource || "website",
+    candidateName: businessName,
+    candidateWebsite: normalizedWebsite,
+    candidateEmail: extractedEmail || googleSearchEmail,
+    candidatePhone: extractedPhone || placesPhone,
+    official: true,
+    candidateData: {
+      contactPage: savedContactPage,
+      email: extractedEmail || googleSearchEmail,
+      phone: extractedPhone || placesPhone,
+      facebook,
+      instagram,
+    },
+  });
   const updatedLead = buildQualifiedLead({
     existingLead,
     website: normalizedWebsite,
@@ -1087,6 +1242,7 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
     socials,
     badDomainDetected,
     homepageScrapeFailed: false,
+    businessInfoMatch,
   });
 
   const savedLead = await updateLeadBySlug(slug, updatedLead);
