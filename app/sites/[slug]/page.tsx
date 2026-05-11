@@ -5,6 +5,7 @@ import {
   getGeneratedSiteContext,
   getOuterSiteIconUrl,
 } from "./siteIcon";
+import FaviconRefresh from "./FaviconRefresh";
 
 type GeneratedSitePageProps = {
   params: Promise<{ slug: string }>;
@@ -69,11 +70,7 @@ export default async function GeneratedSitePage({
   return (
     <>
       {siteIconUrl ? (
-        <>
-          <link rel="icon" href={siteIconUrl} />
-          <link rel="shortcut icon" href={siteIconUrl} />
-          <link rel="apple-touch-icon" href={siteIconUrl} />
-        </>
+        <FaviconRefresh iconUrl={siteIconUrl} />
       ) : null}
       <main className="min-h-screen bg-white">
         <iframe
