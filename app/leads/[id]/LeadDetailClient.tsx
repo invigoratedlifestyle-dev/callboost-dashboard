@@ -2144,6 +2144,123 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
               )}
             </p>
 
+            <div className="mt-6 rounded-xl border border-blue-400/20 bg-blue-500/10 p-4">
+              <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <label className="grid gap-2 text-sm font-bold text-slate-300">
+                    Template Trade
+                    <select
+                      value={templateTrade}
+                      onChange={(event) => setTemplateTrade(event.target.value)}
+                      className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none"
+                    >
+                      {templateTradeOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {formatTemplateTradeLabel(option)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="grid gap-2 text-sm font-bold text-slate-300">
+                    Template Type
+                    <select
+                      value={templateType}
+                      onChange={(event) => setTemplateType(event.target.value)}
+                      className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none"
+                    >
+                      {templateTypeOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 lg:justify-end">
+                  {isLeadArchived ? (
+                    <p className="w-full rounded-lg bg-amber-500/10 px-3 py-2 text-sm font-bold text-amber-200 lg:max-w-xs">
+                      Generated site disabled because this lead is archived.
+                    </p>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        if (!generatedSiteUrl) {
+                          alert("Generate a site first.");
+                          return;
+                        }
+
+                        window.open(
+                          generatedSiteUrl,
+                          "_blank",
+                          "noopener,noreferrer"
+                        );
+                      }}
+                      className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-bold hover:bg-slate-600"
+                    >
+                      View Page
+                    </button>
+                  )}
+
+                  <EnrichButton lead={lead} onEnriched={handleLeadUpdated} />
+
+                  {!isLeadArchived ? (
+                    <GenerateSiteButton
+                      lead={lead}
+                      templateTrade={templateTrade}
+                      templateType={templateType}
+                      onGenerated={handleLeadUpdated}
+                    />
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-white/10 pt-4">
+                <button
+                  onClick={handleCreateCheckoutLink}
+                  disabled={creatingCheckout}
+                  className="rounded-lg bg-green-600 px-4 py-2 text-sm font-bold hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {creatingCheckout ? "Creating..." : "Create Checkout Link"}
+                </button>
+
+                <span className="text-xs text-slate-400">
+                  Secondary payment action for clients ready to proceed.
+                </span>
+              </div>
+
+              {checkoutUrl ? (
+                <div className="mt-4 rounded-xl border border-green-400/20 bg-green-500/10 p-4">
+                  <p className="mb-2 text-sm font-bold text-green-300">
+                    Payment Link URL
+                  </p>
+                  <p className="mb-3 text-sm text-green-100">
+                    Checkout summary: {CALLBOOST_CHECKOUT_SUMMARY}.
+                  </p>
+                  <a
+                    href={brandedPaymentUrl || checkoutUrl}
+                    target="_blank"
+                    className="break-all text-sm text-blue-300 hover:text-blue-200"
+                  >
+                    {brandedPaymentUrl || checkoutUrl}
+                  </a>
+                </div>
+              ) : null}
+
+              {checkoutNotice ? (
+                <p className="mt-3 text-sm font-bold text-green-300">
+                  {checkoutNotice}
+                </p>
+              ) : null}
+
+              {checkoutError ? (
+                <p className="mt-3 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">
+                  {checkoutError}
+                </p>
+              ) : null}
+            </div>
+
             <div className="mt-6 rounded-xl border border-white/10 bg-slate-950 p-4">
               <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -2757,109 +2874,6 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 ) : null}
               </div>
             </div>
-
-              <div className="mt-6 grid gap-4 md:grid-cols-2">
-                <label className="grid gap-2 text-sm font-bold text-slate-300">
-                  Template Trade
-                  <select
-                    value={templateTrade}
-                    onChange={(event) => setTemplateTrade(event.target.value)}
-                    className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none"
-                  >
-                    {templateTradeOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {formatTemplateTradeLabel(option)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="grid gap-2 text-sm font-bold text-slate-300">
-                  Template Type
-                  <select
-                    value={templateType}
-                    onChange={(event) => setTemplateType(event.target.value)}
-                    className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none"
-                  >
-                    {templateTypeOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-
-              <div className="mt-6 flex flex-wrap gap-3">
-              {isLeadArchived ? (
-                <p className="w-full rounded-lg bg-amber-500/10 px-3 py-2 text-sm font-bold text-amber-200">
-                  Generated site disabled because this lead is archived.
-                </p>
-              ) : (
-                <button
-                  onClick={() => {
-                    if (!generatedSiteUrl) {
-                      alert("Generate a site first.");
-                      return;
-                    }
-
-                    window.open(generatedSiteUrl, "_blank", "noopener,noreferrer");
-                  }}
-                  className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-bold hover:bg-slate-600"
-                >
-                  View Page
-                </button>
-              )}
-
-              <EnrichButton lead={lead} onEnriched={handleLeadUpdated} />
-
-              {!isLeadArchived ? (
-                <GenerateSiteButton
-                  lead={lead}
-                  templateTrade={templateTrade}
-                  templateType={templateType}
-                  onGenerated={handleLeadUpdated}
-                />
-              ) : null}
-
-              <button
-                onClick={handleCreateCheckoutLink}
-                disabled={creatingCheckout}
-                className="rounded-lg bg-green-600 px-4 py-2 text-sm font-bold hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {creatingCheckout ? "Creating..." : "Create Checkout Link"}
-              </button>
-            </div>
-
-            {checkoutUrl ? (
-              <div className="mt-4 rounded-xl border border-green-400/20 bg-green-500/10 p-4">
-                <p className="mb-2 text-sm font-bold text-green-300">
-                  Payment Link URL
-                </p>
-                <p className="mb-3 text-sm text-green-100">
-                  Checkout summary: {CALLBOOST_CHECKOUT_SUMMARY}.
-                </p>
-                <a
-                  href={brandedPaymentUrl || checkoutUrl}
-                  target="_blank"
-                  className="break-all text-sm text-blue-300 hover:text-blue-200"
-                >
-                  {brandedPaymentUrl || checkoutUrl}
-                </a>
-              </div>
-            ) : null}
-
-            {checkoutNotice ? (
-              <p className="mt-3 text-sm font-bold text-green-300">
-                {checkoutNotice}
-              </p>
-            ) : null}
-
-            {checkoutError ? (
-              <p className="mt-3 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">
-                {checkoutError}
-              </p>
-            ) : null}
           </section>
         </div>
 
