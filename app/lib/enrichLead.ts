@@ -904,6 +904,27 @@ function extractPhone(html: string) {
   return matches?.[0] || "";
 }
 
+function extractPhones(html: string) {
+  const phones = new Set<string>();
+  const telRegex = /tel:([^"'\s<>]+)/gi;
+  let telMatch: RegExpExecArray | null;
+
+  while ((telMatch = telRegex.exec(html))) {
+    if (telMatch[1]) phones.add(telMatch[1].trim());
+  }
+
+  const text = stripHtml(html);
+  const phoneRegex =
+    /(?:\+?61[\s.-]?)?(?:0[\s.-]?)?(?:4\d{2}[\s.-]?\d{3}[\s.-]?\d{3}|[2378][\s.-]?\d{4}[\s.-]?\d{4})/g;
+  let phoneMatch: RegExpExecArray | null;
+
+  while ((phoneMatch = phoneRegex.exec(text))) {
+    if (phoneMatch[0]) phones.add(phoneMatch[0].trim());
+  }
+
+  return [...phones];
+}
+
 function extractLinks(html: string) {
   const links: string[] = [];
   const regex = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
@@ -950,7 +971,8 @@ function extractInstagramPresence(html: string) {
 
   const text = stripHtml(html);
   const handleMatch =
-    text.match(/(?:instagram|insta|ig)\s*(?:[:@-]|\bat\b)?\s*@?([A-Za-z0-9._]{3,30})/i) ||
+    text.match(/(?:instagram|insta|ig)\s*(?:[:@-]|\bat\b|handle)?\s*@?([A-Za-z0-9._]{3,30})/i) ||
+    text.match(/\b([A-Za-z][A-Za-z0-9]*_[A-Za-z0-9._]{3,30})\b/) ||
     text.match(/@([A-Za-z0-9._]{3,30})\b/);
   const handle = handleMatch?.[1]?.replace(/[.]+$/g, "");
 
@@ -1017,6 +1039,75 @@ function extractEmailFromGoogleSearch(html: string) {
   return extractEmail(html);
 }
 
+function redactContactSample(value: string) {
+  return value
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[email]")
+    .replace(
+      /(?:\+?61[\s.-]?)?(?:0[\s.-]?)?(?:4\d{2}[\s.-]?\d{3}[\s.-]?\d{3}|[2378][\s.-]?\d{4}[\s.-]?\d{4})/g,
+      "[phone]"
+    )
+    .slice(0, 300);
+}
+
+function isBlockedSocialFetch(htmlOrText: string, url: string) {
+  const type = getBusinessPresenceType(url);
+
+  if (type !== "facebook" && type !== "instagram") return false;
+
+  const text = stripHtml(htmlOrText).toLowerCase();
+  const meaningfulText = text.replace(/\s+/g, " ").trim();
+
+  return (
+    htmlOrText.length < 1200 ||
+    meaningfulText.length < 120 ||
+    /you must log in|log into facebook|login required|unsupported browser|browser is not supported|enable javascript|temporarily blocked|content isn't available/i.test(
+      text
+    )
+  );
+}
+
+async function fetchHtmlWithDebug(url: string) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  let res: Response;
+
+  try {
+    res = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 CallBoost Lead Enrichment",
+      },
+      signal: controller.signal,
+      redirect: "follow",
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  const html = await res.text();
+  const blocked = isBlockedSocialFetch(html, res.url || url);
+
+  console.log("BUSINESS_PRESENCE_FETCH", {
+    sourceUrl: url,
+    finalUrl: res.url || url,
+    status: res.status,
+    ok: res.ok,
+    contentLength: html.length,
+    blocked,
+    sample: redactContactSample(stripHtml(html).replace(/\s+/g, " ").trim()),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to fetch ${url}: ${res.status}`);
+  }
+
+  return {
+    html,
+    status: res.status,
+    finalUrl: res.url || url,
+    blocked,
+  };
+}
+
 async function fetchHtml(url: string) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10000);
@@ -1061,6 +1152,92 @@ async function findWebsiteFromGoogleSearch(businessName?: string, city?: string)
     console.error("Failed to auto-find website:", error);
     return { website: "", email: "" };
   }
+}
+
+function extractFacebookCanonicalUrl(html: string) {
+  const ogUrl = extractMetaContent(html, "og:url");
+  const canonicalMatch = html.match(
+    /<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["'][^>]*>/i
+  );
+  const reverseCanonicalMatch = html.match(
+    /<link[^>]+href=["']([^"']+)["'][^>]+rel=["']canonical["'][^>]*>/i
+  );
+  const canonicalUrl = ogUrl || canonicalMatch?.[1] || reverseCanonicalMatch?.[1] || "";
+
+  if (canonicalUrl && isFacebookUrl(canonicalUrl) && !/profile\.php/i.test(canonicalUrl)) {
+    return normalizeUrl(canonicalUrl);
+  }
+
+  const handleMatch = html.match(/https?:\/\/(?:www\.)?facebook\.com\/(?!profile\.php)([A-Za-z0-9_.-]+)/i);
+
+  return handleMatch?.[0] ? normalizeUrl(handleMatch[0]) : "";
+}
+
+function getFacebookPath(url: string) {
+  try {
+    const parsedUrl = new URL(normalizeUrl(url));
+    return parsedUrl.pathname.replace(/^\/+|\/+$/g, "");
+  } catch {
+    return "";
+  }
+}
+
+function mergeTextParts(parts: string[]) {
+  return parts.filter(Boolean).join("\n\n");
+}
+
+async function searchBusinessPresenceFallback(args: {
+  businessName: string;
+  city?: string;
+  sourceUrl: string;
+  existingEmail?: string;
+  existingPhone?: string;
+}) {
+  const facebookPath = getFacebookPath(args.sourceUrl);
+  const queries = [
+    `"${args.businessName}" "facebook"`,
+    args.city ? `"${args.businessName}" "${args.city}" "facebook"` : "",
+    args.existingEmail ? `"${args.businessName}" "${args.existingEmail}"` : "",
+    args.existingPhone ? `"${args.businessName}" "${args.existingPhone}"` : "",
+    facebookPath ? `site:facebook.com/${facebookPath} "${args.businessName}"` : "",
+    facebookPath ? `site:facebook.com/${facebookPath} email phone instagram` : "",
+  ].filter(Boolean);
+  const htmlParts: string[] = [];
+  const urls = new Set<string>();
+
+  for (const query of queries) {
+    try {
+      const params = new URLSearchParams({ q: query });
+      const html = await fetchHtml(`https://www.google.com/search?${params}`);
+      const canonical = extractFacebookCanonicalUrl(html);
+
+      if (canonical) urls.add(canonical);
+      htmlParts.push(html);
+
+      console.log("BUSINESS_PRESENCE fallback search", {
+        query,
+        contentLength: html.length,
+        canonicalFacebookUrl: canonical,
+      });
+    } catch (error) {
+      console.log("BUSINESS_PRESENCE fallback search failed", {
+        query,
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
+  const html = mergeTextParts(htmlParts);
+
+  return {
+    html,
+    canonicalFacebookUrl: [...urls][0] || "",
+    email: extractEmail(html),
+    phones: extractPhones(html),
+    instagram: extractInstagramPresence(html),
+    address: extractAddress(html),
+    candidateImages: extractCandidateImages(html, args.sourceUrl),
+  };
 }
 
 async function findWebsiteFromPlacesApi(businessName?: string, city?: string) {
@@ -1506,9 +1683,18 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
     const presenceType = getBusinessPresenceType(normalizedWebsite);
     let presenceHtml = "";
     let presenceFetchFailed = false;
+    let presenceFetchBlocked = false;
+    let presenceFinalUrl = normalizedWebsite;
+    let extractionSource: "direct_fetch" | "fallback_search" | "mixed" | "none" =
+      "none";
+    let facebookCanonicalized = false;
 
     try {
-      presenceHtml = await fetchHtml(normalizedWebsite);
+      const fetchedPresence = await fetchHtmlWithDebug(normalizedWebsite);
+      presenceHtml = fetchedPresence.html;
+      presenceFetchBlocked = fetchedPresence.blocked;
+      presenceFinalUrl = fetchedPresence.finalUrl;
+      extractionSource = presenceFetchBlocked ? "none" : "direct_fetch";
     } catch (error) {
       presenceFetchFailed = true;
       console.log("BUSINESS_PRESENCE profile fetch limited", {
@@ -1519,25 +1705,85 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
     }
 
     const extractedEmail = presenceHtml ? extractEmail(presenceHtml) : "";
-    const extractedPhone = presenceHtml ? extractPhone(presenceHtml) : "";
+    const directPhones = presenceHtml ? extractPhones(presenceHtml) : [];
     const extractedAddress = presenceHtml ? extractAddress(presenceHtml) : "";
+    const directFacebookCanonical = presenceHtml
+      ? extractFacebookCanonicalUrl(presenceHtml)
+      : "";
+    const redirectedFacebookCanonical =
+      isFacebookUrl(presenceFinalUrl) && !/profile\.php/i.test(presenceFinalUrl)
+        ? normalizeUrl(presenceFinalUrl)
+        : "";
+    const shouldFallbackSearch =
+      (presenceType === "facebook" || presenceType === "instagram") &&
+      (presenceFetchBlocked ||
+        (!extractedEmail &&
+          directPhones.length === 0 &&
+          !extractedAddress &&
+          !extractInstagramPresence(presenceHtml)));
+    const fallback = shouldFallbackSearch
+      ? await searchBusinessPresenceFallback({
+          businessName,
+          city: getString(existingLead.city),
+          sourceUrl: normalizedWebsite,
+          existingEmail: getString(existingLead.email),
+          existingPhone: getString(existingLead.phone),
+        })
+      : {
+          html: "",
+          canonicalFacebookUrl: "",
+          email: "",
+          phones: [] as string[],
+          instagram: "",
+          address: "",
+          candidateImages: [] as string[],
+        };
+    const combinedPresenceText = mergeTextParts([presenceHtml, fallback.html]);
+    const resolvedFacebookUrl =
+      redirectedFacebookCanonical ||
+      directFacebookCanonical ||
+      fallback.canonicalFacebookUrl ||
+      normalizedWebsite;
+    facebookCanonicalized =
+      Boolean(
+        (redirectedFacebookCanonical ||
+          directFacebookCanonical ||
+          fallback.canonicalFacebookUrl) &&
+          isFacebookUrl(normalizedWebsite)
+      ) &&
+      resolvedFacebookUrl !== normalizedWebsite;
+    const allExtractedPhones = [...new Set([...directPhones, ...fallback.phones])];
+    const bestExtractedPhone =
+      allExtractedPhones.find((phoneValue) => /(?:\+?61[\s.-]?)?(?:0[\s.-]?)?4/.test(phoneValue)) ||
+      allExtractedPhones[0] ||
+      "";
+    const bestExtractedEmail = extractedEmail || fallback.email;
+    const bestExtractedAddress = extractedAddress || fallback.address;
+    const bestExtractedInstagram =
+      extractInstagramPresence(combinedPresenceText) || fallback.instagram;
+    const candidateImages = [
+      ...new Set([
+        ...(presenceHtml ? extractCandidateImages(presenceHtml, normalizedWebsite) : []),
+        ...fallback.candidateImages,
+      ]),
+    ].slice(0, 8);
+
+    if (fallback.html) {
+      extractionSource = presenceHtml && !presenceFetchBlocked ? "mixed" : "fallback_search";
+    }
+
     const facebook =
       isFacebookUrl(normalizedWebsite)
-        ? normalizedWebsite
+        ? resolvedFacebookUrl
         : presenceHtml
           ? extractSocial(presenceHtml, "facebook")
           : "";
     const instagram =
       isInstagramUrl(normalizedWebsite)
         ? normalizedWebsite
-        : presenceHtml
-          ? extractInstagramPresence(presenceHtml)
-          : "";
-    const candidateImages = presenceHtml
-      ? extractCandidateImages(presenceHtml, normalizedWebsite)
-      : [];
-    const candidateAddress = extractedAddress || placesAddress;
-    const email = getString(existingLead.email) || googleSearchEmail || extractedEmail;
+        : bestExtractedInstagram;
+    const candidateAddress = bestExtractedAddress || placesAddress;
+    const email = getString(existingLead.email) || googleSearchEmail || bestExtractedEmail;
     const inferredWebsite = await checkInferredCanonicalWebsite({
       email,
       businessName,
@@ -1547,16 +1793,19 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
       candidateUrl: normalizedWebsite,
       candidateSource: businessInfoCandidateSource || presenceType,
       candidateName: businessName,
-      candidateEmail: extractedEmail || googleSearchEmail,
-      candidatePhone: extractedPhone || placesPhone,
+      candidateEmail: bestExtractedEmail || googleSearchEmail,
+      candidatePhone: bestExtractedPhone || placesPhone,
       candidateCity: extractCityFromAddress(candidateAddress) || undefined,
       candidateState: extractStateFromText(candidateAddress) || undefined,
       candidateCountry: extractCountryFromText(candidateAddress) || undefined,
       candidateTrade: placesCategory,
       official: false,
       candidateData: {
-        email: extractedEmail || googleSearchEmail,
-        phone: extractedPhone || placesPhone,
+        extractionSource,
+        finalUrl: presenceFinalUrl,
+        email: bestExtractedEmail || googleSearchEmail,
+        phone: bestExtractedPhone || placesPhone,
+        phones: allExtractedPhones,
         address: candidateAddress,
         facebook,
         instagram,
@@ -1575,11 +1824,11 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
       inferredDomainResponded: inferredWebsite.responded,
       sourceUrl: normalizedWebsite,
       sourceType: presenceType,
-      extractedEmail: extractedEmail || googleSearchEmail,
-      extractedPhone: extractedPhone || placesPhone,
+      extractedEmail: bestExtractedEmail || googleSearchEmail,
+      extractedPhone: bestExtractedPhone || placesPhone,
       extraPhones: getExtraPhones(
         getString(existingLead.phone),
-        extractedPhone || placesPhone
+        bestExtractedPhone || placesPhone
       ),
       extractedAddress: candidateAddress,
       extractedSocials: {
@@ -1592,10 +1841,15 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
     console.log("BUSINESS_PRESENCE result", {
       sourceUrl: normalizedWebsite,
       sourceType: presenceType,
-      extractedEmail: extractedEmail || googleSearchEmail,
-      extractedPhone: extractedPhone || placesPhone,
+      extractionSource,
+      fetchedFinalUrl: presenceFinalUrl,
+      directFetchBlocked: presenceFetchBlocked,
+      extractedEmail: bestExtractedEmail || googleSearchEmail,
+      extractedPhones: allExtractedPhones,
+      extraPhones: getExtraPhones(getString(existingLead.phone), bestExtractedPhone),
       extractedAddress: candidateAddress,
       extractedSocials: { facebook, instagram },
+      facebookCanonicalized,
       inferredDomain: inferredWebsite.inferredDomain,
       inferredDomainResponded: inferredWebsite.responded,
       confidence: businessInfoMatch.confidence,
@@ -1629,7 +1883,7 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
       website: inferredWebsite.canonicalWebsiteUrl,
       homepageHtml: inferredWebsite.html || "",
       email,
-      phone: getString(existingLead.phone) || placesPhone || extractedPhone,
+      phone: getString(existingLead.phone) || placesPhone || bestExtractedPhone,
       websiteEvaluation,
       googleReviewFields,
       badDomainDetected,
@@ -1648,6 +1902,13 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
       instagram: getString(updatedLead.instagram),
       email: getString(updatedLead.email),
       phone: getString(updatedLead.phone),
+      extractionSource,
+      extractedEmail: bestExtractedEmail || googleSearchEmail,
+      extractedPhones: allExtractedPhones,
+      extraPhones: businessPresence.extraPhones || [],
+      extractedInstagram: instagram,
+      extractedAddress: candidateAddress,
+      facebookCanonicalized,
       primaryBusinessPresenceUrl: businessPresence.primaryBusinessPresenceUrl,
       primaryBusinessPresenceType: businessPresence.primaryBusinessPresenceType,
     });
