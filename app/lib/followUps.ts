@@ -356,10 +356,14 @@ export function getFollowUpDueStatus(
     nextStage = 1;
   } else if (!followUpSentAt[2]) {
     nextStage = 2;
-    stageBaseline = followUpSentAt[1] || 0;
+    // Any successful outbound outreach should reset the current due bucket,
+    // even when it was sent manually without follow_up_stage metadata.
+    stageBaseline = Math.max(followUpSentAt[1] || 0, latestOutbound);
   } else if (!followUpSentAt[3]) {
     nextStage = 3;
-    stageBaseline = followUpSentAt[2] || 0;
+    // Keep stage progression metadata-driven, but debounce due state by the
+    // newest outbound outreach across SMS and email.
+    stageBaseline = Math.max(followUpSentAt[2] || 0, latestOutbound);
   }
 
   if (!nextStage || !stageBaseline) {
