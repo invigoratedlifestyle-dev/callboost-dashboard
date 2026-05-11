@@ -2145,7 +2145,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
             </p>
 
             <div className="mt-6 rounded-xl border border-blue-400/20 bg-blue-500/10 p-4">
-              <div className="grid gap-4 lg:grid-cols-[minmax(220px,1fr)_minmax(180px,0.75fr)_auto_auto] lg:items-end">
+              <div className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-[minmax(180px,1fr)_minmax(180px,1fr)_minmax(120px,auto)_minmax(140px,auto)] xl:items-end">
                 <label className="grid min-w-0 gap-2 text-sm font-bold text-slate-300">
                   Template Trade
                   <select
@@ -2194,13 +2194,13 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                         "noopener,noreferrer"
                       );
                     }}
-                    className="min-h-10 w-full whitespace-nowrap rounded-lg bg-slate-700 px-4 py-2 text-sm font-bold hover:bg-slate-600 lg:w-auto"
+                    className="min-h-10 w-full whitespace-nowrap rounded-lg bg-slate-700 px-4 py-2 text-sm font-bold hover:bg-slate-600"
                   >
                     View Page
                   </button>
                 )}
 
-                <div className="w-full [&>button]:min-h-10 [&>button]:w-full [&>button]:whitespace-nowrap lg:w-auto lg:[&>button]:w-auto">
+                <div className="w-full min-w-0 [&>button]:min-h-10 [&>button]:w-full [&>button]:whitespace-nowrap">
                   <EnrichButton lead={lead} onEnriched={handleLeadUpdated} />
                 </div>
               </div>
