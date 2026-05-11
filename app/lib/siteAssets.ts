@@ -269,6 +269,36 @@ export async function uploadLeadSiteBrandingImage(args: {
   };
 }
 
+export async function uploadLeadSiteIconImage(args: {
+  leadKey: string;
+  file: File;
+}): Promise<UploadedLeadHeroImage> {
+  const supabase = getSupabaseAdmin();
+  const leadKey = normalizeKey(args.leadKey, "lead");
+  const extension = getFileExtension(args.file.name, args.file.type);
+  const fileBaseName = sanitizeFileBaseName(args.file.name);
+  const timestamp = Date.now();
+  const storagePath = `site-icons/${leadKey}/${timestamp}-${fileBaseName}.${extension}`;
+  const bytes = await args.file.arrayBuffer();
+  const { error: uploadError } = await supabase.storage
+    .from(SITE_ASSETS_BUCKET)
+    .upload(storagePath, bytes, {
+      contentType: args.file.type || "image/png",
+      upsert: false,
+    });
+
+  if (uploadError) throw uploadError;
+
+  const { data: publicUrlData } = supabase.storage
+    .from(SITE_ASSETS_BUCKET)
+    .getPublicUrl(storagePath);
+
+  return {
+    imageUrl: publicUrlData.publicUrl,
+    storagePath,
+  };
+}
+
 export async function deleteSiteAsset(id: string) {
   const supabase = getSupabaseAdmin();
   const { data: asset, error: lookupError } = await supabase

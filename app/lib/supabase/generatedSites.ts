@@ -35,6 +35,7 @@ const generatedSiteReferenceFields = [
   "generatedHeroImage",
   "siteBrandingUrl",
   "siteLogoUrl",
+  "siteIconUrl",
 ] as const;
 
 function normalizeStorageKey(value: unknown, fallback: string) {
@@ -123,6 +124,7 @@ export async function purgeGeneratedSiteForLead(args: {
   for (const key of storageKeys) {
     await removeStoragePrefix(supabase, `hero-images/${key}`);
     await removeStoragePrefix(supabase, `site-branding/${key}`);
+    await removeStoragePrefix(supabase, `site-icons/${key}`);
   }
 }
 
@@ -1108,6 +1110,12 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
   const heroImage = await getGeneratedHeroImage({ lead, trade, seed });
   const siteBrandingUrl = getText(lead.siteBrandingUrl).trim();
   const hasSiteBranding = isValidHttpUrl(siteBrandingUrl);
+  const siteIconUrl = getText(lead.siteIconUrl).trim();
+  const iconLinkHtml = isValidHttpUrl(siteIconUrl)
+    ? `  <link rel="icon" href="${escapeAttribute(siteIconUrl)}" />
+  <link rel="apple-touch-icon" href="${escapeAttribute(siteIconUrl)}" />
+`
+    : "";
   const buttonColor = getDesignColor(lead, "buttonColor", "#14b8a6");
   const buttonTextColor = getDesignColor(lead, "buttonTextColor", "#ffffff");
   const heroAccentColor = getDesignColor(lead, "heroAccentColor", "#a7f3d0");
@@ -1277,6 +1285,7 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>${escapeHtml(businessName)} | ${escapeHtml(tradeLabel)} in ${escapeHtml(city)}</title>
   <meta name="description" content="${escapeAttribute(description)}" />
+${iconLinkHtml}
   <style>
     :root { --cta-color: ${escapeAttribute(buttonColor)}; --cta-text-color: ${escapeAttribute(buttonTextColor)}; --hero-accent-color: ${escapeAttribute(heroAccentColor)}; --body-accent-color: ${escapeAttribute(bodyAccentColor)}; --service-area-card-color: ${escapeAttribute(serviceAreaCardColor)}; --footer-background-color: ${escapeAttribute(footerBackgroundColor)}; --footer-text-color: #ffffff; --cb-button-color: var(--cta-color); --cb-accent-text-color: var(--body-accent-color); }
     * { box-sizing: border-box; }

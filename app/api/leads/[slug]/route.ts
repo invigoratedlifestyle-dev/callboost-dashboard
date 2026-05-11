@@ -133,6 +133,10 @@ export async function PATCH(
         nextLead.siteBrandingUrl = body.siteBrandingUrl;
       }
 
+      if (hasOwn(body, "siteIconUrl") && typeof body.siteIconUrl === "string") {
+        nextLead.siteIconUrl = body.siteIconUrl;
+      }
+
       if (hasOwn(body, "design")) {
         const existingDesign =
           nextLead.design && typeof nextLead.design === "object"

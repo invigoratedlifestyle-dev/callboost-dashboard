@@ -44,6 +44,7 @@ type LeadWithGeneratedContent = Lead & {
   formattedAddress?: string;
   heroImageUrl?: string;
   siteBrandingUrl?: string;
+  siteIconUrl?: string;
   design?: {
     buttonColor?: string;
     buttonTextColor?: string;
@@ -110,6 +111,9 @@ const heroImageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 const heroImageExtensions = new Set(["jpg", "jpeg", "png", "webp"]);
 const BRANDING_IMAGE_MAX_BYTES = 2 * 1024 * 1024;
 const BRANDING_IMAGE_ACCEPT =
+  ".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp";
+const SITE_ICON_IMAGE_MAX_BYTES = 2 * 1024 * 1024;
+const SITE_ICON_IMAGE_ACCEPT =
   ".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp";
 const DEFAULT_BUTTON_COLOR = "#14b8a6";
 const DEFAULT_BUTTON_TEXT_COLOR = "#ffffff";
@@ -480,6 +484,14 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const [savingSiteBranding, setSavingSiteBranding] = useState(false);
   const [siteBrandingNotice, setSiteBrandingNotice] = useState("");
   const [siteBrandingError, setSiteBrandingError] = useState("");
+  const [siteIconFile, setSiteIconFile] = useState<File | null>(null);
+  const [uploadingSiteIcon, setUploadingSiteIcon] = useState(false);
+  const [siteIconUploadNotice, setSiteIconUploadNotice] = useState("");
+  const [siteIconUploadError, setSiteIconUploadError] = useState("");
+  const [siteIconUrl, setSiteIconUrl] = useState("");
+  const [savingSiteIcon, setSavingSiteIcon] = useState(false);
+  const [siteIconNotice, setSiteIconNotice] = useState("");
+  const [siteIconError, setSiteIconError] = useState("");
   const [buttonColor, setButtonColor] = useState(DEFAULT_BUTTON_COLOR);
   const [buttonTextColor, setButtonTextColor] = useState(
     DEFAULT_BUTTON_TEXT_COLOR
@@ -569,6 +581,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       });
       setSiteHeroImageUrl(loadedLead.heroImageUrl || "");
       setSiteBrandingUrl(loadedLead.siteBrandingUrl || "");
+      setSiteIconUrl(loadedLead.siteIconUrl || "");
       const siteDesign = getLeadSiteDesign(loadedLead);
       setButtonColor(siteDesign.buttonColor);
       setButtonTextColor(siteDesign.buttonTextColor);
@@ -674,6 +687,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     );
     setSiteHeroImageUrl(nextLead.heroImageUrl || "");
     setSiteBrandingUrl(nextLead.siteBrandingUrl || "");
+    setSiteIconUrl(nextLead.siteIconUrl || "");
     const siteDesign = getLeadSiteDesign(nextLead);
     setButtonColor(siteDesign.buttonColor);
     setButtonTextColor(siteDesign.buttonTextColor);
@@ -854,6 +868,33 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
 
     setBrandingImageFile(file);
   };
+  const handleSiteIconFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0] || null;
+
+    setSiteIconUploadNotice("");
+    setSiteIconUploadError("");
+
+    if (!file) {
+      setSiteIconFile(null);
+      return;
+    }
+
+    if (!isAllowedHeroImageFile(file)) {
+      setSiteIconFile(null);
+      event.target.value = "";
+      setSiteIconUploadError("Upload a PNG, JPG or WebP site icon.");
+      return;
+    }
+
+    if (file.size > SITE_ICON_IMAGE_MAX_BYTES) {
+      setSiteIconFile(null);
+      event.target.value = "";
+      setSiteIconUploadError("Site icon must be 2MB or smaller.");
+      return;
+    }
+
+    setSiteIconFile(file);
+  };
   const handleUploadBrandingImage = async () => {
     if (!lead) {
       setBrandingImageUploadError(
@@ -958,6 +999,55 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       setUploadingHeroImage(false);
     }
   };
+  const handleUploadSiteIcon = async () => {
+    if (!lead) {
+      setSiteIconUploadError("Load a lead before uploading a site icon.");
+      return;
+    }
+
+    if (!siteIconFile) {
+      setSiteIconUploadError("Choose a site icon to upload first.");
+      return;
+    }
+
+    setUploadingSiteIcon(true);
+    setSiteIconUploadNotice("Uploading site icon...");
+    setSiteIconUploadError("");
+    setSiteIconNotice("");
+    setSiteIconError("");
+
+    try {
+      const formData = new FormData();
+      formData.append("file", siteIconFile);
+
+      const res = await fetch(`/api/leads/${lead.slug || lead.id}/site-icon`, {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to upload site icon");
+      }
+
+      const imageUrl = typeof data.imageUrl === "string" ? data.imageUrl : "";
+
+      if (!imageUrl) {
+        throw new Error("Upload succeeded but no public image URL was returned.");
+      }
+
+      setSiteIconUrl(imageUrl);
+      setSiteIconFile(null);
+      setSiteIconUploadNotice("Site icon uploaded. Save the site icon URL to keep it.");
+    } catch (error) {
+      setSiteIconUploadNotice("");
+      setSiteIconUploadError(
+        error instanceof Error ? error.message : "Failed to upload site icon"
+      );
+    } finally {
+      setUploadingSiteIcon(false);
+    }
+  };
   const handleSaveSiteBranding = async () => {
     if (!lead) return;
 
@@ -1034,6 +1124,45 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       );
     } finally {
       setSavingSiteHeroImage(false);
+    }
+  };
+  const handleSaveSiteIcon = async () => {
+    if (!lead) return;
+
+    const nextSiteIconUrl = normalizeWebsite(siteIconUrl);
+
+    setSavingSiteIcon(true);
+    setSiteIconNotice("");
+    setSiteIconError("");
+
+    try {
+      const res = await fetch(`/api/leads/${lead.slug || lead.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          siteIconUrl: nextSiteIconUrl,
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to save site icon");
+      }
+
+      const updatedLead = data.lead as LeadWithGeneratedContent;
+
+      setLead(updatedLead);
+      setSiteIconUrl(updatedLead.siteIconUrl || "");
+      setSiteIconNotice("Site icon saved.");
+      setSiteIconUploadNotice("");
+    } catch (error) {
+      setSiteIconError(
+        error instanceof Error ? error.message : "Failed to save site icon"
+      );
+    } finally {
+      setSavingSiteIcon(false);
     }
   };
   const handleSaveSiteDesign = async () => {
@@ -1163,6 +1292,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
         instagram: updatedLead.instagram || "",
       });
       setSiteHeroImageUrl(updatedLead.heroImageUrl || "");
+      setSiteBrandingUrl(updatedLead.siteBrandingUrl || "");
+      setSiteIconUrl(updatedLead.siteIconUrl || "");
       setSmsTo(updatedLead.phone || "");
       setEmailTo(updatedLead.email || "");
       setIsEditingContact(false);
@@ -2499,6 +2630,129 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 {siteHeroImageError ? (
                   <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm font-bold text-red-300">
                     {siteHeroImageError}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="mt-6 rounded-xl border border-white/10 bg-slate-950 p-4">
+              <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="font-bold text-white">Site Icon</h3>
+                  <p className="mt-1 text-sm text-slate-400">
+                    Used as the generated site favicon and mobile home screen
+                    icon.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleSaveSiteIcon}
+                  disabled={savingSiteIcon}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {savingSiteIcon ? "Saving..." : "Save Site Icon"}
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <label className="grid gap-2 text-sm font-bold text-slate-300">
+                  Site Icon URL
+                  <input
+                    value={siteIconUrl}
+                    onChange={(event) => {
+                      setSiteIconUrl(event.target.value);
+                      setSiteIconNotice("");
+                      setSiteIconError("");
+                    }}
+                    className="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none"
+                    placeholder="https://example.com/icon.png"
+                  />
+                </label>
+
+                {isPreviewableImageUrl(siteIconUrl) ? (
+                  <div className="flex items-center gap-4 rounded-lg border border-white/10 bg-slate-900 px-4 py-3">
+                    <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-950">
+                      <Image
+                        src={siteIconUrl}
+                        alt="Site icon preview"
+                        width={64}
+                        height={64}
+                        sizes="64px"
+                        className="h-14 w-14 object-contain"
+                      />
+                    </div>
+                    <a
+                      href={siteIconUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="min-w-0 break-all text-sm text-blue-300 hover:text-blue-200"
+                    >
+                      {siteIconUrl}
+                    </a>
+                  </div>
+                ) : (
+                  <p className="rounded-lg bg-white/5 px-3 py-2 text-sm text-slate-500">
+                    No site icon set. Generated sites will use the browser
+                    default icon.
+                  </p>
+                )}
+
+                <div className="rounded-lg border border-white/10 bg-slate-900 p-3">
+                  <label className="grid gap-2 text-sm font-bold text-slate-300">
+                    Upload site icon
+                    <input
+                      type="file"
+                      accept={SITE_ICON_IMAGE_ACCEPT}
+                      onChange={handleSiteIconFileChange}
+                      disabled={uploadingSiteIcon}
+                      className="block w-full text-sm text-slate-300 file:mr-4 file:rounded-lg file:border-0 file:bg-slate-700 file:px-3 file:py-2 file:text-sm file:font-bold file:text-white hover:file:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
+                    />
+                  </label>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={handleUploadSiteIcon}
+                      disabled={uploadingSiteIcon || !siteIconFile}
+                      className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {uploadingSiteIcon ? "Uploading..." : "Upload"}
+                    </button>
+
+                    {siteIconFile ? (
+                      <span className="text-xs text-slate-400">
+                        {siteIconFile.name}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <p className="mt-2 text-xs text-slate-500">
+                    PNG, JPG or WebP. Maximum 2MB.
+                  </p>
+
+                  {siteIconUploadNotice ? (
+                    <p className="mt-2 rounded-lg bg-green-500/10 px-3 py-2 text-xs font-bold text-green-300">
+                      {siteIconUploadNotice}
+                    </p>
+                  ) : null}
+
+                  {siteIconUploadError ? (
+                    <p className="mt-2 rounded-lg bg-red-500/10 px-3 py-2 text-xs font-bold text-red-300">
+                      {siteIconUploadError}
+                    </p>
+                  ) : null}
+                </div>
+
+                {siteIconNotice ? (
+                  <p className="rounded-lg bg-green-500/10 px-3 py-2 text-sm font-bold text-green-300">
+                    {siteIconNotice}
+                  </p>
+                ) : null}
+
+                {siteIconError ? (
+                  <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm font-bold text-red-300">
+                    {siteIconError}
                   </p>
                 ) : null}
               </div>
