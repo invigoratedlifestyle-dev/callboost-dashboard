@@ -67,6 +67,7 @@ type LeadWithGeneratedContent = Lead & {
   solution?: string;
   websiteOpportunity?: {
     issue?: string;
+    issues?: string[];
     summary?: string;
   };
 };
@@ -1402,6 +1403,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       businessName: lead.businessName,
       channel: destination.channel,
       previewUrl: getPreviewUrl(lead),
+      websiteEvaluation: lead.websiteEvaluation,
+      websiteOpportunity: lead.websiteOpportunity,
     });
     const composerFollowUpBody =
       destination.channel === "email"

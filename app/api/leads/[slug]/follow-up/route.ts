@@ -27,6 +27,12 @@ function getString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function getRecord(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
 function getLatestMessageTime(
   messages: Awaited<ReturnType<typeof listLeadMessages>>,
   direction: "inbound" | "outbound"
@@ -87,6 +93,8 @@ export async function POST(
     }
 
     const leadName = getString(lead.name) || getString(lead.businessName);
+    const websiteEvaluation = getRecord(lead.websiteEvaluation);
+    const websiteOpportunity = getRecord(lead.websiteOpportunity);
     const destination = getFollowUpDestination({
       latestOutboundChannel: getLatestOutboundMessageChannel(messages),
       phone: lead.phone,
@@ -109,6 +117,27 @@ export async function POST(
       businessName: getString(lead.businessName),
       channel,
       previewUrl: getPreviewUrl(lead, new URL(req.url).origin),
+      websiteEvaluation: websiteEvaluation
+        ? {
+            issues: Array.isArray(websiteEvaluation.issues)
+              ? websiteEvaluation.issues.filter(
+                  (issue): issue is string => typeof issue === "string"
+                )
+              : [],
+            summary: getString(websiteEvaluation.summary),
+          }
+        : null,
+      websiteOpportunity: websiteOpportunity
+        ? {
+            issue: getString(websiteOpportunity.issue),
+            issues: Array.isArray(websiteOpportunity.issues)
+              ? websiteOpportunity.issues.filter(
+                  (issue): issue is string => typeof issue === "string"
+                )
+              : [],
+            summary: getString(websiteOpportunity.summary),
+          }
+        : null,
     });
     const messageBody =
       channel === "sms"

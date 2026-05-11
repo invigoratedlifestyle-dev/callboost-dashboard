@@ -30,6 +30,17 @@ export type FollowUpMessage = {
   metadata?: Record<string, unknown> | null;
 };
 
+type FollowUpWebsiteOpportunity = {
+  issue?: string | null;
+  issues?: string[] | null;
+  summary?: string | null;
+};
+
+type FollowUpWebsiteEvaluation = {
+  issues?: string[] | null;
+  summary?: string | null;
+};
+
 export type FollowUpDueStatus = {
   nextStage: FollowUpStage | null;
   isDue: boolean;
@@ -53,6 +64,120 @@ export function getLeadFirstName(name: string) {
   return name.trim().split(/\s+/)[0] || "there";
 }
 
+function cleanIssue(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function humanizeWebsiteOpportunityIssue(issue: string) {
+  const lowerIssue = issue.toLowerCase();
+
+  if (lowerIssue.includes("old technology")) {
+    return "the site appears to be using older technology";
+  }
+
+  if (
+    lowerIssue.includes("phone") &&
+    (lowerIssue.includes("click") ||
+      lowerIssue.includes("mobile") ||
+      lowerIssue.includes("prominent"))
+  ) {
+    return "the phone number could be more prominent as a clickable mobile call-to-action";
+  }
+
+  if (
+    (lowerIssue.includes("length") || lowerIssue.includes("long")) &&
+    (lowerIssue.includes("clutter") || lowerIssue.includes("repetitive"))
+  ) {
+    return "some homepage content feels long or repetitive, which may reduce engagement";
+  }
+
+  if (
+    (lowerIssue.includes("form") ||
+      lowerIssue.includes("quote") ||
+      lowerIssue.includes("booking")) &&
+    lowerIssue.includes("cta")
+  ) {
+    return "the quote or booking call-to-action could be clearer";
+  }
+
+  if (lowerIssue.includes("mobile")) {
+    return "the mobile experience could be simpler for customers who want to call quickly";
+  }
+
+  if (lowerIssue.includes("local") || lowerIssue.includes("positioning")) {
+    return "the site could make the local service area and offer clearer";
+  }
+
+  if (lowerIssue.includes("trust") || lowerIssue.includes("review")) {
+    return "the page could do more to build trust before someone gets in touch";
+  }
+
+  if (lowerIssue.includes("thin") || lowerIssue.includes("content")) {
+    return "the content could give customers more confidence before they enquire";
+  }
+
+  if (
+    lowerIssue.includes("broken") ||
+    lowerIssue.includes("unreachable") ||
+    lowerIssue.includes("load")
+  ) {
+    return "some customers may have trouble loading or using the current site";
+  }
+
+  return issue
+    .replace(/\bCTA\b/g, "call-to-action")
+    .replace(/\s+/g, " ")
+    .replace(/[.]+$/g, "")
+    .replace(/^website\s+/i, "the website ")
+    .replace(/^site\s+/i, "the site ");
+}
+
+function getWebsiteOpportunityIssues(args: {
+  websiteOpportunity?: FollowUpWebsiteOpportunity | null;
+  websiteEvaluation?: FollowUpWebsiteEvaluation | null;
+}) {
+  const rawIssues = [
+    ...(Array.isArray(args.websiteOpportunity?.issues)
+      ? args.websiteOpportunity?.issues || []
+      : []),
+    cleanIssue(args.websiteOpportunity?.issue),
+    ...(Array.isArray(args.websiteEvaluation?.issues)
+      ? args.websiteEvaluation?.issues || []
+      : []),
+  ];
+  const seen = new Set<string>();
+
+  return rawIssues
+    .map(cleanIssue)
+    .filter(Boolean)
+    .map(humanizeWebsiteOpportunityIssue)
+    .filter((issue) => {
+      const key = issue.toLowerCase();
+
+      if (seen.has(key)) return false;
+      seen.add(key);
+
+      return true;
+    })
+    .slice(0, 4);
+}
+
+function buildWebsiteOpportunitySection(args: {
+  websiteOpportunity?: FollowUpWebsiteOpportunity | null;
+  websiteEvaluation?: FollowUpWebsiteEvaluation | null;
+}) {
+  const issues = getWebsiteOpportunityIssues(args);
+
+  if (!issues.length) return "";
+
+  return [
+    "I had another look through your current website and noticed a few areas where a modern redesign could help improve enquiries and mobile usability.",
+    "",
+    "A few things that stood out:",
+    ...issues.map((issue) => `- ${issue}`),
+  ].join("\n");
+}
+
 export function buildFollowUpBody(
   stage: FollowUpStage,
   name: string,
@@ -60,12 +185,15 @@ export function buildFollowUpBody(
     businessName?: string | null;
     channel?: FollowUpChannel;
     previewUrl?: string | null;
+    websiteEvaluation?: FollowUpWebsiteEvaluation | null;
+    websiteOpportunity?: FollowUpWebsiteOpportunity | null;
   } = {}
 ) {
   const firstName = getLeadFirstName(name);
   const businessName = (args.businessName || "").trim();
   const stageTwoName = businessName || name.trim() || "there";
   const previewUrl = (args.previewUrl || "").trim();
+  const websiteOpportunitySection = buildWebsiteOpportunitySection(args);
 
   if (stage === 1) {
     if (previewUrl && args.channel === "sms") {
@@ -107,7 +235,7 @@ CallBoost Tasmania`;
   if (stage === 2) {
     return `Hey ${stageTwoName},
 
-Just checking in regarding the website preview I put together for you.
+Just checking in regarding the website preview I put together for you.${websiteOpportunitySection ? `\n\n${websiteOpportunitySection}` : ""}
 
 A lot of local customers now search online before calling, so even a simple professional website can make a big difference in trust and enquiries.
 
@@ -115,7 +243,7 @@ Your preview is still live at the moment:
 
 ${previewUrl}
 
-I’ll likely remove inactive previews soon as I continue building sites for other local businesses.
+I’ll likely remove inactive previews soon as I continue building sites for other local businesses across Tasmania.
 
 If you'd like me to keep it active or make any changes, just reply here and I can sort it out for you.
 
