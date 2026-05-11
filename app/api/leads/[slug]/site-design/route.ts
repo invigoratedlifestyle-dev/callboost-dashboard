@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { withLifecycleDefaults } from "../../../../lib/leadLifecycle";
+import {
+  isArchivedLead,
+  withLifecycleDefaults,
+} from "../../../../lib/leadLifecycle";
 import {
   buildGeneratedSiteHtml,
   getGeneratedSiteBySlug,
@@ -53,6 +56,11 @@ export async function POST(
     }
 
     const existingLead = rowToLead(leadRow);
+
+    if (isArchivedLead(existingLead)) {
+      return NextResponse.json({ error: "Lead not found" }, { status: 404 });
+    }
+
     const existingDesign = getRecord(existingLead.design);
     const existingGeneratedSiteDesign = getRecord(existingLead.generated_site_design);
     const legacyAccent = pickHex(

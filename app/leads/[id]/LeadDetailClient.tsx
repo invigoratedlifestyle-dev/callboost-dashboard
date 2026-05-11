@@ -1590,7 +1590,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   };
   const generatedDescription =
     lead.description || lead.solution || lead.subheadline || "";
-  const generatedSiteUrl = lead.generatedSiteUrl || "";
+  const isLeadArchived = lead.status === "archived";
+  const generatedSiteUrl = isLeadArchived ? "" : lead.generatedSiteUrl || "";
   const websiteEvaluation = lead.websiteEvaluation;
   const reviewSource = getReviewSource(lead);
   const reviewCount = lead.reviews?.length || 0;
@@ -1995,7 +1996,11 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
 
             <p className="break-all text-slate-300">
               <strong className="text-white">Live URL:</strong>{" "}
-              {generatedSiteUrl ? (
+              {isLeadArchived ? (
+                <span className="text-slate-500">
+                  Generated site disabled because this lead is archived.
+                </span>
+              ) : generatedSiteUrl ? (
                 <a
                   href={generatedSiteUrl}
                   target="_blank"
@@ -2532,28 +2537,36 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
               </div>
 
               <div className="mt-6 flex flex-wrap gap-3">
-              <button
-                onClick={() => {
-                  if (!generatedSiteUrl) {
-                    alert("Generate a site first.");
-                    return;
-                  }
+              {isLeadArchived ? (
+                <p className="w-full rounded-lg bg-amber-500/10 px-3 py-2 text-sm font-bold text-amber-200">
+                  Generated site disabled because this lead is archived.
+                </p>
+              ) : (
+                <button
+                  onClick={() => {
+                    if (!generatedSiteUrl) {
+                      alert("Generate a site first.");
+                      return;
+                    }
 
-                  window.open(generatedSiteUrl, "_blank", "noopener,noreferrer");
-                }}
-                className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-bold hover:bg-slate-600"
-              >
-                View Page
-              </button>
+                    window.open(generatedSiteUrl, "_blank", "noopener,noreferrer");
+                  }}
+                  className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-bold hover:bg-slate-600"
+                >
+                  View Page
+                </button>
+              )}
 
               <EnrichButton lead={lead} onEnriched={handleLeadUpdated} />
 
-              <GenerateSiteButton
-                lead={lead}
-                templateTrade={templateTrade}
-                templateType={templateType}
-                onGenerated={handleLeadUpdated}
-              />
+              {!isLeadArchived ? (
+                <GenerateSiteButton
+                  lead={lead}
+                  templateTrade={templateTrade}
+                  templateType={templateType}
+                  onGenerated={handleLeadUpdated}
+                />
+              ) : null}
 
               <button
                 onClick={handleCreateCheckoutLink}

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
-import { withLifecycleDefaults } from "../../lib/leadLifecycle";
+import { isArchivedLead, withLifecycleDefaults } from "../../lib/leadLifecycle";
 import {
   buildGeneratedSiteHtml,
   saveGeneratedSite,
@@ -122,6 +122,11 @@ export async function POST(req: Request) {
     }
 
     const existingLead = rowToLead(leadRow);
+
+    if (isArchivedLead(existingLead)) {
+      return NextResponse.json({ error: "Lead not found" }, { status: 404 });
+    }
+
     const templateTrade = normalizeTemplateTrade(
       body.templateTrade,
       existingLead.trade

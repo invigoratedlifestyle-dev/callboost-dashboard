@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isArchivedLead } from "../../../../lib/leadLifecycle";
 import { uploadLeadHeroImage } from "../../../../lib/siteAssets";
 import { getLeadBySlug } from "../../../../lib/supabase/leads";
 
@@ -28,6 +29,10 @@ export async function POST(
     const lead = await getLeadBySlug(slug);
 
     if (!lead) {
+      return NextResponse.json({ error: "Lead not found" }, { status: 404 });
+    }
+
+    if (isArchivedLead(lead)) {
       return NextResponse.json({ error: "Lead not found" }, { status: 404 });
     }
 

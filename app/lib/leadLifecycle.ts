@@ -45,6 +45,10 @@ export function getLeadStatus(lead: LeadRecord): LifecycleStatus {
   return "lead";
 }
 
+export function isArchivedLead(lead: LeadRecord | null | undefined) {
+  return Boolean(lead && getLeadStatus(lead) === "archived");
+}
+
 export function withLifecycleDefaults<T extends LeadRecord>(lead: T): T {
   const currentLead = { ...lead };
 

@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { isArchivedLead } from "../../lib/leadLifecycle";
 import { getGeneratedSiteBySlug } from "../../lib/supabase/generatedSites";
+import { getLeadBySlug } from "../../lib/supabase/leads";
 
 export async function GET(
   _req: Request,
@@ -7,6 +9,12 @@ export async function GET(
 ) {
   try {
     const { slug } = await params;
+    const lead = await getLeadBySlug(slug);
+
+    if (!lead || isArchivedLead(lead)) {
+      return NextResponse.json({ error: "Generated site not found" }, { status: 404 });
+    }
+
     const generatedSite = await getGeneratedSiteBySlug(slug);
 
     if (!generatedSite?.html) {

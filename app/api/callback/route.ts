@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isArchivedLead } from "../../lib/leadLifecycle";
 import { Resend } from "resend";
 import Twilio from "twilio";
 import {
@@ -136,6 +137,11 @@ export async function POST(req: Request) {
     }
 
     const lead = rowToLead(leadRow);
+
+    if (isArchivedLead(lead)) {
+      return NextResponse.json({ error: "Lead not found" }, { status: 404 });
+    }
+
     const businessName =
       getString(lead.name) || getString(lead.businessName) || slug;
     const callback = await insertCallbackRequest({

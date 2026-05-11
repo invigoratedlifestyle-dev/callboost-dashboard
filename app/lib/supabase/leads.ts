@@ -1,5 +1,9 @@
 import { getSupabaseAdmin } from "./server";
 import {
+  purgeGeneratedSiteForLead,
+  removeGeneratedSiteReferencesFromLead,
+} from "./generatedSites";
+import {
   getLeadStatus,
   normalizeLeadIdentity,
   withLifecycleDefaults,
@@ -235,12 +239,14 @@ export async function updateLeadStatusBySlug(
   status: LifecycleStatus,
   reviewNotes?: string
 ) {
-  const existingLead = await getLeadBySlug(slug);
+  const existingLeadRow = await getLeadRowBySlug(slug);
 
-  if (!existingLead) return null;
+  if (!existingLeadRow) return null;
+
+  const existingLead = rowToLead(existingLeadRow);
 
   const now = new Date().toISOString();
-  const updatedLead = withLifecycleDefaults({
+  let updatedLead = withLifecycleDefaults({
     ...existingLead,
     status,
     reviewNotes:
@@ -261,9 +267,27 @@ export async function updateLeadStatusBySlug(
 
   if (status === "archived") {
     updatedLead.archivedAt = now;
+    updatedLead = removeGeneratedSiteReferencesFromLead(updatedLead);
   }
 
-  return updateLeadBySlug(slug, updatedLead);
+  const savedLead = await updateLeadBySlug(slug, updatedLead);
+
+  if (status === "archived") {
+    try {
+      await purgeGeneratedSiteForLead({
+        lead: savedLead,
+        leadId: existingLeadRow.id || null,
+      });
+    } catch (error) {
+      console.error("GENERATED_SITE_PURGE_FAILED", {
+        slug,
+        leadId: existingLeadRow.id || null,
+        error: error instanceof Error ? error.message : error,
+      });
+    }
+  }
+
+  return savedLead;
 }
 
 export async function duplicateLeadExists(lead: LeadRecord) {

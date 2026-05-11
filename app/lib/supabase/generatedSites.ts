@@ -1,7 +1,7 @@
 import { getSupabaseAdmin } from "./server";
 import type { LeadRecord } from "../leadLifecycle";
 import { formatAustralianPhoneNumber } from "../contactMethods";
-import { getRandomHeroImage } from "../siteAssets";
+import { getRandomHeroImage, SITE_ASSETS_BUCKET } from "../siteAssets";
 
 export type GeneratedSiteRow = {
   id?: string | number;
@@ -19,6 +19,112 @@ type Review = {
   relativeTimeDescription: string;
   source: string;
 };
+
+type SupabaseAdminClient = ReturnType<typeof getSupabaseAdmin>;
+
+const generatedSiteReferenceFields = [
+  "generatedSiteUrl",
+  "generatedSitePublicUrl",
+  "generatedSitePreviewUrl",
+  "generatedSiteHtml",
+  "generatedHtml",
+  "siteHtml",
+  "heroImageUrl",
+  "heroImageOverride",
+  "generatedHeroImageUrl",
+  "generatedHeroImage",
+  "siteBrandingUrl",
+  "siteLogoUrl",
+] as const;
+
+function normalizeStorageKey(value: unknown, fallback: string) {
+  const normalized = String(value || fallback)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return normalized || fallback;
+}
+
+export function removeGeneratedSiteReferencesFromLead<T extends LeadRecord>(
+  lead: T
+): T {
+  const nextLead = { ...lead } as Record<string, unknown>;
+
+  for (const field of generatedSiteReferenceFields) {
+    if (Object.prototype.hasOwnProperty.call(nextLead, field)) {
+      nextLead[field] = null;
+    }
+  }
+
+  return nextLead as T;
+}
+
+async function removeStoragePrefix(
+  supabase: SupabaseAdminClient,
+  prefix: string
+) {
+  const { data, error } = await supabase.storage
+    .from(SITE_ASSETS_BUCKET)
+    .list(prefix, { limit: 1000 });
+
+  if (error) throw error;
+
+  const paths = (data || [])
+    .filter((item) => item.name)
+    .map((item) => `${prefix}/${item.name}`);
+
+  if (!paths.length) return 0;
+
+  const { error: removeError } = await supabase.storage
+    .from(SITE_ASSETS_BUCKET)
+    .remove(paths);
+
+  if (removeError) throw removeError;
+
+  return paths.length;
+}
+
+export async function purgeGeneratedSiteForLead(args: {
+  supabase?: SupabaseAdminClient;
+  lead: LeadRecord;
+  leadId?: string | number | null;
+}) {
+  const supabase = args.supabase || getSupabaseAdmin();
+  const slug = getText(args.lead.slug || args.lead.id).trim();
+  const leadId = args.leadId ?? args.lead.id ?? null;
+  const storageKeys = Array.from(
+    new Set(
+      [slug, leadId]
+        .map((value) => normalizeStorageKey(value, ""))
+        .filter(Boolean)
+    )
+  );
+
+  if (slug) {
+    const { error } = await supabase
+      .from("generated_sites")
+      .delete()
+      .eq("slug", slug);
+
+    if (error) throw error;
+  }
+
+  if (leadId !== null && leadId !== undefined && String(leadId).trim()) {
+    const { error } = await supabase
+      .from("generated_sites")
+      .delete()
+      .eq("lead_id", leadId);
+
+    if (error) throw error;
+  }
+
+  for (const key of storageKeys) {
+    await removeStoragePrefix(supabase, `hero-images/${key}`);
+    await removeStoragePrefix(supabase, `site-branding/${key}`);
+  }
+}
 
 export async function saveGeneratedSite(args: {
   leadId?: string | number | null;
