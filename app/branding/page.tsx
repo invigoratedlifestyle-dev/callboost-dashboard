@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { ChangeEvent, ReactNode, useEffect, useMemo, useState } from "react";
 
 type Lead = {
@@ -303,6 +304,8 @@ function SavedAssetPanel({
 }
 
 export default function BrandingPage() {
+  const searchParams = useSearchParams();
+  const requestedLeadSlug = searchParams.get("lead") || "";
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loadingLeads, setLoadingLeads] = useState(true);
   const [selectedLeadSlug, setSelectedLeadSlug] = useState("");
@@ -349,7 +352,15 @@ export default function BrandingPage() {
         const nextLeads = getSelectableBrandingLeads((data.leads || []) as Lead[]);
 
         setLeads(nextLeads);
-        setSelectedLeadSlug((current) => current || getLeadSlug(nextLeads[0]));
+        setSelectedLeadSlug((current) => {
+          if (current) return current;
+
+          const requestedLead = nextLeads.find(
+            (lead) => getLeadSlug(lead) === requestedLeadSlug
+          );
+
+          return getLeadSlug(requestedLead || nextLeads[0]);
+        });
       } catch (error) {
         setWorkflows((current) => ({
           ...current,
@@ -365,7 +376,7 @@ export default function BrandingPage() {
     }
 
     void loadLeads();
-  }, []);
+  }, [requestedLeadSlug]);
 
   useEffect(() => {
     if (!selectedLeadSlug || !selectedLead) return;
@@ -562,12 +573,22 @@ export default function BrandingPage() {
               assets for local business previews.
             </p>
           </div>
-          <Link
-            href="/assets"
-            className="rounded-lg bg-white/10 px-5 py-3 text-sm font-bold text-slate-200 hover:bg-white/15"
-          >
-            Asset Library
-          </Link>
+          <div className="flex flex-wrap gap-3 lg:justify-end">
+            {selectedLeadSlug ? (
+              <Link
+                href={`/leads/${encodeURIComponent(selectedLeadSlug)}`}
+                className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-500"
+              >
+                Back to Lead
+              </Link>
+            ) : null}
+            <Link
+              href="/assets"
+              className="rounded-lg bg-white/10 px-5 py-3 text-sm font-bold text-slate-200 hover:bg-white/15"
+            >
+              Asset Library
+            </Link>
+          </div>
         </div>
 
         <section className="mb-6 rounded-2xl border border-white/10 bg-white/5 p-5">

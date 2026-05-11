@@ -2216,6 +2216,12 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                     />
                   </div>
                 ) : null}
+                <Link
+                  href={`/branding?lead=${encodeURIComponent(lead.slug || lead.id)}`}
+                  className="inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-white/10 px-5 py-3 text-sm font-bold text-slate-200 hover:bg-white/15 sm:w-auto"
+                >
+                  Open Branding Workspace
+                </Link>
               </div>
 
               <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-white/10 pt-4">
