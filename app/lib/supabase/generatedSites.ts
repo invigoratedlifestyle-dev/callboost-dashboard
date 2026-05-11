@@ -159,6 +159,8 @@ function pickStable<T>(items: T[], seed: string, offset = 0) {
   return items[(hashString(seed) + offset) % items.length];
 }
 
+const plumbingGasFittingTradeKey = "plumbing-gas-fitting";
+
 function getRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object"
     ? (value as Record<string, unknown>)
@@ -409,6 +411,16 @@ function isPlumberTrade(trade: unknown) {
   return String(trade ?? "").toLowerCase().includes("plumb");
 }
 
+function isPlumbingGasFittingTrade(trade: unknown) {
+  const text = String(trade ?? "").toLowerCase();
+  const slug = slugify(text);
+
+  return (
+    slug === plumbingGasFittingTradeKey ||
+    (text.includes("plumb") && (text.includes("gas") || text.includes("fitting")))
+  );
+}
+
 function isServiceTrade(trade: unknown) {
   const text = String(trade ?? "").toLowerCase();
 
@@ -433,6 +445,7 @@ function isServiceTrade(trade: unknown) {
 function normalizeTrade(trade: unknown) {
   const text = String(trade ?? "").toLowerCase();
 
+  if (isPlumbingGasFittingTrade(text)) return plumbingGasFittingTradeKey;
   if (text.includes("plumb")) return "plumber";
   if (text.includes("electric")) return "electrician";
   if (text.includes("roof")) return "roofer";
@@ -440,7 +453,51 @@ function normalizeTrade(trade: unknown) {
   return slugify(trade || "tradie");
 }
 
+function getTradeLabel(trade: unknown) {
+  if (isPlumbingGasFittingTrade(trade)) return "Plumbing and Gas Fitting";
+
+  return titleCase(trade);
+}
+
+function getTradeHelpLabel(trade: unknown) {
+  if (isPlumbingGasFittingTrade(trade)) return "plumbing or gas fitting";
+  if (isPlumberTrade(trade)) return "plumbing";
+
+  return getTradeLabel(trade).toLowerCase();
+}
+
+function getTradePeopleLabel(trade: unknown) {
+  if (isPlumbingGasFittingTrade(trade)) return "plumbing and gas fitting team";
+  if (isPlumberTrade(trade)) return "plumbers";
+
+  return "service";
+}
+
+function getServicePlaceholder(trade: unknown) {
+  if (isPlumbingGasFittingTrade(trade)) {
+    return "Leak, blocked drain, hot water, gas fitting...";
+  }
+
+  return isPlumberTrade(trade)
+    ? "Blocked drain, leak, hot water..."
+    : "Repairs, maintenance, quote...";
+}
+
 function getDefaultServices(trade: string) {
+  if (isPlumbingGasFittingTrade(trade)) {
+    return [
+      "General Plumbing Repairs",
+      "Burst Pipes and Leaks",
+      "Blocked Drains",
+      "Hot Water Systems",
+      "Gas Fitting and Appliance Connections",
+      "Gas Leak Checks and Safety",
+      "Bathroom, Kitchen and Laundry Plumbing",
+      "Maintenance Plumbing",
+      "Emergency Plumbing",
+    ];
+  }
+
   if (isPlumberTrade(trade)) {
     return [
       "Emergency Plumbing",
@@ -479,7 +536,15 @@ function getServiceDescription(serviceName: string, trade: string) {
     return "Repair, replacement and servicing for electric, gas and common hot water systems.";
   }
 
+  if (lower.includes("appliance") || lower.includes("connection")) {
+    return "Safe gas appliance connection support with clear scope and practical advice.";
+  }
+
   if (lower.includes("leak")) {
+    if (lower.includes("gas") || lower.includes("safety")) {
+      return "Prompt gas leak checks and safety-minded support when something does not seem right.";
+    }
+
     return "Find the source of leaks and arrange repairs before water damage gets worse.";
   }
 
@@ -489,6 +554,14 @@ function getServiceDescription(serviceName: string, trade: string) {
 
   if (lower.includes("gas")) {
     return "Gas fitting support where suitable, with clear scope and safety-minded workmanship.";
+  }
+
+  if (lower.includes("maintenance")) {
+    return "Routine plumbing maintenance to keep taps, fixtures, pipes and wet areas working properly.";
+  }
+
+  if (lower.includes("general plumbing")) {
+    return "Practical help for everyday plumbing faults, repairs and fixture issues around the property.";
   }
 
   if (lower.includes("commercial")) {
@@ -520,6 +593,9 @@ function getServices(lead: LeadRecord, trade: string) {
 function getTopServices(services: string[], trade: string) {
   if (services.length > 0) return services.slice(0, 3).join(", ");
 
+  if (isPlumbingGasFittingTrade(trade)) {
+    return "plumbing repairs, hot water and gas fitting";
+  }
   if (isPlumberTrade(trade)) return "leaks, blocked drains and hot water issues";
 
   return "repairs, maintenance and urgent jobs";
@@ -555,7 +631,9 @@ async function getGeneratedHeroImage(args: {
   if (businessHeroImage?.url) return businessHeroImage.url;
 
   try {
-    return await getRandomHeroImage(args.trade);
+    const assetTrade = isPlumbingGasFittingTrade(args.trade) ? "plumber" : args.trade;
+
+    return await getRandomHeroImage(assetTrade);
   } catch (error) {
     console.warn("Generated site asset lookup failed; using stock hero image.", error);
     return getHeroImages(args.trade, args.seed);
@@ -716,10 +794,7 @@ function getTrustItems(args: {
   trade: string;
 }) {
   const { city, lead, services, trade } = args;
-  const tradeLower = trade.toLowerCase();
-  const label = isPlumberTrade(trade)
-    ? "plumbing"
-    : tradeLower || "service";
+  const label = getTradeHelpLabel(trade);
   const items: [string, string][] = [
     [
       "Licensed & insured",
@@ -743,6 +818,22 @@ function getTrustItems(args: {
       "Help for households, rentals, offices and local business premises.",
     ],
   ];
+
+  if (isPlumbingGasFittingTrade(trade)) {
+    items.splice(
+      2,
+      0,
+      [
+        "Safe gas fitting work",
+        "Support for gas fitting, appliance connections and gas safety checks with careful workmanship.",
+      ],
+      [
+        "Practical repairs",
+        "Straightforward help for leaks, blocked drains, hot water systems and maintenance plumbing.",
+      ]
+    );
+  }
+
   const years =
     getText(lead.yearsExperience) ||
     getText(lead.yearsInBusiness) ||
@@ -772,7 +863,36 @@ function getServiceAreas(lead: LeadRecord, city: string) {
 
 function buildFaqs(args: { city: string; businessName: string; trade: string }) {
   const { city, businessName, trade } = args;
-  const tradeLower = isPlumberTrade(trade) ? "plumbing" : trade.toLowerCase();
+  const tradeLower = getTradeHelpLabel(trade);
+
+  if (isPlumbingGasFittingTrade(trade)) {
+    return [
+      [
+        `Do you service ${city}?`,
+        `Yes. ${businessName} provides plumbing and gas fitting help across ${city} and surrounding areas.`,
+      ],
+      [
+        "Can you help with urgent plumbing issues?",
+        "Call directly for urgent leaks, burst pipes, blocked drains, hot water problems and other plumbing issues that need prompt attention.",
+      ],
+      [
+        "Do you handle gas fitting work?",
+        "Yes. Gas fitting and gas appliance connection enquiries can be discussed, with safe, practical next steps arranged where suitable.",
+      ],
+      [
+        "Can you help with hot water systems?",
+        "Yes. Hot water repairs, replacements and servicing can be discussed when you call or request a callback.",
+      ],
+      [
+        "Do you work with homes and businesses?",
+        "Yes. The site supports enquiries for residential properties, rentals, shops, offices and light commercial premises.",
+      ],
+      [
+        "Do you provide quotes before starting?",
+        "Yes. You can talk through the job first and get a clear next step before work begins.",
+      ],
+    ];
+  }
 
   if (isPlumberTrade(trade)) {
     return [
@@ -824,19 +944,27 @@ function buildFaqs(args: { city: string; businessName: string; trade: string }) 
 }
 
 function buildHeroHeadline(trade: string, city: string) {
+  if (isPlumbingGasFittingTrade(trade)) {
+    return `Local Plumbing & Gas Fitting in ${city}`;
+  }
+
   if (isPlumberTrade(trade)) return `Trusted Plumbing Services in ${city}`;
 
   return `Trusted ${titleCase(trade)} Services in ${city}`;
 }
 
 function buildHeroSubheading(trade: string, city: string, topServices: string) {
+  if (isPlumbingGasFittingTrade(trade)) {
+    return `From leaking taps and blocked drains to hot water systems and gas appliance connections, get professional plumbing and gas fitting support across ${city}.`;
+  }
+
   const label = isPlumberTrade(trade) ? "plumbing" : trade.toLowerCase();
 
   return `Fast, reliable ${label} for homes and businesses across ${city}. Call today for help with ${topServices}.`;
 }
 
 function buildNeutralHeroBadge(trade: string, city: string) {
-  const label = isPlumberTrade(trade) ? "plumbing" : trade.toLowerCase();
+  const label = getTradeHelpLabel(trade);
 
   if (isServiceTrade(trade)) {
     return `Available for urgent ${label || "local"} issues`;
@@ -861,7 +989,10 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
     cleanBusinessName(lead.displayName || lead.businessName || lead.name) ||
     titleCase(slugSource);
   const trade = getText(lead.trade).trim() || "plumber";
-  const tradeLabel = titleCase(trade);
+  const tradeLabel = getTradeLabel(trade);
+  const tradeHelpLabel = getTradeHelpLabel(trade);
+  const tradePeopleLabel = getTradePeopleLabel(trade);
+  const servicePlaceholder = getServicePlaceholder(trade);
   const city = getText(lead.city).trim() || "Hobart";
   const citySlug = slugify(city || "local");
   const tradeSlug = normalizeTrade(trade);
@@ -936,7 +1067,7 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
     ? `<p class="review-summary">Rated ${escapeHtml(rating)}&#9733; from ${escapeHtml(reviewCount)} local reviews</p>`
     : "";
   const heroUrgencyHtml = isServiceTrade(trade)
-    ? `<p class="hero-urgency">Available today for urgent ${escapeHtml(tradeLabel.toLowerCase())} issues</p>`
+    ? `<p class="hero-urgency">Available today for urgent ${escapeHtml(tradeHelpLabel)} issues</p>`
     : "";
   const contactPhoneHtml = hasPhone
     ? `<p><span>Phone</span><a href="tel:${escapeAttribute(phoneRaw)}">${escapeHtml(phoneDisplay)}</a></p>`
@@ -1181,13 +1312,13 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
         <div class="quote-card">
           <div>
             <div class="section-kicker">Quick quote</div>
-            <h2>Need ${escapeHtml(isPlumberTrade(trade) ? "plumbing" : tradeLabel.toLowerCase())} help?</h2>
+            <h2>Need ${escapeHtml(tradeHelpLabel)} help?</h2>
             <p class="muted">Send the basics through and ${escapeHtml(businessName)} can call back with the next step.</p>
           </div>
           <form class="mini-form" data-slug="${escapeAttribute(businessSlug)}">
             <label>Name<input name="name" type="text" autocomplete="name" required /></label>
             <label>Phone<input name="phone" type="tel" autocomplete="tel" required /></label>
-            <label>Service needed<input name="service" type="text" placeholder="${escapeAttribute(isPlumberTrade(trade) ? "Blocked drain, leak, hot water..." : "Repairs, maintenance, quote...")}" /></label>
+            <label>Service needed<input name="service" type="text" placeholder="${escapeAttribute(servicePlaceholder)}" /></label>
             <label>Message<input name="message" type="text" placeholder="Where is the issue?" /></label>
             <div class="full">
               <button class="button primary" type="submit">Request a Call Back</button>
@@ -1213,7 +1344,7 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
       <div class="container">
         <div class="section-header center">
           <div class="section-kicker">Why choose us</div>
-          <h2>Local ${escapeHtml(isPlumberTrade(trade) ? "plumbers" : "service")} you can call directly</h2>
+          <h2>Local ${escapeHtml(tradePeopleLabel)} you can call directly</h2>
           <p class="muted">A simple, contact-first site for people who need clear help without hunting around.</p>
         </div>
         <div class="trust-grid">${trustHtml}</div>
@@ -1239,7 +1370,7 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
       <div class="container">
         <div class="section-header">
           <div class="section-kicker">FAQ</div>
-          <h2>Common ${escapeHtml(isPlumberTrade(trade) ? "plumbing" : tradeLabel.toLowerCase())} questions</h2>
+          <h2>Common ${escapeHtml(tradeHelpLabel)} questions</h2>
           <p class="muted">Straight answers before you pick up the phone.</p>
         </div>
         <div class="faq-grid">${faqHtml}</div>

@@ -11,6 +11,16 @@ export const TRADE_TARGETS: TradeTarget[] = [
     googleQueryTerms: ["plumber", "emergency plumber", "blocked drain plumber"],
   },
   {
+    key: "plumbing-gas-fitting",
+    label: "Plumbing and Gas Fitting",
+    googleQueryTerms: [
+      "plumbing and gas fitting",
+      "plumber gas fitter",
+      "gas fitting plumber",
+      "gas plumber",
+    ],
+  },
+  {
     key: "electrician",
     label: "Electrician",
     googleQueryTerms: ["electrician", "emergency electrician", "commercial electrician"],

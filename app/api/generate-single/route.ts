@@ -17,6 +17,7 @@ const client = new OpenAI({
 
 const templateTradeOptions = [
   "plumber",
+  "plumbing-gas-fitting",
   "electrician",
   "builder",
   "cleaner",
@@ -71,6 +72,12 @@ function normalizeTemplateTrade(value: unknown, fallback: unknown) {
     .replace(/^-+|-+$/g, "");
 
   if (templateTradeOptions.includes(normalized)) return normalized;
+  if (
+    normalized.includes("plumb") &&
+    (normalized.includes("gas") || normalized.includes("fitting"))
+  ) {
+    return "plumbing-gas-fitting";
+  }
   if (normalized.includes("plumb")) return "plumber";
   if (normalized.includes("electric")) return "electrician";
   if (normalized.includes("build")) return "builder";
@@ -115,8 +122,17 @@ export async function POST(req: Request) {
     }
 
     const existingLead = rowToLead(leadRow);
+    const templateTrade = normalizeTemplateTrade(
+      body.templateTrade,
+      existingLead.trade
+    );
+    const templateType = normalizeTemplateType(body.templateType);
     const prompt = `
 Generate local business website content.
+
+Selected template trade: ${templateTrade}
+
+If the selected template trade is plumbing-gas-fitting / Plumbing and Gas Fitting, tailor the copy to licensed plumbing and gas fitting work. Mention safe, reliable gas work, emergency plumbing, hot water, gas appliance connections, residential work and light commercial support where suitable. Do not invent licence numbers or certifications.
 
 Business:
 ${JSON.stringify(existingLead, null, 2)}
@@ -154,11 +170,6 @@ Return ONLY valid JSON:
       Array.isArray(existingLead.reviews) &&
       existingLead.reviews.length > 0;
     const publicUrl = getPublicUrl(req, slug);
-    const templateTrade = normalizeTemplateTrade(
-      body.templateTrade,
-      existingLead.trade
-    );
-    const templateType = normalizeTemplateType(body.templateType);
     const updatedLead = withLifecycleDefaults({
       ...existingLead,
       templateTrade,

@@ -85,6 +85,7 @@ type PendingFollowUpMetadata = {
 
 const templateTradeOptions = [
   "plumber",
+  "plumbing-gas-fitting",
   "electrician",
   "builder",
   "cleaner",
@@ -377,6 +378,12 @@ function normalizeTemplateTrade(value?: string | null) {
     .replace(/^-+|-+$/g, "");
 
   if (templateTradeOptions.includes(normalized)) return normalized;
+  if (
+    normalized.includes("plumb") &&
+    (normalized.includes("gas") || normalized.includes("fitting"))
+  ) {
+    return "plumbing-gas-fitting";
+  }
   if (normalized.includes("plumb")) return "plumber";
   if (normalized.includes("electric")) return "electrician";
   if (normalized.includes("build")) return "builder";
@@ -387,6 +394,16 @@ function normalizeTemplateTrade(value?: string | null) {
   if (normalized.includes("mechanic")) return "mechanic";
 
   return "plumber";
+}
+
+function formatTemplateTradeLabel(value: string) {
+  if (value === "plumbing-gas-fitting") return "Plumbing and Gas Fitting";
+
+  return value
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function isAllowedHeroImageFile(file: File) {
@@ -2492,7 +2509,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                   >
                     {templateTradeOptions.map((option) => (
                       <option key={option} value={option}>
-                        {option}
+                        {formatTemplateTradeLabel(option)}
                       </option>
                     ))}
                   </select>

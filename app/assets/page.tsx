@@ -18,6 +18,7 @@ type SiteAsset = {
 const tradeOptions = [
   "generic",
   "plumber",
+  "plumbing-gas-fitting",
   "electrician",
   "builder",
   "cleaner",
@@ -28,6 +29,8 @@ const tradeOptions = [
 ];
 
 function titleCase(value: string) {
+  if (value === "plumbing-gas-fitting") return "Plumbing and Gas Fitting";
+
   return value
     .replace(/[-_]+/g, " ")
     .replace(/\s+/g, " ")

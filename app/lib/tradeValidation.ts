@@ -50,10 +50,56 @@ const tradeRules: Record<string, TradeRuleSet> = {
       "renovation",
     ],
   },
+  "plumbing-gas-fitting": {
+    strongTerms: [
+      "plumber",
+      "plumbers",
+      "plumbing",
+      "gas fitter",
+      "gas fitters",
+      "gasfitter",
+      "gasfitters",
+      "gas fitting",
+      "gas plumbing",
+      "hot water",
+      "blocked drain",
+    ],
+    relatedTerms: [
+      "drain",
+      "pipe",
+      "pipes",
+      "leak",
+      "leaks",
+      "gas",
+      "appliance connection",
+      "gas appliance",
+    ],
+    rejectedTerms: [
+      "handyman",
+      "painter",
+      "painting",
+      "electrician",
+      "builder",
+      "carpenter",
+      "roofing",
+      "roofer",
+      "landscaper",
+      "cleaner",
+      "general contractor",
+      "renovation",
+    ],
+  },
 };
 
 function normalizeTrade(value: string) {
   const normalized = value.toLowerCase().trim();
+
+  if (
+    normalized.includes("plumb") &&
+    (normalized.includes("gas") || normalized.includes("fitting"))
+  ) {
+    return "plumbing-gas-fitting";
+  }
 
   if (normalized.includes("plumb")) {
     return "plumber";
