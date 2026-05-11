@@ -5,7 +5,10 @@ import {
   getImageBufferFromRequest,
 } from "../../../lib/brandingImages";
 import { uploadSiteAssetBuffer } from "../../../lib/siteAssets";
-import { getLeadBySlug } from "../../../lib/supabase/leads";
+import {
+  getLeadBySlug,
+  updateLeadBrandingAssets,
+} from "../../../lib/supabase/leads";
 
 function getString(value: FormDataEntryValue | null) {
   return typeof value === "string" ? value.trim() : "";
@@ -58,9 +61,17 @@ export async function POST(req: Request) {
         altText ||
         `${String(lead.businessName || lead.name || leadSlug)} ${assetType}`,
     });
+    const updatedLead = await updateLeadBrandingAssets(leadSlug, {
+      ...(assetType === "navigation-branding"
+        ? { siteBrandingUrl: asset.imageUrl }
+        : {}),
+      ...(assetType === "hero" ? { heroImageUrl: asset.imageUrl } : {}),
+      ...(assetType === "icon" ? { siteIconUrl: asset.imageUrl } : {}),
+    });
 
     return NextResponse.json({
       asset,
+      lead: updatedLead,
       imageUrl: asset.imageUrl,
       sizeBytes: processed.sizeBytes,
     });

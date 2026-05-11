@@ -20,6 +20,9 @@ type Lead = {
   website?: string;
   phone?: string;
   email?: string;
+  siteBrandingUrl?: string | null;
+  heroImageUrl?: string | null;
+  siteIconUrl?: string | null;
   status?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
@@ -198,6 +201,44 @@ function PreviewPanel({
   );
 }
 
+function SavedAssetPanel({
+  title,
+  url,
+}: {
+  title: string;
+  url?: string | null;
+}) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-slate-950 p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h3 className="text-sm font-black text-white">{title}</h3>
+      </div>
+      {url ? (
+        <div className="grid gap-3">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={url}
+            alt={title}
+            className="max-h-40 w-full rounded-lg bg-white object-contain p-3"
+          />
+          <a
+            href={url}
+            target="_blank"
+            className="block truncate text-sm font-bold text-blue-300 hover:text-blue-200"
+            title={url}
+          >
+            {getWebsiteLabel(url) || "Open saved asset"}
+          </a>
+        </div>
+      ) : (
+        <p className="rounded-lg bg-white/5 px-3 py-3 text-sm text-slate-500">
+          Nothing saved for this lead yet.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function BrandingPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loadingLeads, setLoadingLeads] = useState(true);
@@ -220,6 +261,8 @@ export default function BrandingPage() {
     getFilePreview(activeWorkflow.file) || activeWorkflow.imageUrl || "";
   const navigationOutput = workflows.navigation.outputImageData;
   const selectedLeadWebsiteLabel = getWebsiteLabel(selectedLead?.website);
+  const currentNavigationBrandingUrl = selectedLead?.siteBrandingUrl || "";
+  const currentHeroImageUrl = selectedLead?.heroImageUrl || "";
 
   useEffect(() => {
     async function loadLeads() {
@@ -251,6 +294,38 @@ export default function BrandingPage() {
 
     void loadLeads();
   }, []);
+
+  useEffect(() => {
+    if (!selectedLeadSlug || !selectedLead) return;
+
+    setWorkflows((current) => ({
+      ...current,
+      navigation: {
+        ...current.navigation,
+        file: null,
+        imageUrl: selectedLead.siteBrandingUrl || "",
+        outputImageData: "",
+        outputSizeBytes: null,
+        savedUrl: selectedLead.siteBrandingUrl || "",
+        notice: "",
+        error: "",
+      },
+      hero: {
+        ...current.hero,
+        file: null,
+        imageUrl: selectedLead.heroImageUrl || "",
+        outputImageData: "",
+        outputSizeBytes: null,
+        savedUrl: selectedLead.heroImageUrl || "",
+        notice: "",
+        error: "",
+      },
+      icon: {
+        ...current.icon,
+        savedUrl: selectedLead.siteIconUrl || "",
+      },
+    }));
+  }, [selectedLeadSlug, selectedLead]);
 
   function updateWorkflow(tab: WorkflowKey, patch: Partial<WorkflowState>) {
     setWorkflows((current) => ({
@@ -319,6 +394,18 @@ export default function BrandingPage() {
         savedUrl: data.imageUrl || data.asset?.imageUrl || workflows[tab].savedUrl,
         notice: data.imageUrl ? "Asset saved." : "Image updated.",
       });
+
+      if (data.lead) {
+        setLeads((current) =>
+          getSelectableBrandingLeads(
+            current.map((lead) =>
+              getLeadSlug(lead) === getLeadSlug(data.lead)
+                ? { ...lead, ...data.lead }
+                : lead
+            )
+          )
+        );
+      }
     } catch (error) {
       updateWorkflow(tab, {
         error: error instanceof Error ? error.message : "Image action failed",
@@ -737,6 +824,18 @@ export default function BrandingPage() {
             </div>
 
             <div className="grid gap-4">
+              {activeTab === "navigation" ? (
+                <SavedAssetPanel
+                  title="Current saved Navigation Branding"
+                  url={currentNavigationBrandingUrl}
+                />
+              ) : null}
+              {activeTab === "hero" ? (
+                <SavedAssetPanel
+                  title="Current saved Hero Image"
+                  url={currentHeroImageUrl}
+                />
+              ) : null}
               <PreviewPanel title="Source preview" image={sourcePreview} />
               <PreviewPanel
                 title="Output preview"

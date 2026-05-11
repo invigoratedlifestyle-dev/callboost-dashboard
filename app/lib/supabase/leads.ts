@@ -234,6 +234,46 @@ export async function updateLeadBySlug(slug: string, lead: LeadRecord) {
   return rowToLead(data as LeadRow);
 }
 
+export async function updateLeadBrandingAssets(
+  slug: string,
+  assets: {
+    siteBrandingUrl?: string;
+    heroImageUrl?: string;
+    siteIconUrl?: string;
+  }
+) {
+  const existingLeadRow = await getLeadRowBySlug(slug);
+
+  if (!existingLeadRow) return null;
+
+  const now = new Date().toISOString();
+  const nextLead = withLifecycleDefaults({
+    ...rowToLead(existingLeadRow),
+    ...(assets.siteBrandingUrl ? { siteBrandingUrl: assets.siteBrandingUrl } : {}),
+    ...(assets.heroImageUrl ? { heroImageUrl: assets.heroImageUrl } : {}),
+    ...(assets.siteIconUrl ? { siteIconUrl: assets.siteIconUrl } : {}),
+    updatedAt: now,
+  });
+  const row = {
+    ...leadToRow({
+      ...nextLead,
+      slug,
+      id: getString((nextLead as LeadRecord).id) || slug,
+    }),
+    updated_at: now,
+  };
+  const { data, error } = await getSupabaseAdmin()
+    .from("leads")
+    .update(row)
+    .eq("slug", slug)
+    .select("*")
+    .single();
+
+  if (error) throw error;
+
+  return rowToLead(data as LeadRow);
+}
+
 export async function updateLeadStatusBySlug(
   slug: string,
   status: LifecycleStatus,
