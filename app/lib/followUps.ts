@@ -272,14 +272,12 @@ export function buildFollowUpBody(
 
   if (stage === 1) {
     if (previewUrl && args.channel === "sms") {
-      return `Hey ${firstName}, just checking you saw the website preview I sent through:
+      return `Hi ${smsName}, just checking you saw the website preview I made for you:
 ${previewUrl}
 
-Happy to make a couple of quick changes if needed 👍
+Reply if you'd like any quick changes.
 
-Cheers,
-Jamie
-CallBoost Tasmania`;
+- Jamie, CallBoost Tasmania`;
     }
 
     if (previewUrl) {
