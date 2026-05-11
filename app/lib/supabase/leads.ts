@@ -204,6 +204,25 @@ export async function getLeadBySlug(slug: string) {
   return row ? rowToLead(row) : null;
 }
 
+export async function getLeadRowById(id: string | number) {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("leads")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  return data as LeadRow | null;
+}
+
+export async function getLeadById(id: string | number) {
+  const row = await getLeadRowById(id);
+
+  return row ? rowToLead(row) : null;
+}
+
 export async function insertLead(lead: LeadRecord) {
   const supabase = getSupabaseAdmin();
   const row = leadToRow(lead);

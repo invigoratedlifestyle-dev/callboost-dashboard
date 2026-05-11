@@ -1,12 +1,22 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { isArchivedLead } from "../../lib/leadLifecycle";
-import { getGeneratedSiteBySlug } from "../../lib/supabase/generatedSites";
-import { getLeadBySlug } from "../../lib/supabase/leads";
+import {
+  type GeneratedSiteRow,
+  getGeneratedSiteBySlug,
+} from "../../lib/supabase/generatedSites";
+import { getLeadById, getLeadBySlug } from "../../lib/supabase/leads";
 
 type GeneratedSitePageProps = {
   params: Promise<{ slug: string }>;
 };
+
+type GeneratedSiteContext = {
+  generatedSite: GeneratedSiteRow | null;
+  lead: Awaited<ReturnType<typeof getLeadBySlug>>;
+};
+
+export const dynamic = "force-dynamic";
 
 function isValidHttpUrl(value: unknown) {
   if (typeof value !== "string") return false;
@@ -20,6 +30,50 @@ function isValidHttpUrl(value: unknown) {
   }
 }
 
+function appendUrlVersion(value: string, version: string) {
+  if (!version) return value;
+
+  try {
+    const url = new URL(value);
+
+    url.searchParams.set("v", version);
+    return url.toString();
+  } catch {
+    const [withoutHash, hash = ""] = value.split("#", 2);
+    const separator = withoutHash.includes("?") ? "&" : "?";
+    const nextUrl = `${withoutHash}${separator}v=${encodeURIComponent(version)}`;
+
+    return hash ? `${nextUrl}#${hash}` : nextUrl;
+  }
+}
+
+async function getGeneratedSiteContext(
+  slug: string
+): Promise<GeneratedSiteContext> {
+  const generatedSite = await getGeneratedSiteBySlug(slug);
+  let lead = await getLeadBySlug(slug);
+
+  if (!lead && generatedSite?.lead_id) {
+    lead = await getLeadById(generatedSite.lead_id);
+  }
+
+  return { generatedSite, lead };
+}
+
+function getOuterSiteIconUrl({
+  generatedSite,
+  lead,
+}: GeneratedSiteContext) {
+  if (!lead || !isValidHttpUrl(lead.siteIconUrl)) return "";
+
+  const version =
+    String(generatedSite?.updated_at || "").trim() ||
+    String(lead.updatedAt || "").trim() ||
+    String(generatedSite?.created_at || "").trim();
+
+  return appendUrlVersion(String(lead.siteIconUrl), version);
+}
+
 export async function generateMetadata({
   params,
 }: GeneratedSitePageProps): Promise<Metadata> {
@@ -29,18 +83,19 @@ export async function generateMetadata({
     return {};
   }
 
-  const lead = await getLeadBySlug(slug);
+  const context = await getGeneratedSiteContext(slug);
 
-  if (!lead || isArchivedLead(lead) || !isValidHttpUrl(lead.siteIconUrl)) {
-    return {};
-  }
+  if (!context.lead || isArchivedLead(context.lead)) return {};
 
-  const siteIconUrl = String(lead.siteIconUrl);
+  const siteIconUrl = getOuterSiteIconUrl(context);
+
+  if (!siteIconUrl) return {};
 
   return {
     icons: {
-      icon: siteIconUrl,
-      apple: siteIconUrl,
+      icon: [{ url: siteIconUrl }],
+      shortcut: [{ url: siteIconUrl }],
+      apple: [{ url: siteIconUrl }],
     },
   };
 }
@@ -54,13 +109,11 @@ export default async function GeneratedSitePage({
     notFound();
   }
 
-  const lead = await getLeadBySlug(slug);
+  const { generatedSite, lead } = await getGeneratedSiteContext(slug);
 
   if (!lead || isArchivedLead(lead)) {
     notFound();
   }
-
-  const generatedSite = await getGeneratedSiteBySlug(slug);
 
   if (!generatedSite?.html) {
     notFound();

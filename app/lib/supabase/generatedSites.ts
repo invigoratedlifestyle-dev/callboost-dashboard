@@ -200,6 +200,23 @@ function escapeAttribute(value: unknown) {
   return escapeHtml(value).replace(/`/g, "&#96;");
 }
 
+function appendUrlVersion(value: string, version: string) {
+  if (!version) return value;
+
+  try {
+    const url = new URL(value);
+
+    url.searchParams.set("v", version);
+    return url.toString();
+  } catch {
+    const [withoutHash, hash = ""] = value.split("#", 2);
+    const separator = withoutHash.includes("?") ? "&" : "?";
+    const nextUrl = `${withoutHash}${separator}v=${encodeURIComponent(version)}`;
+
+    return hash ? `${nextUrl}#${hash}` : nextUrl;
+  }
+}
+
 function slugify(value: unknown) {
   return String(value ?? "")
     .toLowerCase()
@@ -1111,9 +1128,15 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
   const siteBrandingUrl = getText(lead.siteBrandingUrl).trim();
   const hasSiteBranding = isValidHttpUrl(siteBrandingUrl);
   const siteIconUrl = getText(lead.siteIconUrl).trim();
-  const iconLinkHtml = isValidHttpUrl(siteIconUrl)
-    ? `  <link rel="icon" href="${escapeAttribute(siteIconUrl)}" />
-  <link rel="apple-touch-icon" href="${escapeAttribute(siteIconUrl)}" />
+  const siteIconVersion =
+    getText(lead.aiGeneratedAt).trim() || getText(lead.updatedAt).trim();
+  const siteIconHref = isValidHttpUrl(siteIconUrl)
+    ? appendUrlVersion(siteIconUrl, siteIconVersion)
+    : "";
+  const iconLinkHtml = siteIconHref
+    ? `  <link rel="icon" href="${escapeAttribute(siteIconHref)}" />
+  <link rel="shortcut icon" href="${escapeAttribute(siteIconHref)}" />
+  <link rel="apple-touch-icon" href="${escapeAttribute(siteIconHref)}" />
 `
     : "";
   const buttonColor = getDesignColor(lead, "buttonColor", "#14b8a6");

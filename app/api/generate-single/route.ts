@@ -215,12 +215,33 @@ Return ONLY valid JSON:
     });
 
     const html = await buildGeneratedSiteHtml(updatedLead);
+    const siteIconUrl = getStringField(updatedLead, "siteIconUrl");
+
+    console.log("GENERATE_SITE_ICON_DEBUG", {
+      slug,
+      siteIconUrl,
+      htmlIncludesIcon: html.includes('rel="icon"'),
+      htmlIncludesAppleIcon: html.includes('rel="apple-touch-icon"'),
+    });
+
     const generatedSite = await saveGeneratedSite({
       leadId: leadRow.id || null,
       slug,
       html,
     });
     const savedLead = await updateLeadBySlug(slug, updatedLead);
+
+    console.log("GENERATED_SITE_STORED_ICON_DEBUG", {
+      slug,
+      siteIconUrl,
+      storedHtmlIncludesIcon: generatedSite.html.includes('rel="icon"'),
+      storedHtmlIncludesShortcutIcon: generatedSite.html.includes(
+        'rel="shortcut icon"'
+      ),
+      storedHtmlIncludesAppleIcon: generatedSite.html.includes(
+        'rel="apple-touch-icon"'
+      ),
+    });
 
     console.log("Generate single succeeded:", { slug, publicUrl });
 
