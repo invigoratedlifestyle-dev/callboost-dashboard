@@ -13,6 +13,9 @@ type Lead = {
   city?: string;
   website?: string;
   phone?: string;
+  status?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
 };
 
 type WorkflowKey = "navigation" | "hero" | "icon";
@@ -44,6 +47,31 @@ const workflowLabels: Record<WorkflowKey, string> = {
   hero: "Hero Image Cleanup",
   icon: "Site Icon",
 };
+
+const selectableLeadStatuses = new Set(["lead", "contacted", "client"]);
+
+function normalizeLeadStatus(status: unknown) {
+  const normalized = String(status ?? "")
+    .trim()
+    .toLowerCase();
+
+  if (!normalized || normalized === "new") return "lead";
+  if (normalized === "interested") return "contacted";
+
+  return normalized;
+}
+
+function getLeadSortTime(lead: Lead) {
+  const timestamp = Date.parse(String(lead.updatedAt || lead.createdAt || ""));
+
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function getSelectableBrandingLeads(leads: Lead[]) {
+  return leads
+    .filter((lead) => selectableLeadStatuses.has(normalizeLeadStatus(lead.status)))
+    .sort((a, b) => getLeadSortTime(b) - getLeadSortTime(a));
+}
 
 function getLeadName(lead?: Lead | null) {
   return lead?.businessName || lead?.displayName || lead?.name || lead?.slug || "";
@@ -145,7 +173,7 @@ export default function BrandingPage() {
           throw new Error(data.error || "Failed to load leads");
         }
 
-        const nextLeads = (data.leads || []) as Lead[];
+        const nextLeads = getSelectableBrandingLeads((data.leads || []) as Lead[]);
 
         setLeads(nextLeads);
         setSelectedLeadSlug((current) => current || getLeadSlug(nextLeads[0]));
