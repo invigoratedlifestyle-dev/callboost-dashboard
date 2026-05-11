@@ -2145,7 +2145,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
             </p>
 
             <div className="mt-6 rounded-xl border border-blue-400/20 bg-blue-500/10 p-4">
-              <div className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-[minmax(180px,1fr)_minmax(180px,1fr)_minmax(120px,auto)_minmax(140px,auto)] xl:items-end">
+              <div className="grid min-w-0 gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr))]">
                 <label className="grid min-w-0 gap-2 text-sm font-bold text-slate-300">
                   Template Trade
                   <select
@@ -2177,7 +2177,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 </label>
 
                 {isLeadArchived ? (
-                  <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-sm font-bold text-amber-200 lg:col-span-2">
+                  <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-sm font-bold text-amber-200">
                     Generated site disabled because this lead is archived.
                   </p>
                 ) : (
