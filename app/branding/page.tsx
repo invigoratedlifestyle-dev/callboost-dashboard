@@ -11,8 +11,15 @@ type Lead = {
   displayName?: string;
   trade?: string;
   city?: string;
+  town?: string;
+  suburb?: string;
+  state?: string;
+  region?: string;
+  address?: string;
+  formattedAddress?: string;
   website?: string;
   phone?: string;
+  email?: string;
   status?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
@@ -61,6 +68,16 @@ function normalizeLeadStatus(status: unknown) {
   return normalized;
 }
 
+function getDisplayStatus(lead?: Lead | null) {
+  const status = normalizeLeadStatus(lead?.status);
+
+  if (status === "lead") return "Lead";
+  if (status === "contacted") return "Contacted";
+  if (status === "client") return "Client";
+
+  return "Unknown";
+}
+
 function getLeadSortTime(lead: Lead) {
   const timestamp = Date.parse(String(lead.updatedAt || lead.createdAt || ""));
 
@@ -74,11 +91,51 @@ function getSelectableBrandingLeads(leads: Lead[]) {
 }
 
 function getLeadName(lead?: Lead | null) {
-  return lead?.businessName || lead?.displayName || lead?.name || lead?.slug || "";
+  return lead?.displayName || lead?.businessName || lead?.name || lead?.slug || "";
 }
 
 function getLeadSlug(lead?: Lead | null) {
   return String(lead?.slug || lead?.id || "").trim();
+}
+
+function getLeadLocation(lead?: Lead | null) {
+  return (
+    lead?.suburb ||
+    lead?.town ||
+    lead?.city ||
+    lead?.state ||
+    lead?.region ||
+    lead?.formattedAddress ||
+    lead?.address ||
+    ""
+  );
+}
+
+function getLeadDropdownLabel(lead: Lead) {
+  return [
+    getLeadName(lead),
+    getDisplayStatus(lead),
+    getLeadLocation(lead),
+  ]
+    .filter(Boolean)
+    .join(" — ");
+}
+
+function getWebsiteLabel(value?: string | null) {
+  const website = String(value || "").trim();
+
+  if (!website) return "";
+
+  try {
+    const url = new URL(website);
+    const host = url.hostname.replace(/^www\./, "");
+    const path = url.pathname && url.pathname !== "/" ? url.pathname : "";
+    const label = `${host}${path}`;
+
+    return label.length > 42 ? `${label.slice(0, 39)}...` : label;
+  } catch {
+    return website.length > 42 ? `${website.slice(0, 39)}...` : website;
+  }
 }
 
 function formatBytes(bytes: number | null) {
@@ -162,6 +219,7 @@ export default function BrandingPage() {
   const sourcePreview =
     getFilePreview(activeWorkflow.file) || activeWorkflow.imageUrl || "";
   const navigationOutput = workflows.navigation.outputImageData;
+  const selectedLeadWebsiteLabel = getWebsiteLabel(selectedLead?.website);
 
   useEffect(() => {
     async function loadLeads() {
@@ -344,42 +402,77 @@ export default function BrandingPage() {
               >
                 {leads.map((lead) => (
                   <option key={getLeadSlug(lead)} value={getLeadSlug(lead)}>
-                    {getLeadName(lead)}
+                    {getLeadDropdownLabel(lead)}
                   </option>
                 ))}
               </select>
             </FieldLabel>
 
-            <div className="grid gap-3 rounded-xl border border-white/10 bg-slate-950 p-4 text-sm text-slate-300 sm:grid-cols-2 lg:grid-cols-5">
-              <p>
+            <div className="grid gap-3 rounded-xl border border-white/10 bg-slate-950 p-4 text-sm text-slate-300 sm:grid-cols-2 lg:grid-cols-4">
+              <p className="min-w-0 overflow-hidden">
                 <span className="block text-xs font-bold uppercase tracking-wide text-slate-500">
                   Name
                 </span>
-                {getLeadName(selectedLead) || "No lead selected"}
+                <span className="block truncate">
+                  {getLeadName(selectedLead) || "No lead selected"}
+                </span>
               </p>
-              <p>
+              <p className="min-w-0 overflow-hidden">
+                <span className="block text-xs font-bold uppercase tracking-wide text-slate-500">
+                  Status
+                </span>
+                <span className="block truncate">{getDisplayStatus(selectedLead)}</span>
+              </p>
+              <p className="min-w-0 overflow-hidden">
                 <span className="block text-xs font-bold uppercase tracking-wide text-slate-500">
                   Trade
                 </span>
-                {selectedLead?.trade || "-"}
+                <span className="block truncate">{selectedLead?.trade || "-"}</span>
               </p>
-              <p>
+              <p className="min-w-0 overflow-hidden">
                 <span className="block text-xs font-bold uppercase tracking-wide text-slate-500">
-                  City
+                  Location
                 </span>
-                {selectedLead?.city || "-"}
+                <span className="block truncate">{getLeadLocation(selectedLead) || "-"}</span>
               </p>
-              <p className="break-all">
+              <p className="min-w-0 overflow-hidden">
                 <span className="block text-xs font-bold uppercase tracking-wide text-slate-500">
                   Website
                 </span>
-                {selectedLead?.website || "-"}
+                {selectedLead?.website ? (
+                  <a
+                    href={selectedLead.website}
+                    target="_blank"
+                    className="block truncate text-blue-300 hover:text-blue-200"
+                    title={selectedLead.website}
+                  >
+                    {selectedLeadWebsiteLabel || "Open website"}
+                  </a>
+                ) : (
+                  <span className="text-slate-500">Not found yet</span>
+                )}
               </p>
-              <p>
+              <p className="min-w-0 overflow-hidden">
                 <span className="block text-xs font-bold uppercase tracking-wide text-slate-500">
                   Phone
                 </span>
-                {selectedLead?.phone || "-"}
+                <span className="block break-words">{selectedLead?.phone || "-"}</span>
+              </p>
+              <p className="min-w-0 overflow-hidden">
+                <span className="block text-xs font-bold uppercase tracking-wide text-slate-500">
+                  Email
+                </span>
+                {selectedLead?.email ? (
+                  <a
+                    href={`mailto:${selectedLead.email}`}
+                    className="block truncate text-blue-300 hover:text-blue-200"
+                    title={selectedLead.email}
+                  >
+                    {selectedLead.email}
+                  </a>
+                ) : (
+                  <span className="text-slate-500">Not found yet</span>
+                )}
               </p>
             </div>
           </div>
