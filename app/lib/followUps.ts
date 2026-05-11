@@ -184,11 +184,71 @@ function buildWebsiteOpportunitySection(args: {
   if (!issues.length) return "";
 
   return [
-    "I had another look through your current website and noticed a few areas where a modern redesign could help improve enquiries and mobile usability.",
-    "",
-    "A few things that stood out:",
+    "I had another look through your current website and noticed a few areas where a refresh could help improve enquiries and mobile usability, including:",
     ...issues.map((issue) => `- ${issue}`),
   ].join("\n");
+}
+
+function getSmsIssueTheme(issue: string) {
+  const lowerIssue = issue.toLowerCase();
+
+  if (
+    lowerIssue.includes("phone") ||
+    lowerIssue.includes("mobile") ||
+    lowerIssue.includes("click")
+  ) {
+    return "mobile contact options";
+  }
+
+  if (
+    lowerIssue.includes("call-to-action") ||
+    lowerIssue.includes("cta") ||
+    lowerIssue.includes("quote") ||
+    lowerIssue.includes("booking") ||
+    lowerIssue.includes("form")
+  ) {
+    return "clearer calls-to-action";
+  }
+
+  if (
+    lowerIssue.includes("trust") ||
+    lowerIssue.includes("review") ||
+    lowerIssue.includes("confidence")
+  ) {
+    return "trust and conversion elements";
+  }
+
+  if (lowerIssue.includes("local") || lowerIssue.includes("service area")) {
+    return "clearer local service messaging";
+  }
+
+  if (
+    lowerIssue.includes("content") ||
+    lowerIssue.includes("long") ||
+    lowerIssue.includes("repetitive") ||
+    lowerIssue.includes("clutter")
+  ) {
+    return "simpler homepage content";
+  }
+
+  return "a simpler way for customers to get in touch";
+}
+
+function getSmsIssueSummary(args: {
+  websiteOpportunity?: FollowUpWebsiteOpportunity | null;
+  websiteEvaluation?: FollowUpWebsiteEvaluation | null;
+}) {
+  const themes = Array.from(
+    new Set(getWebsiteOpportunityIssues(args).map(getSmsIssueTheme))
+  ).slice(0, 2);
+
+  if (!themes.length) return "";
+
+  return themes.length === 1 ? themes[0] : `${themes[0]} and ${themes[1]}`;
+}
+
+function getSmsMonthlyPriceLabel() {
+  return CALLBOOST_MONTHLY_RECURRING_LABEL.replace("/month", "/mo");
 }
 
 export function buildFollowUpBody(
@@ -207,6 +267,8 @@ export function buildFollowUpBody(
   const stageTwoName = businessName || name.trim() || "there";
   const previewUrl = (args.previewUrl || "").trim();
   const websiteOpportunitySection = buildWebsiteOpportunitySection(args);
+  const smsIssueSummary = getSmsIssueSummary(args);
+  const smsName = name.trim() || stageTwoName;
 
   if (stage === 1) {
     if (previewUrl && args.channel === "sms") {
@@ -246,23 +308,35 @@ CallBoost Tasmania`;
   }
 
   if (stage === 2) {
+    if (args.channel === "sms") {
+      if (smsIssueSummary) {
+        return `Hi ${smsName}, quick follow-up on the website preview I made for you: ${previewUrl}
+
+A refresh could help with ${smsIssueSummary}. Setup is ${CALLBOOST_SETUP_FEE_LABEL} + ${getSmsMonthlyPriceLabel()} managed hosting & support. Reply if you'd like changes.
+
+- Jamie, CallBoost Tasmania`;
+      }
+
+      return `Hi ${smsName}, quick follow-up on the website preview I made for you: ${previewUrl}
+
+Setup is ${CALLBOOST_SETUP_FEE_LABEL} + ${getSmsMonthlyPriceLabel()} managed hosting & support. Reply if you'd like changes or want me to keep it live.
+
+- Jamie, CallBoost Tasmania`;
+    }
+
     return `Hey ${stageTwoName},
 
 Just checking in regarding the website preview I put together for you.${websiteOpportunitySection ? `\n\n${websiteOpportunitySection}` : ""}
 
-A lot of local customers now search online before calling, so even a simple professional website can make a big difference in trust and enquiries.
-
-Your preview is still live at the moment:
+${websiteOpportunitySection ? "" : "A professional website can make a big difference when local customers search online before calling.\n\n"}Your preview is still live here:
 
 ${previewUrl}
 
-I’ll likely remove inactive previews soon as I continue building sites for other local businesses across Tasmania.
+I'll likely remove inactive previews soon as I continue building sites for other local businesses across Tasmania.
 
-If you'd like me to keep it active or make any changes, just reply here and I can sort it out for you.
+Setup is ${CALLBOOST_SETUP_FEE_LABEL} with ongoing managed hosting & support at ${CALLBOOST_MONTHLY_RECURRING_LABEL}.
 
-The full setup is ${CALLBOOST_SETUP_FEE_LABEL} with ongoing managed hosting & support at ${CALLBOOST_MONTHLY_RECURRING_LABEL}.
-
-Happy to make adjustments if there's anything you'd like changed.
+If you'd like any changes or want me to keep the preview live, just reply here.
 
 Cheers,
 
