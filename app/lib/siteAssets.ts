@@ -163,6 +163,52 @@ export async function uploadSiteAsset(args: {
   return rowToSiteAsset(data as SiteAssetRow);
 }
 
+export async function uploadSiteAssetBuffer(args: {
+  trade: string;
+  assetType?: string;
+  bytes: Buffer;
+  contentType: string;
+  extension: string;
+  altText?: string;
+}) {
+  const supabase = getSupabaseAdmin();
+  const trade = normalizeKey(args.trade, "generic");
+  const assetType = normalizeKey(args.assetType, "hero");
+  const extension = normalizeKey(args.extension.replace(/^\./, ""), "webp");
+  const storagePath = `${trade}/${assetType}/${crypto.randomUUID()}.${extension}`;
+  const { error: uploadError } = await supabase.storage
+    .from(SITE_ASSETS_BUCKET)
+    .upload(storagePath, args.bytes, {
+      contentType: args.contentType || "image/webp",
+      upsert: false,
+    });
+
+  if (uploadError) throw uploadError;
+
+  const { data: publicUrlData } = supabase.storage
+    .from(SITE_ASSETS_BUCKET)
+    .getPublicUrl(storagePath);
+  const { data, error } = await supabase
+    .from("site_assets")
+    .insert({
+      trade,
+      asset_type: assetType,
+      image_url: publicUrlData.publicUrl,
+      storage_path: storagePath,
+      alt_text: args.altText?.trim() || null,
+      is_active: true,
+    })
+    .select("*")
+    .single();
+
+  if (error) {
+    await supabase.storage.from(SITE_ASSETS_BUCKET).remove([storagePath]);
+    throw error;
+  }
+
+  return rowToSiteAsset(data as SiteAssetRow);
+}
+
 export async function uploadLeadHeroImage(args: {
   leadKey: string;
   file: File;

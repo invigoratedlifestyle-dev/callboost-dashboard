@@ -856,6 +856,13 @@ export default function DashboardPage() {
               Assets
             </Link>
 
+            <Link
+              href="/branding"
+              className="rounded-lg bg-white/10 px-5 py-3 text-sm font-bold text-slate-200 hover:bg-white/15"
+            >
+              Branding
+            </Link>
+
             <button
               onClick={handleLogout}
               disabled={actionRunning}
