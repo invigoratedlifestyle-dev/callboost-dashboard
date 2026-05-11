@@ -41,6 +41,26 @@ type WorkflowState = {
   error: string;
 };
 
+type IconSource =
+  | {
+      type: "imageData";
+      label: string;
+      preview: string;
+      value: string;
+    }
+  | {
+      type: "imageUrl";
+      label: string;
+      preview: string;
+      value: string;
+    }
+  | {
+      type: "file";
+      label: string;
+      preview: string;
+      file: File;
+    };
+
 const emptyWorkflow: WorkflowState = {
   file: null,
   imageUrl: "",
@@ -151,6 +171,49 @@ function getFilePreview(file: File | null) {
   return file ? URL.createObjectURL(file) : "";
 }
 
+function getSiteIconSource(args: {
+  navigationWorkflow: WorkflowState;
+  savedNavigationBrandingUrl: string;
+}): IconSource | null {
+  if (args.navigationWorkflow.outputImageData) {
+    return {
+      type: "imageData",
+      label: "Using current Navigation Branding output",
+      preview: args.navigationWorkflow.outputImageData,
+      value: args.navigationWorkflow.outputImageData,
+    };
+  }
+
+  if (args.savedNavigationBrandingUrl) {
+    return {
+      type: "imageUrl",
+      label: "Using saved Navigation Branding",
+      preview: args.savedNavigationBrandingUrl,
+      value: args.savedNavigationBrandingUrl,
+    };
+  }
+
+  if (args.navigationWorkflow.imageUrl) {
+    return {
+      type: "imageUrl",
+      label: "Using Navigation Branding source URL",
+      preview: args.navigationWorkflow.imageUrl,
+      value: args.navigationWorkflow.imageUrl,
+    };
+  }
+
+  if (args.navigationWorkflow.file) {
+    return {
+      type: "file",
+      label: "Using uploaded Navigation Branding source",
+      preview: getFilePreview(args.navigationWorkflow.file),
+      file: args.navigationWorkflow.file,
+    };
+  }
+
+  return null;
+}
+
 function FieldLabel({
   children,
   label,
@@ -257,12 +320,21 @@ export default function BrandingPage() {
     [leads, selectedLeadSlug]
   );
   const activeWorkflow = workflows[activeTab];
-  const sourcePreview =
-    getFilePreview(activeWorkflow.file) || activeWorkflow.imageUrl || "";
-  const navigationOutput = workflows.navigation.outputImageData;
   const selectedLeadWebsiteLabel = getWebsiteLabel(selectedLead?.website);
   const currentNavigationBrandingUrl = selectedLead?.siteBrandingUrl || "";
   const currentHeroImageUrl = selectedLead?.heroImageUrl || "";
+  const siteIconSource = getSiteIconSource({
+    navigationWorkflow: workflows.navigation,
+    savedNavigationBrandingUrl: currentNavigationBrandingUrl,
+  });
+  const sourcePreview =
+    activeTab === "icon"
+      ? siteIconSource?.preview || ""
+      : getFilePreview(activeWorkflow.file) || activeWorkflow.imageUrl || "";
+  const sourcePreviewTitle =
+    activeTab === "icon" && siteIconSource
+      ? `Source preview - ${siteIconSource.label}`
+      : "Source preview";
 
   useEffect(() => {
     async function loadLeads() {
@@ -365,6 +437,26 @@ export default function BrandingPage() {
       if (state.file) formData.append("file", state.file);
       else if (state.outputImageData) formData.append("imageData", state.outputImageData);
       else if (state.imageUrl) formData.append("imageUrl", state.imageUrl);
+    }
+
+    return formData;
+  }
+
+  function buildSiteIconFormData(source: IconSource) {
+    const state = workflows.icon;
+    const formData = buildFormData("icon", false);
+    const prompt =
+      state.prompt.trim() ||
+      "Create a clean square favicon-style site icon based on this navigation branding. Use the same colours and visual style. Prefer a simple lettermark or symbol. Transparent background. No full business name text.";
+
+    formData.set("prompt", prompt);
+
+    if (source.type === "imageData") {
+      formData.append("imageData", source.value);
+    } else if (source.type === "imageUrl") {
+      formData.append("imageUrl", source.value);
+    } else {
+      formData.append("file", source.file);
     }
 
     return formData;
@@ -639,7 +731,8 @@ export default function BrandingPage() {
               ) : (
                 <p className="rounded-xl border border-white/10 bg-slate-950 p-4 text-sm text-slate-400">
                   Site icon generation uses the current Navigation Branding
-                  output as its source.
+                  output first, then the saved Navigation Branding URL for this
+                  lead.
                 </p>
               )}
 
@@ -765,16 +858,23 @@ export default function BrandingPage() {
                     <button
                       type="button"
                       onClick={() => {
+                        if (!siteIconSource) {
+                          updateWorkflow("icon", {
+                            error:
+                              "Generate or save navigation branding before creating a site icon.",
+                          });
+                          return;
+                        }
+
                         updateWorkflow("icon", {
                           outputImageData: "",
                           outputSizeBytes: null,
                         });
-                        const formData = buildFormData("icon", false);
+                        const formData = buildSiteIconFormData(siteIconSource);
 
-                        formData.append("imageData", navigationOutput);
                         void callImageRoute("icon", "/api/branding/generate", formData);
                       }}
-                      disabled={isBusy || !selectedLeadSlug || !navigationOutput}
+                      disabled={isBusy || !selectedLeadSlug}
                       className="rounded-lg bg-blue-600 px-4 py-3 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       Generate Site Icon From Branding
@@ -836,7 +936,7 @@ export default function BrandingPage() {
                   url={currentHeroImageUrl}
                 />
               ) : null}
-              <PreviewPanel title="Source preview" image={sourcePreview} />
+              <PreviewPanel title={sourcePreviewTitle} image={sourcePreview} />
               <PreviewPanel
                 title="Output preview"
                 image={activeWorkflow.outputImageData}

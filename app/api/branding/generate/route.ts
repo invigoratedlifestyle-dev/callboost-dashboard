@@ -50,9 +50,9 @@ function buildPrompt(args: {
   if (args.mode === "icon") {
     return [
       `Create a simple square favicon-style mark for ${leadName}, a ${trade} business in ${city}.`,
-      "Use the source branding style and colours if provided.",
-      "Transparent background. Strong readable icon. No mockup, no border, no background.",
-      args.prompt,
+      args.prompt ||
+        "Create a clean square favicon-style site icon based on this navigation branding. Use the same colours and visual style. Prefer a simple lettermark or symbol. Transparent background. No full business name text.",
+      "No mockup, no border, no background.",
     ]
       .filter(Boolean)
       .join(" ");
