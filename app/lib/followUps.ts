@@ -342,6 +342,15 @@ Jamie
 CallBoost Tasmania`;
   }
 
+  if (args.channel === "sms") {
+    return `Hi ${smsName}, just sending one final follow-up on the website preview:
+${previewUrl}
+
+Reply if you'd ever like it updated or reactivated.
+
+- Jamie, CallBoost Tasmania`;
+  }
+
   return `Hey ${stageTwoName},
 
 Just wanted to send one final follow-up regarding the website preview I put together for you.
