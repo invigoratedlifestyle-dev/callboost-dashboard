@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
 import { ChangeEvent, ReactNode, useEffect, useMemo, useState } from "react";
 
 type Lead = {
@@ -304,8 +303,6 @@ function SavedAssetPanel({
 }
 
 export default function BrandingPage() {
-  const searchParams = useSearchParams();
-  const requestedLeadSlug = searchParams.get("lead") || "";
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loadingLeads, setLoadingLeads] = useState(true);
   const [selectedLeadSlug, setSelectedLeadSlug] = useState("");
@@ -342,6 +339,10 @@ export default function BrandingPage() {
   useEffect(() => {
     async function loadLeads() {
       try {
+        const requestedLeadSlug =
+          typeof window !== "undefined"
+            ? new URLSearchParams(window.location.search).get("lead") || ""
+            : "";
         const res = await fetch("/api/leads", { cache: "no-store" });
         const data = await res.json();
 
@@ -376,7 +377,7 @@ export default function BrandingPage() {
     }
 
     void loadLeads();
-  }, [requestedLeadSlug]);
+  }, []);
 
   useEffect(() => {
     if (!selectedLeadSlug || !selectedLead) return;
