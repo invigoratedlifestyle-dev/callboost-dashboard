@@ -5,6 +5,7 @@ import {
   insertCallbackRequest,
   markCallbackForwarded,
 } from "../../lib/supabase/callbacks";
+import { normalizeSmsText } from "../../lib/smsOptOut";
 import { getLeadRowBySlug, rowToLead } from "../../lib/supabase/leads";
 
 function getString(value: unknown) {
@@ -92,7 +93,7 @@ async function forwardToPhone(args: {
   }
 
   await twilio.messages.create({
-    body: [
+    body: normalizeSmsText([
       `🔥 New Lead - ${args.businessName}`,
       "",
       `Name: ${args.visitorName}`,
@@ -101,7 +102,7 @@ async function forwardToPhone(args: {
       args.visitorMessage || "No message provided",
       "",
       "Call them ASAP.",
-    ].join("\n"),
+    ].join("\n")),
     from,
     to: args.to,
   });

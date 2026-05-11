@@ -1,7 +1,7 @@
 import "server-only";
 import { Resend } from "resend";
 import Twilio from "twilio";
-import { appendOptOut } from "./smsOptOut";
+import { prepareOutboundSmsText } from "./smsOptOut";
 
 function getResendClient() {
   const apiKey = process.env.RESEND_API_KEY;
@@ -24,13 +24,23 @@ export async function sendSms(args: { to: string; body: string }) {
     throw new Error("Missing Twilio environment variables");
   }
 
+  const body = prepareOutboundSmsText(args.body);
+
+  if (body.length !== args.body.length) {
+    console.log("SMS_NORMALIZED_FOR_GSM", {
+      originalLength: args.body.length,
+      normalizedLength: body.length,
+    });
+  }
+
   const result = await twilio.messages.create({
-    body: appendOptOut(args.body),
+    body,
     from,
     to: args.to,
   });
 
   return {
+    body,
     from,
     providerMessageId: result.sid || "",
   };

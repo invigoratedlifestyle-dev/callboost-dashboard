@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import Twilio from "twilio";
 import { appendEmailUnsubscribeFooter } from "../../../../../lib/emailUnsubscribe";
-import { appendOptOut } from "../../../../../lib/smsOptOut";
+import { prepareOutboundSmsText } from "../../../../../lib/smsOptOut";
 import { insertLeadMessage } from "../../../../../lib/supabase/leadMessages";
 import {
   getLeadRowBySlug,
@@ -77,6 +77,10 @@ async function sendSms(args: { to: string; body: string }) {
     throw new Error("Missing Twilio environment variables");
   }
 
+  console.log("SMS_READY_FOR_TWILIO", {
+    length: args.body.length,
+  });
+
   const result = await twilio.messages.create({
     body: args.body,
     from,
@@ -148,7 +152,7 @@ export async function POST(
     const metadata = getSafeMessageMetadata(body.metadata);
     const outboundBody =
       channel === "sms"
-        ? appendOptOut(messageBody)
+        ? prepareOutboundSmsText(messageBody)
         : appendEmailUnsubscribeFooter(messageBody);
 
     if (!isChannel(channel)) {

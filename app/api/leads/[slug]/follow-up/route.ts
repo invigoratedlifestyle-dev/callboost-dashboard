@@ -7,7 +7,7 @@ import {
 import { appendEmailUnsubscribeFooter } from "../../../../lib/emailUnsubscribe";
 import { sendEmail, sendSms } from "../../../../lib/outboundMessages";
 import { getPreviewUrl } from "../../../../lib/previewUrls";
-import { appendOptOut } from "../../../../lib/smsOptOut";
+import { prepareOutboundSmsText } from "../../../../lib/smsOptOut";
 import {
   insertLeadMessage,
   listLeadMessages,
@@ -141,7 +141,7 @@ export async function POST(
     });
     const messageBody =
       channel === "sms"
-        ? appendOptOut(followUpBody)
+        ? prepareOutboundSmsText(followUpBody)
         : appendEmailUnsubscribeFooter(followUpBody);
     let fromAddress = "";
     let providerMessageId = "";

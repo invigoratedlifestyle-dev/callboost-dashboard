@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { sendEmail, sendSms } from "../../../lib/outboundMessages";
-import { appendOptOut } from "../../../lib/smsOptOut";
+import { prepareOutboundSmsText } from "../../../lib/smsOptOut";
 import { getStripe } from "../../../lib/stripe";
 import {
   insertLeadMessage,
@@ -266,7 +266,7 @@ async function sendPaymentFailedRecovery(args: {
       emailBody += `\n\nUpdate your payment method here: ${portalUrl}`;
     }
 
-    smsBody = appendOptOut(smsBody);
+    smsBody = prepareOutboundSmsText(smsBody);
 
     const phone = getString(lead.phone);
     const email = getString(lead.email);
