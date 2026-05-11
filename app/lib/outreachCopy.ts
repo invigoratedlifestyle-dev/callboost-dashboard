@@ -17,6 +17,7 @@ type OutreachLead = Pick<
   subheadline?: string;
   websiteOpportunity?: {
     issue?: string;
+    issues?: string[];
     summary?: string;
   };
 };
@@ -68,6 +69,36 @@ function hasBrokenWebsiteOpportunity(lead: OutreachLead) {
       /broken|unreachable|failed to load|could not be loaded/i.test(issue)
     )
   );
+}
+
+function isNoWebsitePlaceholder(value?: string | null) {
+  const normalizedValue = clean(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return /^(no|missing)\s+(current\s+)?(website|site)\s+(found|detected)?$/.test(
+    normalizedValue
+  ) || /^(website|site)\s+(not\s+found|missing)$/.test(normalizedValue);
+}
+
+function hasNoWebsiteOpportunity(lead: OutreachLead) {
+  const evaluation = lead.websiteEvaluation;
+  const opportunityIssues = Array.isArray(lead.websiteOpportunity?.issues)
+    ? lead.websiteOpportunity?.issues || []
+    : [];
+  const issueSignals = [
+    lead.websiteOpportunity?.issue,
+    lead.websiteOpportunity?.summary,
+    evaluation?.summary,
+    ...(evaluation?.issues || []),
+    ...opportunityIssues,
+  ];
+
+  return evaluation?.quality === "none" ||
+    evaluation?.hasWebsite === false ||
+    issueSignals.some((issue) => isNoWebsitePlaceholder(issue));
 }
 
 function buildInitialOpportunityOutreachLines(
@@ -140,6 +171,20 @@ export function buildOpportunitySms(
   lead: OutreachLead,
   previewUrl: string
 ) {
+  if (hasNoWebsiteOpportunity(lead)) {
+    const leadName = getLeadName(lead);
+
+    return appendOptOut([
+      `Hi ${leadName},`,
+      "I put together a quick mobile-friendly website preview for you:",
+      previewUrl,
+      "",
+      "Happy to set this up properly for you if you like.",
+      "",
+      "- Jamie, CallBoost Tasmania",
+    ].join("\n"));
+  }
+
   return appendOptOut(
     buildInitialOpportunityOutreachLines(lead, previewUrl).join("\n")
   );
