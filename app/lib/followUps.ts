@@ -129,7 +129,26 @@ Jamie
 CallBoost Tasmania`;
   }
 
-  return `Last one from me — I'll leave this for now, but if you want the website preview switched on later just reply here 👍`;
+  return `Hey ${stageTwoName},
+
+Just wanted to send one final follow-up regarding the website preview I put together for you.
+
+Your preview is still live here:
+
+${previewUrl}
+
+I completely understand if now isn’t the right time, but I will be removing inactive previews soon as I continue building sites for other local businesses across Tasmania.
+
+If you'd ever like the site reactivated, updated, or finished off properly, just reply here and I’ll be happy to help.
+
+The full setup is ${CALLBOOST_SETUP_FEE_LABEL} with ongoing managed hosting & support at ${CALLBOOST_MONTHLY_RECURRING_LABEL}.
+
+Thanks again for taking the time to have a look.
+
+Cheers,
+
+Jamie
+CallBoost Tasmania`;
 }
 
 function getTime(value?: string | null) {
