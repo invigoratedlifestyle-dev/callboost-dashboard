@@ -121,7 +121,12 @@ If you'd like me to keep it active or make any changes, just reply here and I ca
 
 The full setup is ${CALLBOOST_SETUP_FEE_LABEL} with ongoing managed hosting & support at ${CALLBOOST_MONTHLY_RECURRING_LABEL}.
 
-Happy to make adjustments if there’s anything you’d like changed.`;
+Happy to make adjustments if there's anything you'd like changed.
+
+Cheers,
+
+Jamie
+CallBoost Tasmania`;
   }
 
   return `Last one from me — I'll leave this for now, but if you want the website preview switched on later just reply here 👍`;
