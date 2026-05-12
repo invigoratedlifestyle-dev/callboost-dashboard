@@ -2456,33 +2456,6 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                   </select>
                 </label>
 
-                {isLeadArchived ? (
-                  <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-sm font-bold text-amber-200">
-                    Generated site disabled because this lead is archived.
-                  </p>
-                ) : (
-                  <button
-                    onClick={() => {
-                      if (!generatedSiteUrl) {
-                        alert("Generate a site first.");
-                        return;
-                      }
-
-                      window.open(
-                        generatedSiteUrl,
-                        "_blank",
-                        "noopener,noreferrer"
-                      );
-                    }}
-                    className="min-h-10 w-full whitespace-nowrap rounded-lg bg-slate-700 px-4 py-2 text-sm font-bold hover:bg-slate-600"
-                  >
-                    View Page
-                  </button>
-                )}
-
-                <div className="w-full min-w-0 [&>button]:min-h-10 [&>button]:w-full [&>button]:whitespace-nowrap">
-                  <EnrichButton lead={lead} onEnriched={handleLeadUpdated} />
-                </div>
               </div>
 
               <div className="mt-4 rounded-xl border border-white/10 bg-slate-950/40 p-3">
@@ -2602,6 +2575,36 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 >
                   Open Branding Workspace
                 </Link>
+              </div>
+
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+                {isLeadArchived ? (
+                  <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-sm font-bold text-amber-200">
+                    Generated site disabled because this lead is archived.
+                  </p>
+                ) : (
+                  <button
+                    onClick={() => {
+                      if (!generatedSiteUrl) {
+                        alert("Generate a site first.");
+                        return;
+                      }
+
+                      window.open(
+                        generatedSiteUrl,
+                        "_blank",
+                        "noopener,noreferrer"
+                      );
+                    }}
+                    className="min-h-10 w-full whitespace-nowrap rounded-lg border border-white/10 bg-slate-800/80 px-4 py-2 text-sm font-bold text-slate-200 hover:bg-slate-700 sm:w-auto"
+                  >
+                    View Page
+                  </button>
+                )}
+
+                <div className="w-full min-w-0 [&>button]:min-h-10 [&>button]:w-full [&>button]:whitespace-nowrap [&>button]:border [&>button]:border-white/10 [&>button]:bg-slate-800/80 [&>button]:text-slate-200 [&>button]:hover:bg-slate-700 sm:w-auto sm:[&>button]:w-auto">
+                  <EnrichButton lead={lead} onEnriched={handleLeadUpdated} />
+                </div>
               </div>
 
               <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-white/10 pt-4">
