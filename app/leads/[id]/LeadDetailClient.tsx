@@ -76,6 +76,21 @@ type LeadWithGeneratedContent = Lead & {
     issues?: string[];
     summary?: string;
   };
+  yellow_pages?: {
+    url?: string;
+    website?: string;
+    email?: string;
+    phone?: string;
+    mobile?: string;
+    address?: string;
+    abn?: string;
+    established_year?: string;
+    category?: string;
+    payment_methods?: string[];
+    opening_hours?: string[];
+    years_in_business?: string;
+    scraped_at?: string;
+  };
   business_info_match?: BusinessInfoMatch;
 };
 
@@ -1755,6 +1770,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const reviewCount = lead.reviews?.length || 0;
   const leadAddress = (lead.address || lead.formattedAddress || "").trim();
   const googleMapsUrl = leadAddress ? buildGoogleMapsUrl(leadAddress) : "";
+  const yellowPages = lead.yellow_pages;
   const hasPageCopy =
     Boolean(lead.headline) ||
     Boolean(lead.subheadline) ||
@@ -2057,6 +2073,73 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                   </>
                 )}
               </div>
+
+              {yellowPages?.url ? (
+                <p>
+                  <strong className="text-white">Yellow Pages:</strong>{" "}
+                  <a
+                    href={yellowPages.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-400 hover:text-blue-300 hover:underline"
+                  >
+                    Open listing
+                  </a>
+                </p>
+              ) : null}
+
+              {yellowPages?.website ? (
+                <p>
+                  <strong className="text-white">Yellow Pages website:</strong>{" "}
+                  <a
+                    href={yellowPages.website}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="break-all text-blue-400 hover:text-blue-300 hover:underline"
+                  >
+                    {yellowPages.website}
+                  </a>
+                </p>
+              ) : null}
+
+              {yellowPages?.email ? (
+                <p>
+                  <strong className="text-white">Yellow Pages email:</strong>{" "}
+                  <a
+                    href={`mailto:${yellowPages.email}`}
+                    className="text-blue-400 hover:text-blue-300 hover:underline"
+                  >
+                    {yellowPages.email}
+                  </a>
+                </p>
+              ) : null}
+
+              {yellowPages?.mobile ? (
+                <p>
+                  <strong className="text-white">Yellow Pages mobile:</strong>{" "}
+                  {formatAustralianPhoneNumber(yellowPages.mobile) || yellowPages.mobile}
+                </p>
+              ) : null}
+
+              {yellowPages?.abn ? (
+                <p>
+                  <strong className="text-white">ABN:</strong> {yellowPages.abn}
+                </p>
+              ) : null}
+
+              {yellowPages?.established_year ? (
+                <p>
+                  <strong className="text-white">Established:</strong>{" "}
+                  {yellowPages.established_year}
+                </p>
+              ) : null}
+
+              {yellowPages?.years_in_business ? (
+                <p>
+                  <strong className="text-white">Years in business:</strong>{" "}
+                  {yellowPages.years_in_business}
+                </p>
+              ) : null}
 
               <p>
                 <strong className="text-white">Contact Page:</strong>{" "}

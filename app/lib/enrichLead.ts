@@ -10,6 +10,7 @@ import {
   type BusinessInfoMatch,
 } from "./businessInfoMatch";
 import { withLifecycleDefaults } from "./leadLifecycle";
+import { enrichLeadFromYellowPages } from "./enrichment/yellowPages";
 import { getLeadBySlug, updateLeadBySlug } from "./supabase/leads";
 const ignoredSearchDomains = [
   "google.com",
@@ -160,6 +161,25 @@ function getString(value: unknown) {
 
 function getRecord(value: unknown) {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+function shouldRunYellowPagesEnrichment(lead: Record<string, unknown>) {
+  const yellowPages = getRecord(lead.yellow_pages);
+
+  return !(
+    getString(lead.website) &&
+    getString(lead.email) &&
+    getString(lead.phone) &&
+    getString(yellowPages.mobile)
+  );
+}
+
+async function enrichFromYellowPagesIfNeeded(lead: Record<string, unknown>) {
+  if (!shouldRunYellowPagesEnrichment(lead)) {
+    return lead;
+  }
+
+  return enrichLeadFromYellowPages(lead);
 }
 
 function getExistingPrimaryPresenceUrl(lead: Record<string, unknown>) {
@@ -1672,7 +1692,8 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
       businessPresence,
     });
 
-    const savedLead = await updateLeadBySlug(slug, updatedLead);
+    const yellowPagesLead = await enrichFromYellowPagesIfNeeded(updatedLead);
+    const savedLead = await updateLeadBySlug(slug, yellowPagesLead);
     return { success: true, lead: savedLead } satisfies EnrichLeadResult;
   }
 
@@ -1913,7 +1934,8 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
       primaryBusinessPresenceType: businessPresence.primaryBusinessPresenceType,
     });
 
-    const savedLead = await updateLeadBySlug(slug, updatedLead);
+    const yellowPagesLead = await enrichFromYellowPagesIfNeeded(updatedLead);
+    const savedLead = await updateLeadBySlug(slug, yellowPagesLead);
     return { success: true, lead: savedLead } satisfies EnrichLeadResult;
   }
 
@@ -1995,7 +2017,8 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
       businessPresence,
     });
 
-    const savedLead = await updateLeadBySlug(slug, updatedLead);
+    const yellowPagesLead = await enrichFromYellowPagesIfNeeded(updatedLead);
+    const savedLead = await updateLeadBySlug(slug, yellowPagesLead);
     return { success: true, lead: savedLead } satisfies EnrichLeadResult;
   }
 
@@ -2132,6 +2155,7 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
     businessPresence,
   });
 
-  const savedLead = await updateLeadBySlug(slug, updatedLead);
+  const yellowPagesLead = await enrichFromYellowPagesIfNeeded(updatedLead);
+  const savedLead = await updateLeadBySlug(slug, yellowPagesLead);
   return { success: true, lead: savedLead } satisfies EnrichLeadResult;
 }
