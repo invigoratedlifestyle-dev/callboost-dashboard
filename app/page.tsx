@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Lead, LeadStage, WebsiteEvaluation } from "./lib/leads";
 import { CALLBOOST_MONTHLY_RECURRING_REVENUE } from "./lib/pricing";
@@ -9,6 +10,20 @@ type LeadPriority = "high" | "medium" | "low";
 type WebsiteStatus = "no_website" | "weak_website" | "has_website";
 type LeadFilter = "all" | LeadStage;
 const DEFAULT_LEAD_FILTER: LeadFilter = "lead";
+type NavigationMenuKey = "leads" | "tools" | "account";
+type NavigationMenuItem =
+  | {
+      type: "link";
+      label: string;
+      href: string;
+    }
+  | {
+      type: "button";
+      label: string;
+      onClick: () => void;
+      disabled?: boolean;
+      destructive?: boolean;
+    };
 type DashboardLead = Lead & {
   priority?: LeadPriority;
   leadScore?: number;
@@ -229,6 +244,109 @@ function getNotificationPreview(notification: DashboardNotification) {
   return text.length > 90 ? `${text.slice(0, 87)}...` : text;
 }
 
+function isActiveNavHref(pathname: string, href: string) {
+  if (href === "/") return pathname === "/";
+
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function NavDropdown({
+  id,
+  label,
+  items,
+  openMenu,
+  setOpenMenu,
+  pathname,
+}: {
+  id: NavigationMenuKey;
+  label: string;
+  items: NavigationMenuItem[];
+  openMenu: NavigationMenuKey | null;
+  setOpenMenu: (menu: NavigationMenuKey | null) => void;
+  pathname: string;
+}) {
+  const isOpen = openMenu === id;
+  const isActive = items.some(
+    (item) => item.type === "link" && isActiveNavHref(pathname, item.href)
+  );
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
+        onClick={() => setOpenMenu(isOpen ? null : id)}
+        className={`inline-flex items-center gap-2 rounded-lg px-5 py-3 text-sm font-bold transition focus:outline-none focus:ring-2 focus:ring-blue-400/70 ${
+          isActive || isOpen
+            ? "bg-blue-600 text-white shadow-lg shadow-blue-950/30"
+            : "bg-white/10 text-slate-200 hover:bg-white/15"
+        }`}
+      >
+        {label}
+        <span
+          aria-hidden="true"
+          className={`mt-[-2px] h-2 w-2 border-b-2 border-r-2 border-current transition-transform duration-200 ${
+            isOpen ? "rotate-[225deg]" : "rotate-45"
+          }`}
+        />
+      </button>
+
+      <div
+        role="menu"
+        aria-label={label}
+        className={`absolute right-0 z-30 mt-2 w-52 origin-top-right rounded-xl border border-white/10 bg-slate-900/95 p-2 shadow-2xl shadow-black/40 ring-1 ring-white/5 backdrop-blur transition duration-150 ease-out ${
+          isOpen
+            ? "translate-y-0 scale-100 opacity-100"
+            : "pointer-events-none -translate-y-1 scale-95 opacity-0"
+        }`}
+      >
+        {items.map((item) => {
+          if (item.type === "link") {
+            const active = isActiveNavHref(pathname, item.href);
+
+            return (
+              <Link
+                key={item.href}
+                role="menuitem"
+                href={item.href}
+                onClick={() => setOpenMenu(null)}
+                className={`block rounded-lg px-3 py-2.5 text-sm font-bold transition focus:outline-none focus:ring-2 focus:ring-blue-400/70 ${
+                  active
+                    ? "bg-blue-600/25 text-blue-100"
+                    : "text-slate-200 hover:bg-white/10 hover:text-white"
+                }`}
+              >
+                {item.label}
+              </Link>
+            );
+          }
+
+          return (
+            <button
+              key={item.label}
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                setOpenMenu(null);
+                item.onClick();
+              }}
+              disabled={item.disabled}
+              className={`block w-full rounded-lg px-3 py-2.5 text-left text-sm font-bold transition focus:outline-none focus:ring-2 focus:ring-blue-400/70 disabled:cursor-not-allowed disabled:opacity-60 ${
+                item.destructive
+                  ? "text-red-300 hover:bg-red-500/10 hover:text-red-200"
+                  : "text-slate-200 hover:bg-white/10 hover:text-white"
+              }`}
+            >
+              {item.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 type AudioContextWindow = Window &
   typeof globalThis & {
     webkitAudioContext?: typeof AudioContext;
@@ -325,6 +443,7 @@ function getLeadSelectionKey(lead: DashboardLead) {
 }
 
 export default function DashboardPage() {
+  const pathname = usePathname();
   const [leads, setLeads] = useState<DashboardLead[]>([]);
   const [clientRevenueLeads, setClientRevenueLeads] = useState<DashboardLead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -344,12 +463,14 @@ export default function DashboardPage() {
   >([]);
   const [followUpQueue, setFollowUpQueue] = useState<FollowUpQueueItem[]>([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [openNavMenu, setOpenNavMenu] = useState<NavigationMenuKey | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(getStoredSoundEnabled);
   const prevNotificationIdsRef = useRef<Set<string>>(new Set());
   const isFirstNotificationLoadRef = useRef(true);
   const soundEnabledRef = useRef(soundEnabled);
   const permissionRequestedRef = useRef(false);
   const selectAllCheckboxRef = useRef<HTMLInputElement | null>(null);
+  const topNavigationRef = useRef<HTMLDivElement | null>(null);
   const actionRunning = enriching || Boolean(bulkActionRunning);
 
   const loadLeads = useCallback(async (filter: LeadFilter) => {
@@ -485,6 +606,35 @@ export default function DashboardPage() {
 
     window.location.href = "/login";
   }
+
+  useEffect(() => {
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target;
+
+      if (
+        target instanceof Node &&
+        topNavigationRef.current?.contains(target)
+      ) {
+        return;
+      }
+
+      setOpenNavMenu(null);
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setOpenNavMenu(null);
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
 
   useEffect(() => {
     // Initial dashboard data load.
@@ -760,6 +910,29 @@ export default function DashboardPage() {
     );
   }, [leads]);
 
+  const setNavigationMenu = (menu: NavigationMenuKey | null) => {
+    setNotificationsOpen(false);
+    setOpenNavMenu(menu);
+  };
+  const leadsMenuItems: NavigationMenuItem[] = [
+    { type: "link", label: "Dashboard", href: "/" },
+    { type: "link", label: "Generate Leads", href: "/generate-leads" },
+  ];
+  const toolsMenuItems: NavigationMenuItem[] = [
+    { type: "link", label: "Branding", href: "/branding" },
+    { type: "link", label: "Assets", href: "/assets" },
+    { type: "link", label: "Reports", href: "/reports" },
+  ];
+  const accountMenuItems: NavigationMenuItem[] = [
+    {
+      type: "button",
+      label: "Logout",
+      onClick: handleLogout,
+      disabled: actionRunning,
+      destructive: true,
+    },
+  ];
+
   return (
     <main className="min-h-screen bg-slate-950 text-white">
       <div className="mx-auto max-w-7xl px-6 py-10">
@@ -777,7 +950,10 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center lg:justify-end">
+          <div
+            ref={topNavigationRef}
+            className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center lg:justify-end"
+          >
             {!soundEnabled ? (
               <button
                 onClick={handleEnableSoundAlerts}
@@ -789,8 +965,16 @@ export default function DashboardPage() {
 
             <div className="relative">
               <button
-                onClick={() => setNotificationsOpen((open) => !open)}
-                className="relative rounded-lg bg-white/10 px-5 py-3 text-sm font-bold text-slate-200 hover:bg-white/15"
+                type="button"
+                onClick={() => {
+                  setOpenNavMenu(null);
+                  setNotificationsOpen((open) => !open);
+                }}
+                className={`relative rounded-lg px-5 py-3 text-sm font-bold transition focus:outline-none focus:ring-2 focus:ring-blue-400/70 ${
+                  notificationsOpen
+                    ? "bg-blue-600 text-white shadow-lg shadow-blue-950/30"
+                    : "bg-white/10 text-slate-200 hover:bg-white/15"
+                }`}
               >
                 Notifications
                 {notifications.length > 0 ? (
@@ -801,7 +985,7 @@ export default function DashboardPage() {
               </button>
 
               {notificationsOpen ? (
-                <div className="absolute right-0 z-20 mt-2 w-[min(22rem,calc(100vw-3rem))] rounded-xl border border-white/10 bg-slate-900 p-3 shadow-2xl">
+                <div className="absolute right-0 z-30 mt-2 w-[min(22rem,calc(100vw-3rem))] rounded-xl border border-white/10 bg-slate-900 p-3 shadow-2xl shadow-black/40 ring-1 ring-white/5">
                   <div className="mb-2 flex items-center justify-between gap-3">
                     <p className="text-sm font-bold text-white">
                       Notifications
@@ -862,34 +1046,32 @@ export default function DashboardPage() {
               ) : null}
             </div>
 
-            <Link
-              href="/generate-leads"
-              className="rounded-lg bg-white/10 px-5 py-3 text-sm font-bold text-slate-200 hover:bg-white/15"
-            >
-              Generate Leads
-            </Link>
+            <NavDropdown
+              id="leads"
+              label="Leads"
+              items={leadsMenuItems}
+              openMenu={openNavMenu}
+              setOpenMenu={setNavigationMenu}
+              pathname={pathname}
+            />
 
-            <Link
-              href="/assets"
-              className="rounded-lg bg-white/10 px-5 py-3 text-sm font-bold text-slate-200 hover:bg-white/15"
-            >
-              Assets
-            </Link>
+            <NavDropdown
+              id="tools"
+              label="Tools"
+              items={toolsMenuItems}
+              openMenu={openNavMenu}
+              setOpenMenu={setNavigationMenu}
+              pathname={pathname}
+            />
 
-            <Link
-              href="/reports"
-              className="rounded-lg bg-white/10 px-5 py-3 text-sm font-bold text-slate-200 hover:bg-white/15"
-            >
-              Reports
-            </Link>
-
-            <button
-              onClick={handleLogout}
-              disabled={actionRunning}
-              className="rounded-lg bg-white/10 px-5 py-3 text-sm font-bold text-slate-200 hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              Logout
-            </button>
+            <NavDropdown
+              id="account"
+              label="Account"
+              items={accountMenuItems}
+              openMenu={openNavMenu}
+              setOpenMenu={setNavigationMenu}
+              pathname={pathname}
+            />
           </div>
         </div>
 
