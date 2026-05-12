@@ -11,6 +11,7 @@ import {
 } from "./businessInfoMatch";
 import { withLifecycleDefaults } from "./leadLifecycle";
 import { enrichLeadFromYellowPages } from "./enrichment/yellowPages";
+import { withTradeProfile } from "./leadTargeting/tradeModifiers";
 import { getLeadBySlug, updateLeadBySlug } from "./supabase/leads";
 const ignoredSearchDomains = [
   "google.com",
@@ -1706,7 +1707,7 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
     });
 
     const yellowPagesLead = await enrichFromYellowPagesIfNeeded(updatedLead);
-    const savedLead = await updateLeadBySlug(slug, yellowPagesLead);
+    const savedLead = await updateLeadBySlug(slug, withTradeProfile(yellowPagesLead));
     return { success: true, lead: savedLead } satisfies EnrichLeadResult;
   }
 
@@ -1948,7 +1949,7 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
     });
 
     const yellowPagesLead = await enrichFromYellowPagesIfNeeded(updatedLead);
-    const savedLead = await updateLeadBySlug(slug, yellowPagesLead);
+    const savedLead = await updateLeadBySlug(slug, withTradeProfile(yellowPagesLead));
     return { success: true, lead: savedLead } satisfies EnrichLeadResult;
   }
 
@@ -2031,7 +2032,7 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
     });
 
     const yellowPagesLead = await enrichFromYellowPagesIfNeeded(updatedLead);
-    const savedLead = await updateLeadBySlug(slug, yellowPagesLead);
+    const savedLead = await updateLeadBySlug(slug, withTradeProfile(yellowPagesLead));
     return { success: true, lead: savedLead } satisfies EnrichLeadResult;
   }
 
@@ -2169,6 +2170,6 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
   });
 
   const yellowPagesLead = await enrichFromYellowPagesIfNeeded(updatedLead);
-  const savedLead = await updateLeadBySlug(slug, yellowPagesLead);
+  const savedLead = await updateLeadBySlug(slug, withTradeProfile(yellowPagesLead));
   return { success: true, lead: savedLead } satisfies EnrichLeadResult;
 }

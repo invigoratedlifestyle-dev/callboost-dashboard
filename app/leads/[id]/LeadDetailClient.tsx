@@ -22,6 +22,7 @@ import {
   getLeadStatusBadgeClass,
   getLeadStatusLabel,
 } from "../../lib/leadWorkflow";
+import { getServiceModifierLabel } from "../../lib/leadTargeting/tradeModifiers";
 import { CALLBOOST_CHECKOUT_SUMMARY } from "../../lib/pricing";
 import {
   buildFollowUpBody,
@@ -1806,6 +1807,10 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     lead.yellow_pages_search?.searchUrl ||
     lead.yellow_pages_url ||
     "";
+  const tradeProfile = lead.trade_profile;
+  const serviceModifierLabels =
+    tradeProfile?.service_modifiers?.map(getServiceModifierLabel).filter(Boolean) ||
+    [];
   const hasPageCopy =
     Boolean(lead.headline) ||
     Boolean(lead.subheadline) ||
@@ -1946,6 +1951,25 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                   <span>{lead.trade || "-"}</span>
                 )}
               </div>
+
+              {tradeProfile ? (
+                <div className="rounded-xl border border-white/10 bg-slate-950/40 p-3 text-sm">
+                  <p>
+                    <strong className="text-white">Primary Trade:</strong>{" "}
+                    {tradeProfile.primary_trade || "-"}
+                  </p>
+                  <p className="mt-2">
+                    <strong className="text-white">Template Profile:</strong>{" "}
+                    {tradeProfile.template_profile || "-"}
+                  </p>
+                  <p className="mt-2">
+                    <strong className="text-white">Service Modifiers:</strong>{" "}
+                    {serviceModifierLabels.length
+                      ? serviceModifierLabels.join(", ")
+                      : "None detected"}
+                  </p>
+                </div>
+              ) : null}
 
               <div>
                 <strong className="text-white">Display Name:</strong>{" "}

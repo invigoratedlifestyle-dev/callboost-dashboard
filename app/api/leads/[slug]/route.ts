@@ -4,6 +4,7 @@ import {
   type LeadRecord,
 } from "../../../lib/leadLifecycle";
 import { isLeadStatus } from "../../../lib/leadWorkflow";
+import { withTradeProfile } from "../../../lib/leadTargeting/tradeModifiers";
 import { listCallbacksForLead } from "../../../lib/supabase/callbacks";
 import {
   getLeadBySlug,
@@ -239,7 +240,7 @@ export async function PATCH(
       }
 
       try {
-        updatedLead = await updateLeadBySlug(slug, nextLead);
+        updatedLead = await updateLeadBySlug(slug, withTradeProfile(nextLead));
         if (hasOwn(body, "siteBrandingUrl")) {
           if (updatedLead.generatedSiteUrl && updatedLead.siteBrandingUrl) {
             updatedLead =

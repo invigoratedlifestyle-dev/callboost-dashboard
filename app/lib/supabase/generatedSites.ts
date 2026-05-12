@@ -2,6 +2,12 @@ import { getSupabaseAdmin } from "./server";
 import type { LeadRecord } from "../leadLifecycle";
 import { formatAustralianPhoneNumber } from "../contactMethods";
 import { getRandomHeroImage, SITE_ASSETS_BUCKET } from "../siteAssets";
+import {
+  buildTradeProfile,
+  getServiceModifierLabel,
+  type ServiceModifier,
+  type TradeProfile,
+} from "../leadTargeting/tradeModifiers";
 
 export type GeneratedSiteRow = {
   id?: string | number;
@@ -694,6 +700,113 @@ function getServicePlaceholder(trade: unknown) {
     : "Repairs, maintenance, quote...";
 }
 
+function hasModifier(profile: TradeProfile, modifier: ServiceModifier) {
+  return profile.service_modifiers.includes(modifier);
+}
+
+function getModifierServices(profile: TradeProfile) {
+  const services: string[] = [];
+
+  if (
+    hasModifier(profile, "sheetmetal") ||
+    hasModifier(profile, "roof_plumbing") ||
+    hasModifier(profile, "guttering")
+  ) {
+    services.push(
+      "General Plumbing",
+      "Roof Plumbing",
+      "Guttering & Downpipes",
+      "Sheetmetal Work",
+      "Flashings",
+      "Repairs & Maintenance"
+    );
+  }
+
+  if (hasModifier(profile, "gas_fitting")) {
+    services.push("Gas Fitting", "Gas Appliance Connections");
+  }
+
+  if (hasModifier(profile, "drainage")) {
+    services.push("Blocked Drains", "Drainage Repairs");
+  }
+
+  if (hasModifier(profile, "bathrooms")) {
+    services.push("Bathroom Plumbing", "Bathroom Renovation Plumbing");
+  }
+
+  if (hasModifier(profile, "renovations")) {
+    services.push("Renovation Plumbing");
+  }
+
+  if (hasModifier(profile, "hot_water")) {
+    services.push("Hot Water Systems");
+  }
+
+  if (hasModifier(profile, "emergency_plumbing")) {
+    services.push("Emergency Plumbing");
+  }
+
+  if (hasModifier(profile, "excavation")) {
+    services.push("Drainage & Excavation");
+  }
+
+  if (hasModifier(profile, "maintenance")) {
+    services.push("Maintenance Plumbing");
+  }
+
+  return services;
+}
+
+function getServicePhrase(trade: string, profile: TradeProfile) {
+  if (
+    isPlumberTrade(trade) &&
+    (hasModifier(profile, "sheetmetal") ||
+      hasModifier(profile, "roof_plumbing") ||
+      hasModifier(profile, "guttering"))
+  ) {
+    return "plumbing, roofing, guttering and sheetmetal services";
+  }
+
+  if (isPlumbingGasFittingTrade(trade) || hasModifier(profile, "gas_fitting")) {
+    return "plumbing and gas fitting services";
+  }
+
+  if (isPlumberTrade(trade) && hasModifier(profile, "bathrooms")) {
+    return "plumbing and bathroom renovation services";
+  }
+
+  if (isPlumberTrade(trade) && hasModifier(profile, "drainage")) {
+    return "plumbing and drainage services";
+  }
+
+  return `${getTradeHelpLabel(trade)} services`;
+}
+
+function getProfileTradeLabel(trade: string, profile: TradeProfile) {
+  if (
+    isPlumberTrade(trade) &&
+    (hasModifier(profile, "sheetmetal") ||
+      hasModifier(profile, "roof_plumbing") ||
+      hasModifier(profile, "guttering"))
+  ) {
+    return "Plumbing, Roofing & Sheetmetal";
+  }
+
+  if (isPlumbingGasFittingTrade(trade) || hasModifier(profile, "gas_fitting")) {
+    return "Plumbing and Gas Fitting";
+  }
+
+  if (isPlumberTrade(trade) && hasModifier(profile, "bathrooms")) {
+    return "Plumbing and Bathrooms";
+  }
+
+  if (isPlumberTrade(trade) && hasModifier(profile, "drainage")) {
+    return "Plumbing and Drainage";
+  }
+
+  return getTradeLabel(trade);
+}
+
 function getDefaultServices(trade: string) {
   if (isPlumbingGasFittingTrade(trade)) {
     return [
@@ -734,6 +847,26 @@ function getDefaultServices(trade: string) {
 
 function getServiceDescription(serviceName: string, trade: string) {
   const lower = serviceName.toLowerCase();
+
+  if (lower.includes("sheetmetal") || lower.includes("sheet metal")) {
+    return "Practical sheetmetal work for local roofing, plumbing and building details.";
+  }
+
+  if (lower.includes("roof plumbing")) {
+    return "Roof plumbing support for water flow, flashing details and weather protection.";
+  }
+
+  if (lower.includes("gutter") || lower.includes("downpipe")) {
+    return "Guttering and downpipe work to move water away from roofs, walls and foundations.";
+  }
+
+  if (lower.includes("flashing")) {
+    return "Flashing repairs and installation to help protect roof edges, joins and penetrations.";
+  }
+
+  if (lower.includes("excavation")) {
+    return "Drainage and excavation support for practical underground plumbing access and repairs.";
+  }
 
   if (lower.includes("emergency") || lower.includes("urgent")) {
     return "Fast help for urgent issues, leaks, overflows and jobs that cannot wait.";
@@ -782,13 +915,14 @@ function getServiceDescription(serviceName: string, trade: string) {
   return `Straightforward ${trade.toLowerCase()} repairs, maintenance and installation help for local properties.`;
 }
 
-function getServices(lead: LeadRecord, trade: string) {
+function getServices(lead: LeadRecord, trade: string, profile: TradeProfile) {
   const leadServices = getStringArray(lead.services);
+  const modifierServices = getModifierServices(profile);
   const defaults = getDefaultServices(trade);
   const seen = new Set<string>();
   const services: string[] = [];
 
-  for (const service of [...leadServices, ...defaults]) {
+  for (const service of [...modifierServices, ...leadServices, ...defaults]) {
     const clean = service.length > 80 ? `${service.slice(0, 77)}...` : service;
     const key = clean.toLowerCase();
 
@@ -1001,10 +1135,11 @@ function renderStars(rating: number | null) {
 function getTrustItems(args: {
   city: string;
   lead: LeadRecord;
+  profile: TradeProfile;
   services: string[];
   trade: string;
 }) {
-  const { city, lead, services, trade } = args;
+  const { city, lead, profile, services, trade } = args;
   const label = getTradeHelpLabel(trade);
   const items: [string, string][] = [
     [
@@ -1045,6 +1180,25 @@ function getTrustItems(args: {
     );
   }
 
+  if (
+    hasModifier(profile, "sheetmetal") ||
+    hasModifier(profile, "roof_plumbing") ||
+    hasModifier(profile, "guttering")
+  ) {
+    items.splice(
+      2,
+      0,
+      [
+        "Roof & gutter detail",
+        "Support for roof plumbing, gutters, downpipes, flashings and sheetmetal work.",
+      ],
+      [
+        "Practical maintenance",
+        "Straightforward repairs for leaks, water flow issues and weather-exposed fittings.",
+      ]
+    );
+  }
+
   const years =
     getText(lead.yearsExperience) ||
     getText(lead.yearsInBusiness) ||
@@ -1072,9 +1226,48 @@ function getServiceAreas(lead: LeadRecord, city: string) {
   return city ? `${city} and surrounding areas` : "Local service area";
 }
 
-function buildFaqs(args: { city: string; businessName: string; trade: string }) {
-  const { city, businessName, trade } = args;
+function buildFaqs(args: {
+  city: string;
+  businessName: string;
+  profile: TradeProfile;
+  trade: string;
+}) {
+  const { city, businessName, profile, trade } = args;
   const tradeLower = getTradeHelpLabel(trade);
+
+  if (
+    isPlumberTrade(trade) &&
+    (hasModifier(profile, "sheetmetal") ||
+      hasModifier(profile, "roof_plumbing") ||
+      hasModifier(profile, "guttering"))
+  ) {
+    return [
+      [
+        `Do you service ${city}?`,
+        `Yes. ${businessName} provides plumbing, roof plumbing, guttering and sheetmetal services across ${city} and surrounding areas.`,
+      ],
+      [
+        "Can you help with roof plumbing and gutters?",
+        "Yes. Roof plumbing, guttering, downpipes and flashing enquiries can be discussed when you call or request a callback.",
+      ],
+      [
+        "Do you still handle general plumbing?",
+        "Yes. General plumbing repairs, maintenance, leaks, fixtures and common property plumbing jobs can be discussed.",
+      ],
+      [
+        "Can you help with urgent leaks?",
+        "Call directly for urgent water leaks, roof water issues, blocked drains or other problems that need prompt attention.",
+      ],
+      [
+        "Do you provide quotes before starting?",
+        "Yes. You can talk through the job first and get a clear next step before work begins.",
+      ],
+      [
+        "Do you work with homes and businesses?",
+        "Yes. The site supports enquiries for homes, rentals, shops, offices and light commercial premises.",
+      ],
+    ];
+  }
 
   if (isPlumbingGasFittingTrade(trade)) {
     return [
@@ -1154,7 +1347,16 @@ function buildFaqs(args: { city: string; businessName: string; trade: string }) 
   ];
 }
 
-function buildHeroHeadline(trade: string, city: string) {
+function buildHeroHeadline(trade: string, city: string, profile: TradeProfile) {
+  if (
+    isPlumberTrade(trade) &&
+    (hasModifier(profile, "sheetmetal") ||
+      hasModifier(profile, "roof_plumbing") ||
+      hasModifier(profile, "guttering"))
+  ) {
+    return `Local Plumbing, Roofing & Sheetmetal in ${city}`;
+  }
+
   if (isPlumbingGasFittingTrade(trade)) {
     return `Local Plumbing & Gas Fitting in ${city}`;
   }
@@ -1164,7 +1366,21 @@ function buildHeroHeadline(trade: string, city: string) {
   return `Trusted ${titleCase(trade)} Services in ${city}`;
 }
 
-function buildHeroSubheading(trade: string, city: string, topServices: string) {
+function buildHeroSubheading(
+  trade: string,
+  city: string,
+  topServices: string,
+  profile: TradeProfile
+) {
+  if (
+    isPlumberTrade(trade) &&
+    (hasModifier(profile, "sheetmetal") ||
+      hasModifier(profile, "roof_plumbing") ||
+      hasModifier(profile, "guttering"))
+  ) {
+    return `Local plumbing, roofing, guttering and sheetmetal services in ${city} and surrounding areas. Call for help with ${topServices}.`;
+  }
+
   if (isPlumbingGasFittingTrade(trade)) {
     return `From leaking taps and blocked drains to hot water systems and gas appliance connections, get professional plumbing and gas fitting support across ${city}.`;
   }
@@ -1199,8 +1415,10 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
   const businessName =
     cleanBusinessName(lead.displayName || lead.businessName || lead.name) ||
     titleCase(slugSource);
-  const trade = getText(lead.trade).trim() || "plumber";
-  const tradeLabel = getTradeLabel(trade);
+  const tradeProfile = buildTradeProfile(lead);
+  const trade = tradeProfile.template_profile || getText(lead.trade).trim() || "plumber";
+  const primaryTrade = tradeProfile.primary_trade || trade;
+  const tradeLabel = getProfileTradeLabel(trade, tradeProfile);
   const tradeHelpLabel = getTradeHelpLabel(trade);
   const tradePeopleLabel = getTradePeopleLabel(trade);
   const servicePlaceholder = getServicePlaceholder(trade);
@@ -1210,7 +1428,11 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
   const businessSlug = slugify(slugSource);
   const seed = `${businessSlug}-${citySlug}-${tradeSlug}`;
   // Business-specific and library imagery can improve trust and conversion. Stock trade imagery remains the safe fallback.
-  const heroImage = await getGeneratedHeroImage({ lead, trade, seed });
+  const heroImage = await getGeneratedHeroImage({
+    lead,
+    trade: primaryTrade || trade,
+    seed,
+  });
   const siteBrandingUrl = getText(lead.siteBrandingUrl).trim();
   const hasSiteBranding = isValidHttpUrl(siteBrandingUrl);
   const siteIconUrl = getText(lead.siteIconUrl).trim();
@@ -1257,22 +1479,26 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
   const hasRating = Boolean(rating && reviewCount);
   const ratingNumber = Number(rating);
   const hasStrongHeroRating = hasRating && Number.isFinite(ratingNumber) && ratingNumber >= 3.5;
-  const services = getServices(lead, trade);
+  const services = getServices(lead, trade, tradeProfile);
   const topServices = getTopServices(services, trade);
   const serviceAreas = getServiceAreas(lead, city);
-  const trustItems = getTrustItems({ city, lead, services, trade });
-  const faqs = buildFaqs({ city, businessName, trade });
+  const trustItems = getTrustItems({ city, lead, profile: tradeProfile, services, trade });
+  const faqs = buildFaqs({ city, businessName, profile: tradeProfile, trade });
   const reviews = getReviews(lead);
   const hasReviews = reviews.length > 0;
   const usingGoogleReviews = hasReviews && isGoogleReviewSource(lead, reviews);
   const mapEmbedUrl = getMapEmbedUrl(lead, businessName, city);
   const hoursLines = formatHours(lead.hours);
   const variant = isPlumberTrade(trade) ? "plumber-classic" : "tradie-classic";
-  const heroHeadline = buildHeroHeadline(trade, city);
-  const heroSubheading = buildHeroSubheading(trade, city, topServices);
+  const heroHeadline = buildHeroHeadline(trade, city, tradeProfile);
+  const heroSubheading = buildHeroSubheading(trade, city, topServices, tradeProfile);
+  const servicePhrase = getServicePhrase(trade, tradeProfile);
+  const modifierSummary = tradeProfile.service_modifiers
+    .map(getServiceModifierLabel)
+    .join(", ");
   const description =
     getText(lead.description).trim() ||
-    `${businessName} provides local ${tradeLabel} services in ${city}. Call directly or request a callback.`;
+    `${businessName} provides local ${servicePhrase} in ${city}. Call directly or request a callback.`;
 
   const navCallHtml = hasPhone
     ? `<a class="nav-call" href="tel:${escapeAttribute(phoneRaw)}">${escapeHtml(phoneDisplay)}</a>`
@@ -1396,6 +1622,7 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>${escapeHtml(businessName)} | ${escapeHtml(tradeLabel)} in ${escapeHtml(city)}</title>
   <meta name="description" content="${escapeAttribute(description)}" />
+  ${modifierSummary ? `<meta name="keywords" content="${escapeAttribute([tradeLabel, city, modifierSummary].filter(Boolean).join(", "))}" />` : ""}
 ${iconLinkHtml}
   <style>
     :root { --cta-color: ${escapeAttribute(buttonColor)}; --cta-text-color: ${escapeAttribute(buttonTextColor)}; --hero-accent-color: ${escapeAttribute(heroAccentColor)}; --body-accent-color: ${escapeAttribute(bodyAccentColor)}; --service-area-card-color: ${escapeAttribute(serviceAreaCardColor)}; --footer-background-color: ${escapeAttribute(footerBackgroundColor)}; --footer-text-color: #ffffff; --cb-button-color: var(--cta-color); --cb-accent-text-color: var(--body-accent-color); }
@@ -1538,7 +1765,7 @@ ${iconLinkHtml}
         <div class="quote-card">
           <div>
             <div class="section-kicker">Quick quote</div>
-            <h2>Need ${escapeHtml(tradeHelpLabel)} help?</h2>
+            <h2>Need ${escapeHtml(servicePhrase)}?</h2>
             <p class="muted">Send the basics through and ${escapeHtml(businessName)} can call back with the next step.</p>
           </div>
           <form class="mini-form" data-slug="${escapeAttribute(businessSlug)}">
@@ -1560,7 +1787,7 @@ ${iconLinkHtml}
         <div class="section-header">
           <div class="section-kicker">Services</div>
           <h2>Our ${escapeHtml(city)} ${escapeHtml(tradeLabel)} Services</h2>
-          <p class="muted">Practical ${escapeHtml(tradeLabel.toLowerCase())} help for homes, rentals, shops and commercial properties across ${escapeHtml(city)}.</p>
+          <p class="muted">Practical ${escapeHtml(servicePhrase)} for homes, rentals, shops and commercial properties across ${escapeHtml(city)}.</p>
         </div>
         <div class="services-grid">${servicesHtml}</div>
       </div>
@@ -1585,7 +1812,7 @@ ${iconLinkHtml}
           <div>
             <div class="section-kicker">Service areas</div>
             <h2>Serving ${escapeHtml(city)} and nearby suburbs</h2>
-            <p>Local ${escapeHtml(tradeLabel.toLowerCase())} services for homes and businesses across the area.</p>
+            <p>Local ${escapeHtml(servicePhrase)} for homes and businesses across the area.</p>
           </div>
           <div class="areas-list">${escapeHtml(serviceAreas)}</div>
         </div>
@@ -1596,7 +1823,7 @@ ${iconLinkHtml}
       <div class="container">
         <div class="section-header">
           <div class="section-kicker">FAQ</div>
-          <h2>Common ${escapeHtml(tradeHelpLabel)} questions</h2>
+          <h2>Common ${escapeHtml(servicePhrase)} questions</h2>
           <p class="muted">Straight answers before you pick up the phone.</p>
         </div>
         <div class="faq-grid">${faqHtml}</div>
@@ -1641,7 +1868,7 @@ ${iconLinkHtml}
       <div class="footer-grid">
         <div>
           <h3>${escapeHtml(businessName)}</h3>
-          <p>Local ${escapeHtml(tradeLabel.toLowerCase())} services for homes and businesses in ${escapeHtml(city)}.</p>
+          <p>Local ${escapeHtml(servicePhrase)} for homes and businesses in ${escapeHtml(city)}.</p>
         </div>
         <div>
           <h4>Contact</h4>

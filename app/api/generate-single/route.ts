@@ -13,6 +13,11 @@ import {
   updateLeadStatus,
 } from "../../lib/supabase/leads";
 import { isValidTradeLead } from "../../lib/tradeValidation";
+import {
+  buildTradeProfile,
+  getServiceModifierLabel,
+  withTradeProfile,
+} from "../../lib/leadTargeting/tradeModifiers";
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -180,12 +185,28 @@ export async function POST(req: Request) {
       );
     }
 
+    const initialTradeProfile = buildTradeProfile({
+      ...existingLead,
+      ...requestLead,
+      templateTrade,
+      templateType,
+    });
+    const modifierLabels = initialTradeProfile.service_modifiers.map(
+      getServiceModifierLabel
+    );
+
     const prompt = `
 Generate local business website content.
 
 Selected template trade: ${templateTrade}
+Primary trade: ${initialTradeProfile.primary_trade}
+Template profile: ${initialTradeProfile.template_profile}
+Secondary trades: ${initialTradeProfile.secondary_trades.join(", ") || "none"}
+Service modifiers: ${modifierLabels.join(", ") || "none"}
 
 If the selected template trade is plumbing-gas-fitting / Plumbing and Gas Fitting, tailor the copy to licensed plumbing and gas fitting work. Mention safe, reliable gas work, emergency plumbing, hot water, gas appliance connections, residential work and light commercial support where suitable. Do not invent licence numbers or certifications.
+
+Use the primary trade for the core website structure and template choice. Use service modifiers only when they are supported by the business name, scraped data or existing lead data. Do not invent unsupported services. Keep the copy practical, local-business focused and specific to the modifier mix.
 
 Business:
 ${JSON.stringify(existingLead, null, 2)}
@@ -223,7 +244,7 @@ Return ONLY valid JSON:
       Array.isArray(existingLead.reviews) &&
       existingLead.reviews.length > 0;
     const publicUrl = getPublicUrl(req, slug);
-    const updatedLead = withLifecycleDefaults({
+    const updatedLead = withLifecycleDefaults(withTradeProfile({
       ...existingLead,
       siteBrandingUrl:
         getStringField(existingLead, "siteBrandingUrl") ||
@@ -236,6 +257,7 @@ Return ONLY valid JSON:
         getStringField(requestLead, "siteIconUrl"),
       templateTrade,
       templateType,
+      trade_profile: initialTradeProfile,
       description: ai.description,
       services: ai.services,
       reviews: hasGoogleReviews ? existingLead.reviews : ai.reviews,
@@ -244,7 +266,7 @@ Return ONLY valid JSON:
         : existingLead.reviewsSource || "none",
       generatedSiteUrl: publicUrl,
       aiGeneratedAt: new Date().toISOString(),
-    });
+    }));
 
     console.log("GENERATE_SITE_ASSETS", {
       siteBrandingUrl: getStringField(updatedLead, "siteBrandingUrl"),

@@ -1,3 +1,5 @@
+import type { TradeProfile } from "./leadTargeting/tradeModifiers";
+
 export type LeadStage =
   | "lead"
   | "contacted"
@@ -113,6 +115,7 @@ export type Lead = {
   paymentStatus?: string | null;
   paidAt?: string | null;
   clientStartedAt?: string | null;
+  trade_profile?: TradeProfile;
 };
 
 export const leads: Lead[] = [

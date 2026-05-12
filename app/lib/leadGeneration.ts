@@ -12,6 +12,7 @@ import {
   getStateTarget,
   type CityTarget,
 } from "./leadTargeting/cities";
+import { withTradeProfile } from "./leadTargeting/tradeModifiers";
 import { getTradeTarget, type TradeTarget } from "./leadTargeting/trades";
 import {
   duplicateLeadExists,
@@ -743,7 +744,7 @@ export async function generateLeadsForTown(args: GenerateLeadsForTownArgs) {
       tradeValidation.score +
       (Number(place.rating) || 0) +
       Math.min(Number(place.userRatingCount) || 0, 100) / 100;
-    const lead = {
+    const lead = withTradeProfile({
       businessName,
       trade,
       city,
@@ -799,7 +800,7 @@ export async function generateLeadsForTown(args: GenerateLeadsForTownArgs) {
       enrichedAt: "",
       createdAt: now,
       updatedAt: now,
-    };
+    });
 
     console.log("Saving lead:", { businessName, website: lead.website });
 
