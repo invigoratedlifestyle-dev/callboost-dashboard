@@ -104,9 +104,11 @@ const foodHospitalityRetailTypes = new Set([
   "bakery",
   "bar",
   "lodging",
-  "store",
+  "hotel",
+  "motel",
   "supermarket",
   "convenience_store",
+  "liquor_store",
   "tourist_attraction",
 ]);
 
@@ -127,6 +129,7 @@ const negativeNameTerms = [
 const plumberTradeTypes = new Set([
   "plumber",
   "plumbing",
+  "plumbing_service",
   "contractor",
   "general_contractor",
 ]);
@@ -228,6 +231,9 @@ export function isGooglePlaceRelevantForTrade(
   const matchedNegativeType = [...categoryTypes].find((type) =>
     foodHospitalityRetailTypes.has(type)
   );
+  const matchedPlumberType = [...categoryTypes].find((type) =>
+    plumberTradeTypes.has(type)
+  );
 
   if (matchedNegativeNameTerm) {
     return {
@@ -248,25 +254,25 @@ export function isGooglePlaceRelevantForTrade(
   }
 
   if (
+    (normalizedTargetTrade === "plumber" ||
+      normalizedTargetTrade === "plumbing-gas-fitting") &&
+    matchedPlumberType
+  ) {
+    return {
+      isRelevant: true,
+      reason: `matched_place_type:${matchedPlumberType}`,
+      primaryType,
+      types,
+    };
+  }
+
+  if (
     normalizedTargetTrade !== "plumber" &&
     normalizedTargetTrade !== "plumbing-gas-fitting"
   ) {
     return {
       isRelevant: true,
       reason: "no_strict_place_type_rules",
-      primaryType,
-      types,
-    };
-  }
-
-  const matchedPlumberType = [...categoryTypes].find((type) =>
-    plumberTradeTypes.has(type)
-  );
-
-  if (matchedPlumberType) {
-    return {
-      isRelevant: true,
-      reason: `matched_place_type:${matchedPlumberType}`,
       primaryType,
       types,
     };
@@ -287,7 +293,7 @@ export function isGooglePlaceRelevantForTrade(
   if (
     (categoryTypes.size === 0 ||
       [...categoryTypes].every((type) =>
-        ["point_of_interest", "establishment"].includes(type)
+        ["store", "point_of_interest", "establishment", "service"].includes(type)
       )) &&
     hasAnyTerm(nameAndWebsite, plumberIntentTerms)
   ) {
@@ -383,6 +389,9 @@ export function isValidTradeLead(
     }
   }
 
+  const hasExplicitPositivePlaceType =
+    placeRelevance.reason?.startsWith("matched_place_type:") || false;
+
   return {
     targetTrade: normalizedTargetTrade,
     score,
@@ -390,6 +399,6 @@ export function isValidTradeLead(
     rejectedTerms: Array.from(new Set(rejectedTerms)),
     reason: rejectedTerms.length ? "rejected_keyword" : placeRelevance.reason,
     validatedAt: new Date().toISOString(),
-    isValid: score >= 3,
+    isValid: score >= 3 || hasExplicitPositivePlaceType,
   };
 }
