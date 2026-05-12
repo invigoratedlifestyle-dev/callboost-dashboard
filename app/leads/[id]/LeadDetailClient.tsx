@@ -77,6 +77,7 @@ type LeadWithGeneratedContent = Lead & {
     summary?: string;
   };
   yellow_pages?: {
+    listing_url?: string;
     url?: string;
     manual_listing_url?: string;
     website?: string;
@@ -93,6 +94,14 @@ type LeadWithGeneratedContent = Lead & {
     years_in_business?: string;
     scraped_at?: string;
   };
+  yellow_pages_search?: {
+    query?: string;
+    searchUrl?: string;
+    candidateCount?: number;
+    fetchedAt?: string;
+    reason?: string;
+  };
+  yellow_pages_url?: string;
   enrichment_sources?: {
     website?: string;
     email?: string;
@@ -516,14 +525,6 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const [isEditingContact, setIsEditingContact] = useState(false);
   const [savingContact, setSavingContact] = useState(false);
   const [contactError, setContactError] = useState("");
-  const [rerunningYellowPages, setRerunningYellowPages] = useState(false);
-  const [savingYellowPagesUrl, setSavingYellowPagesUrl] = useState(false);
-  const [scrapingYellowPagesUrl, setScrapingYellowPagesUrl] = useState(false);
-  const [scrapingYellowPagesInBrowser, setScrapingYellowPagesInBrowser] =
-    useState(false);
-  const [yellowPagesListingUrl, setYellowPagesListingUrl] = useState("");
-  const [yellowPagesNotice, setYellowPagesNotice] = useState("");
-  const [yellowPagesError, setYellowPagesError] = useState("");
   const [heroImageFile, setHeroImageFile] = useState<File | null>(null);
   const [uploadingHeroImage, setUploadingHeroImage] = useState(false);
   const [heroImageUploadNotice, setHeroImageUploadNotice] = useState("");
@@ -659,11 +660,6 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       );
       setCallbackForwardToEmail(data.lead?.callbackForwardToEmail || "");
       setCallbackForwardToPhone(data.lead?.callbackForwardToPhone || "");
-      setYellowPagesListingUrl(
-        loadedLead.yellow_pages?.manual_listing_url ||
-          loadedLead.yellow_pages?.url ||
-          ""
-      );
 
       const messagesRes = await fetch(`/api/leads/${slug}/messages`, {
         cache: "no-store",
@@ -750,9 +746,6 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     setSiteHeroImageUrl(nextLead.heroImageUrl || "");
     setSiteBrandingUrl(nextLead.siteBrandingUrl || "");
     setSiteIconUrl(nextLead.siteIconUrl || "");
-    setYellowPagesListingUrl(
-      nextLead.yellow_pages?.manual_listing_url || nextLead.yellow_pages?.url || ""
-    );
     const siteDesign = getLeadSiteDesign(nextLead);
     setButtonColor(siteDesign.buttonColor);
     setButtonTextColor(siteDesign.buttonTextColor);
@@ -840,298 +833,6 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       );
     } finally {
       setRedoingOpportunity(false);
-    }
-  };
-  const handleRerunYellowPages = async () => {
-    if (!lead) return;
-
-    setRerunningYellowPages(true);
-    setYellowPagesNotice("");
-    setYellowPagesError("");
-
-    try {
-      const res = await fetch(`/api/leads/${lead.slug || lead.id}/yellow-pages`, {
-        method: "POST",
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to run Yellow Pages enrichment");
-      }
-
-      if (data.lead) {
-        handleLeadUpdated(data.lead);
-      }
-
-      const updatedFields = Array.isArray(data.updatedFields)
-        ? data.updatedFields
-        : [];
-
-      setYellowPagesNotice(
-        updatedFields.length
-          ? `Yellow Pages updated ${updatedFields.join(", ")}.`
-          : data.hasYellowPages
-            ? "Yellow Pages check completed. No empty top-level fields were updated."
-            : "Yellow Pages search unavailable from server. Paste listing URL to enrich manually."
-      );
-    } catch (error) {
-      setYellowPagesError(
-        error instanceof Error
-          ? error.message
-          : "Failed to run Yellow Pages enrichment"
-      );
-    } finally {
-      setRerunningYellowPages(false);
-    }
-  };
-  const handleSaveYellowPagesUrl = async () => {
-    if (!lead) return;
-
-    const listingUrl = yellowPagesListingUrl.trim();
-
-    if (!listingUrl) {
-      setYellowPagesError("Paste a Yellow Pages listing URL first.");
-      setYellowPagesNotice("");
-      return;
-    }
-
-    setSavingYellowPagesUrl(true);
-    setYellowPagesNotice("");
-    setYellowPagesError("");
-
-    try {
-      const res = await fetch(`/api/leads/${lead.slug || lead.id}/yellow-pages`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          listingUrl,
-          saveOnly: true,
-        }),
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to save Yellow Pages URL");
-      }
-
-      if (data.lead) {
-        handleLeadUpdated(data.lead);
-      }
-
-      setYellowPagesNotice("Yellow Pages listing URL saved.");
-    } catch (error) {
-      setYellowPagesError(
-        error instanceof Error ? error.message : "Failed to save Yellow Pages URL"
-      );
-    } finally {
-      setSavingYellowPagesUrl(false);
-    }
-  };
-  const handleScrapeYellowPagesUrl = async () => {
-    if (!lead) return;
-
-    const listingUrl = yellowPagesListingUrl.trim();
-
-    if (!listingUrl) {
-      setYellowPagesError("Paste a Yellow Pages listing URL first.");
-      setYellowPagesNotice("");
-      return;
-    }
-
-    setScrapingYellowPagesUrl(true);
-    setYellowPagesNotice("");
-    setYellowPagesError("");
-
-    try {
-      const res = await fetch(`/api/leads/${lead.slug || lead.id}/yellow-pages`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          listingUrl,
-        }),
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to scrape Yellow Pages listing");
-      }
-
-      if (data.lead) {
-        handleLeadUpdated(data.lead);
-      }
-
-      const updatedFields = Array.isArray(data.updatedFields)
-        ? data.updatedFields
-        : [];
-
-      setYellowPagesNotice(
-        updatedFields.length
-          ? `Yellow Pages listing updated ${updatedFields.join(", ")}.`
-          : "Yellow Pages listing scraped. No empty top-level fields were updated."
-      );
-    } catch (error) {
-      setYellowPagesError(
-        error instanceof Error
-          ? error.message
-          : "Failed to scrape Yellow Pages listing"
-      );
-    } finally {
-      setScrapingYellowPagesUrl(false);
-    }
-  };
-  const handleScrapeYellowPagesInBrowser = async () => {
-    if (!lead) return;
-
-    const listingUrl = yellowPagesListingUrl.trim();
-
-    if (!listingUrl) {
-      setYellowPagesError("Paste a Yellow Pages listing URL first.");
-      setYellowPagesNotice("");
-      return;
-    }
-
-    setScrapingYellowPagesInBrowser(true);
-    setYellowPagesNotice("Scraping Yellow Pages in browser...");
-    setYellowPagesError("");
-
-    try {
-      const response = await fetch(listingUrl, {
-        method: "GET",
-        credentials: "include",
-      });
-
-      if (!response.ok) {
-        throw new Error(`Browser fetch failed with HTTP ${response.status}`);
-      }
-
-      const html = await response.text();
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(html, "text/html");
-      const text = doc.body?.innerText || "";
-      const findMeta = (selectors: string[]) => {
-        for (const selector of selectors) {
-          const content = doc.querySelector<HTMLMetaElement>(selector)?.content?.trim();
-          if (content) return content;
-        }
-
-        return "";
-      };
-      const externalLink = Array.from(doc.querySelectorAll<HTMLAnchorElement>("a[href]"))
-        .map((anchor) => anchor.href)
-        .find((href) => {
-          try {
-            const parsedUrl = new URL(href);
-            const nestedUrl =
-              parsedUrl.searchParams.get("url") ||
-              parsedUrl.searchParams.get("u") ||
-              parsedUrl.searchParams.get("target") ||
-              parsedUrl.searchParams.get("redirect");
-            const candidate = new URL(nestedUrl || href);
-            const host = candidate.hostname.toLowerCase();
-
-            return (
-              /^https?:/i.test(candidate.protocol) &&
-              !host.includes("yellowpages.com.au") &&
-              !host.includes("google.com") &&
-              !host.includes("facebook.com") &&
-              !host.includes("instagram.com")
-            );
-          } catch {
-            return false;
-          }
-        });
-      const website = externalLink
-        ? (() => {
-            const parsedUrl = new URL(externalLink);
-            const nestedUrl =
-              parsedUrl.searchParams.get("url") ||
-              parsedUrl.searchParams.get("u") ||
-              parsedUrl.searchParams.get("target") ||
-              parsedUrl.searchParams.get("redirect");
-
-            return nestedUrl || externalLink;
-          })()
-        : "";
-      const email =
-        doc.querySelector<HTMLAnchorElement>('a[href^="mailto:"]')?.href
-          .replace(/^mailto:/i, "")
-          .split("?")[0]
-          .trim() ||
-        text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] ||
-        "";
-      const phone =
-        doc.querySelector<HTMLAnchorElement>('a[href^="tel:"]')?.href
-          .replace(/^tel:/i, "")
-          .trim() ||
-        text.match(
-          /(?:\+?61[\s.-]?)?(?:0[\s.-]?)?[2378][\d\s.-]{7,12}|(?:\+?61[\s.-]?)?(?:0[\s.-]?)?4[\d\s.-]{7,12}/
-        )?.[0]?.trim() ||
-        "";
-      const description =
-        findMeta([
-          'meta[name="description"]',
-          'meta[property="og:description"]',
-        ]) ||
-        doc.querySelector('[class*="description" i]')?.textContent?.trim() ||
-        "";
-      const manualResult = {
-        website,
-        email,
-        phone,
-        description,
-      };
-      const foundFields = Object.entries(manualResult)
-        .filter(([, value]) => Boolean(value))
-        .map(([field]) => field);
-
-      if (foundFields.length === 0) {
-        throw new Error("Extraction failed. No website, email, phone or description found.");
-      }
-
-      setYellowPagesNotice(`Fields found: ${foundFields.join(", ")}. Saving...`);
-
-      const res = await fetch(`/api/leads/${lead.slug || lead.id}/yellow-pages`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          listingUrl,
-          manualResult,
-        }),
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Failed to save browser scrape result");
-      }
-
-      if (data.lead) {
-        handleLeadUpdated(data.lead);
-      }
-
-      const updatedFields = Array.isArray(data.updatedFields)
-        ? data.updatedFields
-        : [];
-
-      setYellowPagesNotice(
-        updatedFields.length
-          ? `Browser scrape saved. Updated ${updatedFields.join(", ")}.`
-          : `Browser scrape saved. Fields found: ${foundFields.join(", ")}.`
-      );
-    } catch (error) {
-      setYellowPagesError(
-        error instanceof Error
-          ? error.message
-          : "Yellow Pages browser extraction failed"
-      );
-      setYellowPagesNotice("");
-    } finally {
-      setScrapingYellowPagesInBrowser(false);
     }
   };
   const handleStartContactEdit = () => {
@@ -2086,7 +1787,13 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const leadAddress = (lead.address || lead.formattedAddress || "").trim();
   const googleMapsUrl = leadAddress ? buildGoogleMapsUrl(leadAddress) : "";
   const yellowPages = lead.yellow_pages;
-  const enrichmentSources = lead.enrichment_sources;
+  const yellowPagesUrl =
+    yellowPages?.listing_url ||
+    yellowPages?.url ||
+    yellowPages?.manual_listing_url ||
+    lead.yellow_pages_search?.searchUrl ||
+    lead.yellow_pages_url ||
+    "";
   const hasPageCopy =
     Boolean(lead.headline) ||
     Boolean(lead.subheadline) ||
@@ -2172,7 +1879,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-xl font-bold">Business Info</h2>
-                {yellowPages ? (
+                {yellowPages || lead.yellow_pages_url ? (
                   <span className="rounded-full border border-yellow-400/20 bg-yellow-500/10 px-2 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-yellow-300">
                     Yellow Pages
                   </span>
@@ -2198,22 +1905,12 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                   </button>
                 </div>
               ) : (
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={handleRerunYellowPages}
-                    disabled={rerunningYellowPages}
-                    className="rounded-lg border border-yellow-400/20 bg-yellow-500/10 px-3 py-2 text-xs font-bold text-yellow-200 hover:bg-yellow-500/15 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {rerunningYellowPages ? "Checking..." : "Re-run Yellow Pages"}
-                  </button>
-
-                  <button
-                    onClick={handleStartContactEdit}
-                    className="rounded-lg bg-slate-700 px-3 py-2 text-xs font-bold text-white hover:bg-slate-600"
-                  >
-                    Edit
-                  </button>
-                </div>
+                <button
+                  onClick={handleStartContactEdit}
+                  className="rounded-lg bg-slate-700 px-3 py-2 text-xs font-bold text-white hover:bg-slate-600"
+                >
+                  Edit
+                </button>
               )}
             </div>
 
@@ -2222,76 +1919,6 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 {contactError}
               </p>
             ) : null}
-
-            {yellowPagesNotice ? (
-              <p className="mb-4 rounded-lg bg-green-500/10 px-3 py-2 text-sm font-bold text-green-300">
-                {yellowPagesNotice}
-              </p>
-            ) : null}
-
-            {yellowPagesError ? (
-              <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm font-bold text-red-300">
-                {yellowPagesError}
-              </p>
-            ) : null}
-
-            <div className="mb-5 rounded-xl border border-white/10 bg-slate-950/40 p-3">
-              <label
-                htmlFor="yellow-pages-listing-url"
-                className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-400"
-              >
-                Yellow Pages listing URL
-              </label>
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <input
-                  id="yellow-pages-listing-url"
-                  value={yellowPagesListingUrl}
-                  onChange={(event) => setYellowPagesListingUrl(event.target.value)}
-                  className="min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none placeholder:text-slate-600"
-                  placeholder="https://www.yellowpages.com.au/..."
-                />
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={handleSaveYellowPagesUrl}
-                    disabled={
-                      savingYellowPagesUrl ||
-                      scrapingYellowPagesUrl ||
-                      scrapingYellowPagesInBrowser
-                    }
-                    className="rounded-lg bg-slate-700 px-3 py-2 text-xs font-bold text-white hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {savingYellowPagesUrl ? "Saving..." : "Save URL"}
-                  </button>
-                  <button
-                    onClick={handleScrapeYellowPagesUrl}
-                    disabled={
-                      savingYellowPagesUrl ||
-                      scrapingYellowPagesUrl ||
-                      scrapingYellowPagesInBrowser
-                    }
-                    className="rounded-lg border border-yellow-400/20 bg-yellow-500/10 px-3 py-2 text-xs font-bold text-yellow-200 hover:bg-yellow-500/15 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {scrapingYellowPagesUrl ? "Scraping..." : "Scrape Listing"}
-                  </button>
-                  <button
-                    onClick={handleScrapeYellowPagesInBrowser}
-                    disabled={
-                      savingYellowPagesUrl ||
-                      scrapingYellowPagesUrl ||
-                      scrapingYellowPagesInBrowser
-                    }
-                    className="rounded-lg border border-blue-400/20 bg-blue-500/10 px-3 py-2 text-xs font-bold text-blue-200 hover:bg-blue-500/15 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {scrapingYellowPagesInBrowser
-                      ? "Scraping..."
-                      : "Scrape In Browser"}
-                  </button>
-                </div>
-              </div>
-              <p className="mt-2 text-xs text-slate-500">
-                Use this when server-side Yellow Pages search is blocked.
-              </p>
-            </div>
 
             <div className="space-y-3 text-slate-300">
               <div>
@@ -2412,14 +2039,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                     placeholder="0400 000 000"
                   />
                 ) : (
-                  <>
-                    {formatAustralianPhoneNumber(lead.phone || "") || "Not found"}
-                    {enrichmentSources?.phone === "yellow_pages" ? (
-                      <span className="ml-2 rounded-full bg-yellow-500/10 px-2 py-0.5 text-[11px] font-bold text-yellow-300">
-                        Phone source: Yellow Pages
-                      </span>
-                    ) : null}
-                  </>
+                  formatAustralianPhoneNumber(lead.phone || "") || "Not found"
                 )}
               </div>
 
@@ -2440,19 +2060,12 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 ) : (
                   <>
                     {lead.email ? (
-                      <>
-                        <a
-                          href={`mailto:${lead.email}`}
-                          className="text-blue-400 hover:text-blue-300"
-                        >
-                          {lead.email}
-                        </a>
-                        {enrichmentSources?.email === "yellow_pages" ? (
-                          <span className="ml-2 rounded-full bg-yellow-500/10 px-2 py-0.5 text-[11px] font-bold text-yellow-300">
-                            Email source: Yellow Pages
-                          </span>
-                        ) : null}
-                      </>
+                      <a
+                        href={`mailto:${lead.email}`}
+                        className="text-blue-400 hover:text-blue-300"
+                      >
+                        {lead.email}
+                      </a>
                     ) : (
                       <span className="text-slate-500">Not found yet</span>
                     )}
@@ -2477,20 +2090,13 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 ) : (
                   <>
                     {lead.website ? (
-                      <>
-                        <a
-                          href={lead.website}
-                          target="_blank"
-                          className="text-blue-400 hover:text-blue-300"
-                        >
-                          {lead.website}
-                        </a>
-                        {enrichmentSources?.website === "yellow_pages" ? (
-                          <span className="ml-2 rounded-full bg-yellow-500/10 px-2 py-0.5 text-[11px] font-bold text-yellow-300">
-                            Website source: Yellow Pages
-                          </span>
-                        ) : null}
-                      </>
+                      <a
+                        href={lead.website}
+                        target="_blank"
+                        className="text-blue-400 hover:text-blue-300"
+                      >
+                        {lead.website}
+                      </a>
                     ) : (
                       <span className="text-slate-500">Not found yet</span>
                     )}
@@ -2498,70 +2104,17 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 )}
               </div>
 
-              {yellowPages?.url ? (
+              {yellowPagesUrl ? (
                 <p>
                   <strong className="text-white">Yellow Pages:</strong>{" "}
                   <a
-                    href={yellowPages.url}
+                    href={yellowPagesUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-blue-400 hover:text-blue-300 hover:underline"
                   >
-                    Open listing
+                    Open in Yellow Pages
                   </a>
-                </p>
-              ) : null}
-
-              {yellowPages?.website ? (
-                <p>
-                  <strong className="text-white">Yellow Pages website:</strong>{" "}
-                  <a
-                    href={yellowPages.website}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="break-all text-blue-400 hover:text-blue-300 hover:underline"
-                  >
-                    {yellowPages.website}
-                  </a>
-                </p>
-              ) : null}
-
-              {yellowPages?.email ? (
-                <p>
-                  <strong className="text-white">Yellow Pages email:</strong>{" "}
-                  <a
-                    href={`mailto:${yellowPages.email}`}
-                    className="text-blue-400 hover:text-blue-300 hover:underline"
-                  >
-                    {yellowPages.email}
-                  </a>
-                </p>
-              ) : null}
-
-              {yellowPages?.mobile ? (
-                <p>
-                  <strong className="text-white">Yellow Pages mobile:</strong>{" "}
-                  {formatAustralianPhoneNumber(yellowPages.mobile) || yellowPages.mobile}
-                </p>
-              ) : null}
-
-              {yellowPages?.abn ? (
-                <p>
-                  <strong className="text-white">ABN:</strong> {yellowPages.abn}
-                </p>
-              ) : null}
-
-              {yellowPages?.established_year ? (
-                <p>
-                  <strong className="text-white">Established:</strong>{" "}
-                  {yellowPages.established_year}
-                </p>
-              ) : null}
-
-              {yellowPages?.years_in_business ? (
-                <p>
-                  <strong className="text-white">Years in business:</strong>{" "}
-                  {yellowPages.years_in_business}
                 </p>
               ) : null}
 
