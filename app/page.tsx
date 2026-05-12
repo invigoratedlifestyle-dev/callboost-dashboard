@@ -65,6 +65,25 @@ type FollowUpQueueItem = {
   dueSince: string | null;
 };
 
+type GenerateBatchTownResult = {
+  town: string;
+  created: number;
+  skipped: number;
+  rejected: number;
+  errors: string[];
+};
+
+type GenerateBatchSummary = {
+  totals: {
+    towns: number;
+    created: number;
+    skipped: number;
+    rejected: number;
+    errors: number;
+  };
+  results: GenerateBatchTownResult[];
+};
+
 const leadFilters: Array<{ value: LeadFilter; label: string }> = [
   { value: "all", label: "All" },
   { value: "lead", label: "Leads" },
@@ -337,9 +356,13 @@ export default function DashboardPage() {
     () => new Set()
   );
   const [targetStateKey, setTargetStateKey] = useState("TAS");
-  const [targetCityKey, setTargetCityKey] = useState("hobart");
+  const [targetCityKeys, setTargetCityKeys] = useState<string[]>(["hobart"]);
+  const [townSearch, setTownSearch] = useState("");
   const [targetTradeKey, setTargetTradeKey] = useState("plumber");
   const [generationLimit, setGenerationLimit] = useState(50);
+  const [generationProgress, setGenerationProgress] = useState("");
+  const [generationSummary, setGenerationSummary] =
+    useState<GenerateBatchSummary | null>(null);
   const [activeFilter, setActiveFilter] =
     useState<LeadFilter>(DEFAULT_LEAD_FILTER);
   const [notifications, setNotifications] = useState<
@@ -360,6 +383,24 @@ export default function DashboardPage() {
     [targetStateKey]
   );
   const firstCityOptionKey = cityOptions[0]?.key || "hobart";
+  const selectedCityOptions = useMemo(
+    () =>
+      targetCityKeys
+        .map((cityKey) => cityOptions.find((cityTarget) => cityTarget.key === cityKey))
+        .filter((cityTarget): cityTarget is (typeof cityOptions)[number] =>
+          Boolean(cityTarget)
+        ),
+    [cityOptions, targetCityKeys]
+  );
+  const filteredCityOptions = useMemo(() => {
+    const normalizedSearch = townSearch.trim().toLowerCase();
+
+    if (!normalizedSearch) return cityOptions;
+
+    return cityOptions.filter((cityTarget) =>
+      cityTarget.city.toLowerCase().includes(normalizedSearch)
+    );
+  }, [cityOptions, townSearch]);
 
   const loadLeads = useCallback(async (filter: LeadFilter) => {
     const url =
@@ -469,28 +510,93 @@ export default function DashboardPage() {
   }
 
   async function handleGenerateLeads() {
+    const selectedTownKeys =
+      selectedCityOptions.length > 0
+        ? selectedCityOptions.map((cityTarget) => cityTarget.key)
+        : [firstCityOptionKey];
+    const selectedTownNames = selectedTownKeys
+      .map((cityKey) => cityOptions.find((cityTarget) => cityTarget.key === cityKey))
+      .filter((cityTarget): cityTarget is (typeof cityOptions)[number] =>
+        Boolean(cityTarget)
+      )
+      .map((cityTarget) => cityTarget.city);
+
+    if (!selectedTownNames.length) {
+      alert("Select at least one town/suburb.");
+      return;
+    }
+
     setGenerating(true);
+    setGenerationSummary(null);
+    setGenerationProgress(
+      selectedTownNames.length === 1
+        ? `Generating 1 of 1: ${selectedTownNames[0]}`
+        : `Generating 1 of ${selectedTownNames.length}: ${selectedTownNames[0]}`
+    );
 
     try {
-      const res = await fetch("/api/leads/generate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          stateKey: targetStateKey,
-          cityKey: targetCityKey,
-          tradeKey: targetTradeKey,
-          limit: generationLimit,
-        }),
-      });
+      const res = await fetch(
+        selectedTownNames.length === 1
+          ? "/api/leads/generate"
+          : "/api/leads/generate-batch",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(
+            selectedTownNames.length === 1
+              ? {
+                  stateKey: targetStateKey,
+                  cityKey: selectedTownKeys[0],
+                  tradeKey: targetTradeKey,
+                  limit: generationLimit,
+                }
+              : {
+                  state: targetStateKey,
+                  towns: selectedTownKeys,
+                  trade: targetTradeKey,
+                  limit: generationLimit,
+                }
+          ),
+        }
+      );
+      const result = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        const result = await res.json().catch(() => ({}));
-
         console.error("Generate leads failed:", result);
         alert(result.message || result.error || "Lead generation failed");
         return;
+      }
+
+      if (selectedTownNames.length === 1) {
+        const rejected = Number(result.skippedWrongTrade) || 0;
+        const skipped =
+          (Number(result.existingSkipped) || 0) +
+          (Number(result.skippedDuplicates) || 0) +
+          (Number(result.skippedInvalidLocation) || 0) +
+          (Number(result.skippedInvalidPhone) || 0);
+
+        setGenerationSummary({
+          totals: {
+            towns: 1,
+            created: Number(result.saved) || 0,
+            skipped,
+            rejected,
+            errors: 0,
+          },
+          results: [
+            {
+              town: selectedTownNames[0],
+              created: Number(result.saved) || 0,
+              skipped,
+              rejected,
+              errors: [],
+            },
+          ],
+        });
+      } else {
+        setGenerationSummary(result as GenerateBatchSummary);
       }
 
       await loadLeads(activeFilter);
@@ -501,7 +607,41 @@ export default function DashboardPage() {
       alert("Lead generation failed");
     } finally {
       setGenerating(false);
+      setGenerationProgress("");
     }
+  }
+
+  function toggleTargetCity(cityKey: string) {
+    setTargetCityKeys((current) => {
+      if (current.includes(cityKey)) {
+        const next = current.filter((key) => key !== cityKey);
+
+        return next.length ? next : current;
+      }
+
+      return [...current, cityKey];
+    });
+  }
+
+  function removeTargetCity(cityKey: string) {
+    setTargetCityKeys((current) =>
+      current.length > 1 ? current.filter((key) => key !== cityKey) : current
+    );
+  }
+
+  function selectAllVisibleTowns() {
+    setTargetCityKeys((current) =>
+      Array.from(
+        new Set([
+          ...current,
+          ...filteredCityOptions.map((cityTarget) => cityTarget.key),
+        ])
+      )
+    );
+  }
+
+  function clearSelectedTowns() {
+    setTargetCityKeys([firstCityOptionKey]);
   }
 
   async function handleEnrichAll() {
@@ -886,9 +1026,14 @@ export default function DashboardPage() {
                   value={targetStateKey}
                   onChange={(event) => {
                     const nextStateKey = event.target.value;
+                    const nextFirstCityKey =
+                      CITY_TARGETS.find(
+                        (cityTarget) => cityTarget.stateCode === nextStateKey
+                      )?.key || "hobart";
 
                     setTargetStateKey(nextStateKey);
-                    setTargetCityKey(firstCityOptionKey);
+                    setTargetCityKeys([nextFirstCityKey]);
+                    setTownSearch("");
                   }}
                   disabled={actionRunning}
                   className="min-w-32 rounded-lg border border-white/10 bg-slate-900 px-3 py-3 text-sm font-bold normal-case tracking-normal text-white outline-none disabled:cursor-not-allowed disabled:opacity-60"
@@ -903,18 +1048,77 @@ export default function DashboardPage() {
 
               <label className="grid gap-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
                 Town/Suburb
-                <select
-                  value={targetCityKey}
-                  onChange={(event) => setTargetCityKey(event.target.value)}
-                  disabled={actionRunning}
-                  className="min-w-44 rounded-lg border border-white/10 bg-slate-900 px-3 py-3 text-sm font-bold normal-case tracking-normal text-white outline-none disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {cityOptions.map((cityTarget) => (
-                    <option key={cityTarget.key} value={cityTarget.key}>
-                      {cityTarget.city}
-                    </option>
-                  ))}
-                </select>
+                <div className="min-w-72 rounded-lg border border-white/10 bg-slate-900 p-3 normal-case tracking-normal">
+                  <div className="mb-2 flex flex-wrap gap-2">
+                    {selectedCityOptions.map((cityTarget) => (
+                      <button
+                        key={cityTarget.key}
+                        type="button"
+                        onClick={() => removeTargetCity(cityTarget.key)}
+                        disabled={actionRunning || selectedCityOptions.length === 1}
+                        className="rounded-full bg-blue-500/15 px-3 py-1 text-xs font-bold text-blue-200 hover:bg-blue-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+                        title="Remove town"
+                      >
+                        {cityTarget.city} x
+                      </button>
+                    ))}
+                  </div>
+
+                  <input
+                    value={townSearch}
+                    onChange={(event) => setTownSearch(event.target.value)}
+                    disabled={actionRunning}
+                    placeholder="Search towns"
+                    className="mb-2 w-full rounded-md border border-white/10 bg-slate-950 px-3 py-2 text-sm font-bold text-white outline-none placeholder:text-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
+                  />
+
+                  <div className="mb-2 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={selectAllVisibleTowns}
+                      disabled={actionRunning || filteredCityOptions.length === 0}
+                      className="rounded-md bg-white/10 px-2 py-1 text-xs font-bold text-slate-200 hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Select all visible
+                    </button>
+                    <button
+                      type="button"
+                      onClick={clearSelectedTowns}
+                      disabled={actionRunning}
+                      className="rounded-md bg-white/10 px-2 py-1 text-xs font-bold text-slate-200 hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      Clear selected
+                    </button>
+                  </div>
+
+                  <div className="max-h-36 overflow-y-auto rounded-md border border-white/10 bg-slate-950/60 p-2">
+                    {filteredCityOptions.map((cityTarget) => (
+                      <label
+                        key={cityTarget.key}
+                        className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm font-bold text-slate-200 hover:bg-white/5"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={targetCityKeys.includes(cityTarget.key)}
+                          onChange={() => toggleTargetCity(cityTarget.key)}
+                          disabled={
+                            actionRunning ||
+                            (targetCityKeys.includes(cityTarget.key) &&
+                              targetCityKeys.length === 1)
+                          }
+                          className="h-4 w-4 accent-blue-500 disabled:cursor-not-allowed"
+                        />
+                        <span>{cityTarget.city}</span>
+                      </label>
+                    ))}
+
+                    {filteredCityOptions.length === 0 ? (
+                      <p className="px-2 py-1 text-sm font-bold text-slate-500">
+                        No towns found
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
               </label>
 
               <label className="grid gap-2 text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
@@ -958,6 +1162,36 @@ export default function DashboardPage() {
               </button>
             </div>
           </div>
+
+          {generationProgress ? (
+            <p className="mt-4 rounded-lg bg-blue-500/10 px-3 py-2 text-sm font-bold text-blue-200">
+              {generationProgress}
+            </p>
+          ) : null}
+
+          {generationSummary ? (
+            <div className="mt-4 rounded-lg border border-white/10 bg-slate-950/40 px-3 py-2 text-sm text-slate-300">
+              <p className="font-bold text-white">
+                Completed {generationSummary.totals.towns}{" "}
+                {generationSummary.totals.towns === 1 ? "town" : "towns"}.{" "}
+                {generationSummary.totals.created} leads created,{" "}
+                {generationSummary.totals.skipped} skipped,{" "}
+                {generationSummary.totals.rejected} rejected.
+              </p>
+
+              {generationSummary.results.some((result) => result.errors.length) ? (
+                <div className="mt-2 text-red-300">
+                  {generationSummary.results
+                    .filter((result) => result.errors.length)
+                    .map((result) => (
+                      <p key={result.town}>
+                        {result.town}: {result.errors.join(", ")}
+                      </p>
+                    ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </section>
 
         <div className="mb-6 flex justify-start">
