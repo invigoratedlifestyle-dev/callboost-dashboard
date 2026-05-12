@@ -16,6 +16,19 @@ export type YellowPagesDetails = {
   scraped_at: string;
 };
 
+export type YellowPagesCandidate = {
+  title: string;
+  url: string;
+  snippet?: string;
+};
+
+export type YellowPagesSearchResult = {
+  query: string;
+  candidates: YellowPagesCandidate[];
+  chosenUrl: string;
+  reason: string;
+};
+
 type LeadLike = Record<string, unknown>;
 
 const YELLOW_PAGES_USER_AGENT =
@@ -110,6 +123,43 @@ function buildSearchQuery(lead: LeadLike) {
     .join(" ");
 }
 
+function normalizeBusinessName(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/\b(?:pty|ltd|limited|proprietary|company|co|inc|pl|aust|australia)\b/g, " ")
+    .replace(/\b(?:and|the)\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getNameTokens(value: string) {
+  return normalizeBusinessName(value)
+    .split(" ")
+    .filter((token) => token.length > 1);
+}
+
+function isCandidateMatch(lead: LeadLike, candidate: YellowPagesCandidate) {
+  const leadName = normalizeBusinessName(getLeadName(lead));
+  const candidateTitle = normalizeBusinessName(candidate.title);
+
+  if (!leadName || !candidateTitle) return false;
+  if (candidateTitle.includes(leadName) || leadName.includes(candidateTitle)) {
+    return true;
+  }
+
+  const leadTokens = getNameTokens(leadName);
+  const candidateTokens = new Set(getNameTokens(candidateTitle));
+
+  if (leadTokens.length === 0) return false;
+
+  const matchedTokens = leadTokens.filter((token) => candidateTokens.has(token));
+  const requiredMatches = Math.max(1, Math.ceil(leadTokens.length * 0.7));
+
+  return matchedTokens.length >= requiredMatches;
+}
+
 function normalizeYellowPagesUrl(rawUrl: string) {
   const decodedUrl = decodeHtmlEntities(rawUrl);
   let candidate = decodedUrl;
@@ -150,24 +200,52 @@ function normalizeYellowPagesUrl(rawUrl: string) {
   }
 }
 
-function extractYellowPagesUrl(html: string) {
-  const hrefMatches = [...html.matchAll(/href=["']([^"']+)["']/gi)];
+function extractSearchCandidates(html: string) {
+  const candidates: YellowPagesCandidate[] = [];
+  const seenUrls = new Set<string>();
+  const linkMatches = [...html.matchAll(/<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)];
 
-  for (const match of hrefMatches) {
+  for (const match of linkMatches) {
     const url = normalizeYellowPagesUrl(match[1] || "");
 
     if (
-      url &&
-      !/\/search\//i.test(url) &&
-      !/\/advertise\//i.test(url) &&
-      !/\/contact-us/i.test(url)
+      !url ||
+      seenUrls.has(url) ||
+      /\/search\//i.test(url) ||
+      /\/advertise\//i.test(url) ||
+      /\/contact-us/i.test(url)
     ) {
-      return url;
+      continue;
     }
+
+    const title = stripHtml(match[2] || "");
+    const startIndex = typeof match.index === "number" ? match.index + match[0].length : 0;
+    const nearbyHtml = html.slice(startIndex, startIndex + 700);
+    const snippet = stripHtml(nearbyHtml)
+      .replace(/^Cached\s*/i, "")
+      .slice(0, 240);
+
+    seenUrls.add(url);
+    candidates.push({
+      title: title || url,
+      url,
+      ...(snippet ? { snippet } : {}),
+    });
   }
 
   const plainMatch = html.match(/https?:\/\/(?:www\.)?yellowpages\.com\.au\/[^\s"'<>]+/i);
-  return plainMatch ? normalizeYellowPagesUrl(plainMatch[0]) : "";
+
+  if (plainMatch) {
+    const url = normalizeYellowPagesUrl(plainMatch[0]);
+    if (url && !seenUrls.has(url)) {
+      candidates.push({
+        title: url,
+        url,
+      });
+    }
+  }
+
+  return candidates.slice(0, 10);
 }
 
 function extractJsonLd(html: string) {
@@ -402,7 +480,9 @@ function compactDetails(details: YellowPagesDetails) {
   ) as YellowPagesDetails;
 }
 
-export async function findYellowPagesListing(lead: LeadLike) {
+export async function searchYellowPagesListings(
+  lead: LeadLike
+): Promise<YellowPagesSearchResult> {
   const query = buildSearchQuery(lead);
   const name = getLeadName(lead);
 
@@ -411,7 +491,12 @@ export async function findYellowPagesListing(lead: LeadLike) {
       name,
       reason: "missing_search_terms",
     });
-    return "";
+    return {
+      query,
+      candidates: [],
+      chosenUrl: "",
+      reason: "missing_search_terms",
+    };
   }
 
   console.log("YELLOW_PAGES_SEARCH_START", {
@@ -424,30 +509,79 @@ export async function findYellowPagesListing(lead: LeadLike) {
   try {
     const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
     const html = await fetchTextWithTimeout(searchUrl);
-    const listingUrl = extractYellowPagesUrl(html);
+    const candidates = extractSearchCandidates(html);
+    const matchedCandidate = candidates.find((candidate) =>
+      isCandidateMatch(lead, candidate)
+    );
+    const fallbackCandidate = candidates.length === 1 ? candidates[0] : undefined;
+    const chosenCandidate = matchedCandidate || fallbackCandidate;
 
-    if (listingUrl) {
+    console.log("YELLOW_PAGES_SEARCH_CANDIDATES", {
+      name,
+      query,
+      candidates: candidates.map((candidate) => ({
+        title: candidate.title,
+        url: candidate.url,
+      })),
+      chosenUrl: chosenCandidate?.url || "",
+      reason: matchedCandidate
+        ? "matched_business_name"
+        : fallbackCandidate
+          ? "single_candidate_fallback"
+          : candidates.length
+            ? "no_candidate_matched"
+            : "no_candidates_found",
+    });
+
+    if (chosenCandidate?.url) {
       console.log("YELLOW_PAGES_LISTING_FOUND", {
         name,
-        url: listingUrl,
+        url: chosenCandidate.url,
+        title: chosenCandidate.title,
+        reason: matchedCandidate ? "matched_business_name" : "single_candidate_fallback",
       });
-      return listingUrl;
+      return {
+        query,
+        candidates,
+        chosenUrl: chosenCandidate.url,
+        reason: matchedCandidate ? "matched_business_name" : "single_candidate_fallback",
+      };
     }
 
     console.log("YELLOW_PAGES_NO_LISTING", {
       name,
       query,
-      reason: "no_yellow_pages_result",
+      candidates: candidates.map((candidate) => ({
+        title: candidate.title,
+        url: candidate.url,
+      })),
+      reason: candidates.length ? "no_candidate_matched" : "no_candidates_found",
     });
-    return "";
+    return {
+      query,
+      candidates,
+      chosenUrl: "",
+      reason: candidates.length ? "no_candidate_matched" : "no_candidates_found",
+    };
   } catch (error) {
     console.log("YELLOW_PAGES_NO_LISTING", {
       name,
       query,
       reason: error instanceof Error ? error.message : "search_failed",
     });
-    return "";
+    return {
+      query,
+      candidates: [],
+      chosenUrl: "",
+      reason: error instanceof Error ? error.message : "search_failed",
+    };
   }
+}
+
+export async function findYellowPagesListing(lead: LeadLike) {
+  const result = await searchYellowPagesListings(lead);
+
+  return result.chosenUrl;
 }
 
 export async function scrapeYellowPagesListing(url: string) {
@@ -506,29 +640,68 @@ export async function scrapeYellowPagesListing(url: string) {
 
 export async function enrichLeadFromYellowPages(lead: LeadLike) {
   try {
-    const listingUrl = await findYellowPagesListing(lead);
+    const searchResult = await searchYellowPagesListings(lead);
+    const listingUrl = searchResult.chosenUrl;
 
     if (!listingUrl) {
-      return lead;
+      return searchResult.candidates.length
+        ? {
+            ...lead,
+            yellow_pages_candidates: searchResult.candidates,
+          }
+        : lead;
     }
 
     const yellowPages = await scrapeYellowPagesListing(listingUrl);
+    const enrichmentSources = getRecord(lead.enrichment_sources);
     const nextLead: LeadLike = {
       ...lead,
       yellow_pages: yellowPages,
+      yellow_pages_candidates: searchResult.candidates,
     };
+    const updatedFields: string[] = [];
+    const skippedFields: string[] = [];
 
     if (!getString(nextLead.website) && yellowPages.website) {
       nextLead.website = yellowPages.website;
+      enrichmentSources.website = "yellow_pages";
+      updatedFields.push("website");
+    } else if (yellowPages.website) {
+      skippedFields.push("website");
     }
 
     if (!getString(nextLead.email) && yellowPages.email) {
       nextLead.email = yellowPages.email;
+      enrichmentSources.email = "yellow_pages";
+      updatedFields.push("email");
+    } else if (yellowPages.email) {
+      skippedFields.push("email");
     }
 
     if (!getString(nextLead.phone) && (yellowPages.mobile || yellowPages.phone)) {
       nextLead.phone = yellowPages.mobile || yellowPages.phone;
+      enrichmentSources.phone = "yellow_pages";
+      updatedFields.push("phone");
+    } else if (yellowPages.mobile || yellowPages.phone) {
+      skippedFields.push("phone");
     }
+
+    if (Object.keys(enrichmentSources).length > 0) {
+      nextLead.enrichment_sources = enrichmentSources;
+    }
+
+    console.log("YELLOW_PAGES_ENRICH_APPLIED", {
+      name: getLeadName(lead),
+      listingUrl,
+      updatedFields,
+      skippedFields,
+      foundFields: {
+        website: Boolean(yellowPages.website),
+        email: Boolean(yellowPages.email),
+        phone: Boolean(yellowPages.phone),
+        mobile: Boolean(yellowPages.mobile),
+      },
+    });
 
     return nextLead;
   } catch (error) {

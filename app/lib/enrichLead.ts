@@ -1595,7 +1595,7 @@ function buildQualifiedLead(args: {
 }
 
 export async function enrichLead(slug: string, providedWebsite?: string) {
-  const existingLead = await getLeadBySlug(slug);
+  let existingLead = await getLeadBySlug(slug);
 
   if (!existingLead) {
     throw new Error("Lead not found");
@@ -1646,6 +1646,19 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
     googleSearchEmail = googleSearchResult.email;
     if (googleSearchResult.website) {
       businessInfoCandidateSource = "google_search";
+    }
+  }
+
+  if (!normalizedWebsite) {
+    const yellowPagesLead = await enrichFromYellowPagesIfNeeded(existingLead);
+    const yellowPagesWebsite = getString(yellowPagesLead.website);
+
+    if (yellowPagesWebsite) {
+      existingLead = yellowPagesLead;
+      normalizedWebsite = normalizeUrl(yellowPagesWebsite);
+      businessInfoCandidateSource = "yellow_pages";
+    } else if (yellowPagesLead !== existingLead) {
+      existingLead = yellowPagesLead;
     }
   }
 

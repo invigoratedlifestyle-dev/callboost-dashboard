@@ -91,6 +91,11 @@ type LeadWithGeneratedContent = Lead & {
     years_in_business?: string;
     scraped_at?: string;
   };
+  enrichment_sources?: {
+    website?: string;
+    email?: string;
+    phone?: string;
+  };
   business_info_match?: BusinessInfoMatch;
 };
 
@@ -509,6 +514,9 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const [isEditingContact, setIsEditingContact] = useState(false);
   const [savingContact, setSavingContact] = useState(false);
   const [contactError, setContactError] = useState("");
+  const [rerunningYellowPages, setRerunningYellowPages] = useState(false);
+  const [yellowPagesNotice, setYellowPagesNotice] = useState("");
+  const [yellowPagesError, setYellowPagesError] = useState("");
   const [heroImageFile, setHeroImageFile] = useState<File | null>(null);
   const [uploadingHeroImage, setUploadingHeroImage] = useState(false);
   const [heroImageUploadNotice, setHeroImageUploadNotice] = useState("");
@@ -817,6 +825,46 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       );
     } finally {
       setRedoingOpportunity(false);
+    }
+  };
+  const handleRerunYellowPages = async () => {
+    if (!lead) return;
+
+    setRerunningYellowPages(true);
+    setYellowPagesNotice("");
+    setYellowPagesError("");
+
+    try {
+      const res = await fetch(`/api/leads/${lead.slug || lead.id}/yellow-pages`, {
+        method: "POST",
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to run Yellow Pages enrichment");
+      }
+
+      if (data.lead) {
+        handleLeadUpdated(data.lead);
+      }
+
+      const updatedFields = Array.isArray(data.updatedFields)
+        ? data.updatedFields
+        : [];
+
+      setYellowPagesNotice(
+        updatedFields.length
+          ? `Yellow Pages updated ${updatedFields.join(", ")}.`
+          : "Yellow Pages check completed. No empty top-level fields were updated."
+      );
+    } catch (error) {
+      setYellowPagesError(
+        error instanceof Error
+          ? error.message
+          : "Failed to run Yellow Pages enrichment"
+      );
+    } finally {
+      setRerunningYellowPages(false);
     }
   };
   const handleStartContactEdit = () => {
@@ -1771,6 +1819,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const leadAddress = (lead.address || lead.formattedAddress || "").trim();
   const googleMapsUrl = leadAddress ? buildGoogleMapsUrl(leadAddress) : "";
   const yellowPages = lead.yellow_pages;
+  const enrichmentSources = lead.enrichment_sources;
   const hasPageCopy =
     Boolean(lead.headline) ||
     Boolean(lead.subheadline) ||
@@ -1854,7 +1903,14 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
         <div className="mt-8 grid gap-6 lg:grid-cols-2">
           <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-xl font-bold">Business Info</h2>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-xl font-bold">Business Info</h2>
+                {yellowPages ? (
+                  <span className="rounded-full border border-yellow-400/20 bg-yellow-500/10 px-2 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-yellow-300">
+                    Yellow Pages
+                  </span>
+                ) : null}
+              </div>
 
               {isEditingContact ? (
                 <div className="flex flex-wrap gap-2">
@@ -1875,18 +1931,40 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                   </button>
                 </div>
               ) : (
-                <button
-                  onClick={handleStartContactEdit}
-                  className="rounded-lg bg-slate-700 px-3 py-2 text-xs font-bold text-white hover:bg-slate-600"
-                >
-                  Edit
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={handleRerunYellowPages}
+                    disabled={rerunningYellowPages}
+                    className="rounded-lg border border-yellow-400/20 bg-yellow-500/10 px-3 py-2 text-xs font-bold text-yellow-200 hover:bg-yellow-500/15 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {rerunningYellowPages ? "Checking..." : "Re-run Yellow Pages"}
+                  </button>
+
+                  <button
+                    onClick={handleStartContactEdit}
+                    className="rounded-lg bg-slate-700 px-3 py-2 text-xs font-bold text-white hover:bg-slate-600"
+                  >
+                    Edit
+                  </button>
+                </div>
               )}
             </div>
 
             {contactError ? (
               <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm font-bold text-red-300">
                 {contactError}
+              </p>
+            ) : null}
+
+            {yellowPagesNotice ? (
+              <p className="mb-4 rounded-lg bg-green-500/10 px-3 py-2 text-sm font-bold text-green-300">
+                {yellowPagesNotice}
+              </p>
+            ) : null}
+
+            {yellowPagesError ? (
+              <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm font-bold text-red-300">
+                {yellowPagesError}
               </p>
             ) : null}
 
@@ -2009,7 +2087,14 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                     placeholder="0400 000 000"
                   />
                 ) : (
-                  formatAustralianPhoneNumber(lead.phone || "") || "Not found"
+                  <>
+                    {formatAustralianPhoneNumber(lead.phone || "") || "Not found"}
+                    {enrichmentSources?.phone === "yellow_pages" ? (
+                      <span className="ml-2 rounded-full bg-yellow-500/10 px-2 py-0.5 text-[11px] font-bold text-yellow-300">
+                        Phone source: Yellow Pages
+                      </span>
+                    ) : null}
+                  </>
                 )}
               </div>
 
@@ -2030,12 +2115,19 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 ) : (
                   <>
                     {lead.email ? (
-                      <a
-                        href={`mailto:${lead.email}`}
-                        className="text-blue-400 hover:text-blue-300"
-                      >
-                        {lead.email}
-                      </a>
+                      <>
+                        <a
+                          href={`mailto:${lead.email}`}
+                          className="text-blue-400 hover:text-blue-300"
+                        >
+                          {lead.email}
+                        </a>
+                        {enrichmentSources?.email === "yellow_pages" ? (
+                          <span className="ml-2 rounded-full bg-yellow-500/10 px-2 py-0.5 text-[11px] font-bold text-yellow-300">
+                            Email source: Yellow Pages
+                          </span>
+                        ) : null}
+                      </>
                     ) : (
                       <span className="text-slate-500">Not found yet</span>
                     )}
@@ -2060,13 +2152,20 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 ) : (
                   <>
                     {lead.website ? (
-                      <a
-                        href={lead.website}
-                        target="_blank"
-                        className="text-blue-400 hover:text-blue-300"
-                      >
-                        {lead.website}
-                      </a>
+                      <>
+                        <a
+                          href={lead.website}
+                          target="_blank"
+                          className="text-blue-400 hover:text-blue-300"
+                        >
+                          {lead.website}
+                        </a>
+                        {enrichmentSources?.website === "yellow_pages" ? (
+                          <span className="ml-2 rounded-full bg-yellow-500/10 px-2 py-0.5 text-[11px] font-bold text-yellow-300">
+                            Website source: Yellow Pages
+                          </span>
+                        ) : null}
+                      </>
                     ) : (
                       <span className="text-slate-500">Not found yet</span>
                     )}
