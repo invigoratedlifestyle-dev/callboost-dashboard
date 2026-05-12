@@ -431,6 +431,66 @@ export async function updateLeadStatusBySlug(
   return savedLead;
 }
 
+export async function deleteLeadsBySlugs(slugs: string[]) {
+  const uniqueSlugs = Array.from(
+    new Set(slugs.map((slug) => slug.trim()).filter(Boolean))
+  );
+
+  if (!uniqueSlugs.length) {
+    return 0;
+  }
+
+  const supabase = getSupabaseAdmin();
+  const { data: rows, error: fetchError } = await supabase
+    .from("leads")
+    .select("*")
+    .in("slug", uniqueSlugs);
+
+  if (fetchError) throw fetchError;
+
+  const leadRows = (rows || []) as LeadRow[];
+
+  for (const row of leadRows) {
+    try {
+      await purgeGeneratedSiteForLead({
+        supabase,
+        lead: rowToLead(row),
+        leadId: row.id || null,
+      });
+    } catch (error) {
+      console.error("GENERATED_SITE_PURGE_FAILED_BEFORE_DELETE", {
+        slug: row.slug,
+        leadId: row.id || null,
+        error: error instanceof Error ? error.message : error,
+      });
+      throw error;
+    }
+  }
+
+  const { error: callbackSlugError } = await supabase
+    .from("callbacks")
+    .delete()
+    .in("source_slug", uniqueSlugs);
+
+  if (callbackSlugError) throw callbackSlugError;
+
+  const { error: messageSlugError } = await supabase
+    .from("lead_messages")
+    .delete()
+    .in("slug", uniqueSlugs);
+
+  if (messageSlugError) throw messageSlugError;
+
+  const { error: deleteError } = await supabase
+    .from("leads")
+    .delete()
+    .in("slug", uniqueSlugs);
+
+  if (deleteError) throw deleteError;
+
+  return leadRows.length;
+}
+
 export async function duplicateLeadExists(lead: LeadRecord) {
   const supabase = getSupabaseAdmin();
   const slug = getString(lead.slug);

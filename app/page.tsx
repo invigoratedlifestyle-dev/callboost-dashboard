@@ -327,6 +327,8 @@ export default function DashboardPage() {
   const [bulkActionRunning, setBulkActionRunning] = useState<string | null>(
     null
   );
+  const [bulkActionNotice, setBulkActionNotice] = useState("");
+  const [bulkActionError, setBulkActionError] = useState("");
   const [selectedLeadKeys, setSelectedLeadKeys] = useState<Set<string>>(
     () => new Set()
   );
@@ -624,6 +626,8 @@ export default function DashboardPage() {
     }
 
     setBulkActionRunning(action);
+    setBulkActionNotice("");
+    setBulkActionError("");
 
     try {
       const isStatusAction = action === "contacted" || action === "archived";
@@ -648,7 +652,7 @@ export default function DashboardPage() {
 
       if (!res.ok) {
         console.error("Bulk action failed:", result);
-        alert(result.message || result.error || "Bulk action failed");
+        setBulkActionError(result.message || result.error || "Bulk action failed");
         return;
       }
 
@@ -659,7 +663,58 @@ export default function DashboardPage() {
       clearSelectedLeads();
     } catch (error) {
       console.error("Bulk action failed:", error);
-      alert("Bulk action failed");
+      setBulkActionError("Bulk action failed");
+    } finally {
+      setBulkActionRunning(null);
+    }
+  }
+
+  async function handleDeleteSelectedLeads() {
+    const slugs = selectedLeads
+      .map((lead) => lead.slug || "")
+      .filter((slug) => slug);
+
+    if (!slugs.length) {
+      setBulkActionError("Selected leads need slugs before deletion can run.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Delete ${selectedLeads.length} selected leads? This cannot be undone.`
+    );
+
+    if (!confirmed) return;
+
+    setBulkActionRunning("delete");
+    setBulkActionNotice("");
+    setBulkActionError("");
+
+    try {
+      const res = await fetch("/api/leads/bulk-delete", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ ids: slugs }),
+      });
+      const result = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        console.error("Bulk delete failed:", result);
+        setBulkActionError(result.message || result.error || "Bulk delete failed");
+        return;
+      }
+
+      const deleted = Number(result.deleted) || 0;
+
+      setBulkActionNotice(`Deleted ${deleted} leads.`);
+      clearSelectedLeads();
+      await loadLeads(activeFilter);
+      await loadClientRevenueLeads();
+      await loadFollowUpQueue();
+    } catch (error) {
+      console.error("Bulk delete failed:", error);
+      setBulkActionError("Bulk delete failed");
     } finally {
       setBulkActionRunning(null);
     }
@@ -956,8 +1011,30 @@ export default function DashboardPage() {
                   ? "Archiving..."
                   : "Archive Selected"}
               </button>
+
+              <button
+                onClick={handleDeleteSelectedLeads}
+                disabled={Boolean(bulkActionRunning)}
+                className="rounded-lg bg-red-950 px-3 py-2 text-xs font-bold text-red-100 ring-1 ring-red-400/40 hover:bg-red-900 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {bulkActionRunning === "delete"
+                  ? "Deleting..."
+                  : "Delete Selected"}
+              </button>
             </div>
           </div>
+        ) : null}
+
+        {bulkActionNotice ? (
+          <p className="mb-4 rounded-lg bg-green-500/10 px-4 py-3 text-sm font-bold text-green-300">
+            {bulkActionNotice}
+          </p>
+        ) : null}
+
+        {bulkActionError ? (
+          <p className="mb-4 rounded-lg bg-red-500/10 px-4 py-3 text-sm font-bold text-red-300">
+            {bulkActionError}
+          </p>
         ) : null}
 
         <div className="rounded-2xl border border-white/10 bg-white/5 shadow-2xl">
