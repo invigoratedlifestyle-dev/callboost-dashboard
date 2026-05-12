@@ -13,6 +13,7 @@ export type SiteAsset = {
   storagePath: string;
   altText: string;
   isActive: boolean;
+  usageCount?: number;
   createdAt: string;
 };
 
@@ -55,6 +56,13 @@ function rowToSiteAsset(row: SiteAssetRow): SiteAsset {
   };
 }
 
+function withUsageCounts(assets: SiteAsset[], usageCounts: Record<string, number>) {
+  return assets.map((asset) => ({
+    ...asset,
+    usageCount: usageCounts[asset.imageUrl] || 0,
+  }));
+}
+
 function getFileExtension(fileName: string, contentType: string) {
   const fromName = fileName.split(".").pop()?.toLowerCase() || "";
 
@@ -94,6 +102,10 @@ export async function getAssetsByTrade(trade: string, assetType = "hero") {
   return ((data || []) as SiteAssetRow[]).map(rowToSiteAsset);
 }
 
+export async function listActiveSiteAssets(trade: string, assetType = "hero") {
+  return getAssetsByTrade(trade, assetType);
+}
+
 export async function listSiteAssets() {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
@@ -104,7 +116,45 @@ export async function listSiteAssets() {
 
   if (error) throw error;
 
-  return ((data || []) as SiteAssetRow[]).map(rowToSiteAsset);
+  const assets = ((data || []) as SiteAssetRow[]).map(rowToSiteAsset);
+  const usageCounts = await getSiteAssetUsageCounts(assets);
+
+  return withUsageCounts(assets, usageCounts);
+}
+
+export async function getSiteAssetUsageCounts(assets?: SiteAsset[]) {
+  let assetList = assets;
+
+  if (!assetList) {
+    const { data, error } = await getSupabaseAdmin()
+      .from("site_assets")
+      .select("*");
+
+    if (error) throw error;
+
+    assetList = ((data || []) as SiteAssetRow[]).map(rowToSiteAsset);
+  }
+
+  const imageUrls = Array.from(
+    new Set(assetList.map((asset) => asset.imageUrl).filter(Boolean))
+  );
+
+  if (!imageUrls.length) return {} as Record<string, number>;
+
+  const { data, error } = await getSupabaseAdmin()
+    .from("generated_sites")
+    .select("html")
+    .limit(10000);
+
+  if (error) throw error;
+
+  return imageUrls.reduce<Record<string, number>>((counts, imageUrl) => {
+    counts[imageUrl] = (data || []).filter((site) =>
+      String(site.html || "").includes(imageUrl)
+    ).length;
+
+    return counts;
+  }, {});
 }
 
 export async function getRandomHeroImage(trade: string) {
@@ -325,4 +375,24 @@ export async function deleteSiteAsset(id: string) {
   if (deleteError) throw deleteError;
 
   return rowToSiteAsset(row);
+}
+
+export async function updateSiteAssetActiveState(id: string, isActive: boolean) {
+  const { data, error } = await getSupabaseAdmin()
+    .from("site_assets")
+    .update({ is_active: isActive })
+    .eq("id", id)
+    .select("*")
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return null;
+
+  const asset = rowToSiteAsset(data as SiteAssetRow);
+  const usageCounts = await getSiteAssetUsageCounts([asset]);
+
+  return {
+    ...asset,
+    usageCount: usageCounts[asset.imageUrl] || 0,
+  };
 }

@@ -12,6 +12,7 @@ type SiteAsset = {
   storagePath: string;
   altText: string;
   isActive: boolean;
+  usageCount?: number;
   createdAt: string;
 };
 
@@ -54,6 +55,7 @@ export default function AssetsPage() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [deletingId, setDeletingId] = useState("");
+  const [togglingId, setTogglingId] = useState("");
   const [trade, setTrade] = useState("plumber");
   const [assetType, setAssetType] = useState("hero");
   const [altText, setAltText] = useState("");
@@ -172,6 +174,56 @@ export default function AssetsPage() {
     } finally {
       setDeletingId("");
     }
+  }
+
+  async function handleToggleActive(asset: SiteAsset) {
+    const nextActive = !asset.isActive;
+
+    setTogglingId(asset.id);
+    setNotice("");
+    setError("");
+    setAssets((current) =>
+      current.map((item) =>
+        item.id === asset.id ? { ...item, isActive: nextActive } : item
+      )
+    );
+
+    try {
+      const res = await fetch(`/api/site-assets/${asset.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ isActive: nextActive }),
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to update asset");
+      }
+
+      setAssets((current) =>
+        current.map((item) => (item.id === asset.id ? data.asset : item))
+      );
+      setNotice(nextActive ? "Asset made active." : "Asset made inactive.");
+    } catch (toggleError) {
+      setAssets((current) =>
+        current.map((item) => (item.id === asset.id ? asset : item))
+      );
+      setError(
+        toggleError instanceof Error
+          ? toggleError.message
+          : "Failed to update asset"
+      );
+    } finally {
+      setTogglingId("");
+    }
+  }
+
+  function getUsageLabel(asset: SiteAsset) {
+    const count = asset.usageCount || 0;
+
+    return `Used in ${count} ${count === 1 ? "site" : "sites"}`;
   }
 
   return (
@@ -295,7 +347,9 @@ export default function AssetsPage() {
                   {groupAssets.map((asset) => (
                     <article
                       key={asset.id}
-                      className="overflow-hidden rounded-xl border border-white/10 bg-white/5"
+                      className={`overflow-hidden rounded-xl border border-white/10 bg-white/5 transition ${
+                        asset.isActive ? "" : "opacity-60"
+                      }`}
                     >
                       <div className="relative aspect-[16/10] bg-slate-900">
                         <Image
@@ -330,13 +384,31 @@ export default function AssetsPage() {
                           {asset.altText || "No alt text set."}
                         </p>
 
-                        <button
-                          onClick={() => handleDelete(asset)}
-                          disabled={deletingId === asset.id}
-                          className="rounded-lg bg-red-600 px-3 py-2 text-xs font-bold text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {deletingId === asset.id ? "Deleting..." : "Delete"}
-                        </button>
+                        <p className="text-xs font-bold text-slate-500">
+                          {getUsageLabel(asset)}
+                        </p>
+
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => handleToggleActive(asset)}
+                            disabled={togglingId === asset.id}
+                            className="rounded-lg bg-white/10 px-3 py-2 text-xs font-bold text-slate-100 hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {togglingId === asset.id
+                              ? "Saving..."
+                              : asset.isActive
+                                ? "Make inactive"
+                                : "Make active"}
+                          </button>
+
+                          <button
+                            onClick={() => handleDelete(asset)}
+                            disabled={deletingId === asset.id}
+                            className="rounded-lg bg-red-600 px-3 py-2 text-xs font-bold text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {deletingId === asset.id ? "Deleting..." : "Delete"}
+                          </button>
+                        </div>
                       </div>
                     </article>
                   ))}
