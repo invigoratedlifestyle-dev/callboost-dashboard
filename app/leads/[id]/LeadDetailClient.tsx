@@ -870,7 +870,11 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
         );
       }
 
-      setServiceModifierNotice("Service modifiers saved.");
+      setServiceModifierNotice(
+        modifiers.length
+          ? "Service modifiers saved."
+          : "No modifiers saved as a manual override."
+      );
     } catch (error) {
       setServiceModifierError(
         error instanceof Error
@@ -889,6 +893,10 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
 
     setSelectedServiceModifiers(nextModifiers);
     void saveServiceModifiers(nextModifiers);
+  };
+  const clearServiceModifiers = () => {
+    setSelectedServiceModifiers([]);
+    void saveServiceModifiers([]);
   };
   const handleOutreachChannelChange = (channel: OutreachChannel) => {
     setPendingFollowUpMetadata(null);
@@ -2488,30 +2496,54 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                     </p>
                   </div>
 
-                  <details className="relative">
-                    <summary className="list-none rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800 [&::-webkit-details-marker]:hidden">
-                      Select modifiers
-                    </summary>
-                    <div className="absolute right-0 z-30 mt-2 grid w-72 gap-1 rounded-xl border border-white/10 bg-slate-950 p-2 shadow-2xl">
-                      {serviceModifierOptions.map((option) => (
-                        <label
-                          key={option.value}
-                          className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-sm text-slate-200 hover:bg-white/10"
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={clearServiceModifiers}
+                      disabled={
+                        savingServiceModifiers ||
+                        selectedServiceModifiers.length === 0
+                      }
+                      className="rounded-lg border border-amber-300/30 bg-amber-400/10 px-3 py-2 text-xs font-bold text-amber-100 hover:bg-amber-400/20 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Clear modifiers
+                    </button>
+
+                    <details className="relative">
+                      <summary className="list-none rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800 [&::-webkit-details-marker]:hidden">
+                        Select modifiers
+                      </summary>
+                      <div className="absolute right-0 z-30 mt-2 grid w-72 gap-1 rounded-xl border border-white/10 bg-slate-950 p-2 shadow-2xl">
+                        <button
+                          type="button"
+                          onClick={clearServiceModifiers}
+                          disabled={savingServiceModifiers}
+                          className="mb-1 rounded-lg border border-amber-300/30 bg-amber-400/10 px-2 py-2 text-left text-sm font-bold text-amber-100 hover:bg-amber-400/20 disabled:cursor-not-allowed disabled:opacity-50"
                         >
-                          <input
-                            type="checkbox"
-                            checked={selectedServiceModifiers.includes(
-                              option.value
-                            )}
-                            disabled={savingServiceModifiers}
-                            onChange={() => toggleServiceModifier(option.value)}
-                            className="h-4 w-4 rounded border-white/20 bg-slate-900 accent-blue-500"
-                          />
-                          <span>{option.label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </details>
+                          No modifiers
+                        </button>
+                        {serviceModifierOptions.map((option) => (
+                          <label
+                            key={option.value}
+                            className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-sm text-slate-200 hover:bg-white/10"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selectedServiceModifiers.includes(
+                                option.value
+                              )}
+                              disabled={savingServiceModifiers}
+                              onChange={() =>
+                                toggleServiceModifier(option.value)
+                              }
+                              className="h-4 w-4 rounded border-white/20 bg-slate-900 accent-blue-500"
+                            />
+                            <span>{option.label}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </details>
+                  </div>
                 </div>
 
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -2529,7 +2561,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                       </button>
                     ))
                   ) : (
-                    <span className="text-xs text-slate-500">
+                    <span className="rounded-full border border-amber-300/20 bg-amber-400/10 px-2.5 py-1 text-xs font-bold text-amber-100">
                       No service modifiers selected.
                     </span>
                   )}
