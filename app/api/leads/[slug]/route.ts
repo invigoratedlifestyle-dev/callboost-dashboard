@@ -151,6 +151,22 @@ export async function PATCH(
         nextLead.siteIconUrl = body.siteIconUrl;
       }
 
+      if (hasOwn(body, "templateTrade") && typeof body.templateTrade === "string") {
+        nextLead.templateTrade = body.templateTrade;
+      }
+
+      if (hasOwn(body, "templateType") && typeof body.templateType === "string") {
+        nextLead.templateType = body.templateType;
+      }
+
+      if (
+        hasOwn(body, "trade_profile") &&
+        body.trade_profile &&
+        typeof body.trade_profile === "object"
+      ) {
+        nextLead.trade_profile = body.trade_profile as Record<string, unknown>;
+      }
+
       if (hasOwn(body, "design")) {
         const existingDesign =
           nextLead.design && typeof nextLead.design === "object"

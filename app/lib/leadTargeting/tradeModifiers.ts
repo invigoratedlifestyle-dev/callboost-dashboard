@@ -20,6 +20,7 @@ export type TradeProfile = {
   template_profile: string;
   secondary_trades: string[];
   service_modifiers: ServiceModifier[];
+  manual_service_modifiers?: boolean;
 };
 
 const modifierLabels: Record<ServiceModifier, string> = {
@@ -154,6 +155,7 @@ export function buildTradeProfile(lead: Record<string, unknown>): TradeProfile {
   const primaryTrade = resolvePrimaryTrade(
     [lead.trade, lead.businessName, lead.displayName, lead.name].filter(Boolean).join(" ")
   );
+  const hasManualModifiers = existingProfile?.manual_service_modifiers === true;
   const modifiers = new Set<ServiceModifier>(
     getStringArray(existingProfile?.service_modifiers).filter(
       (modifier): modifier is ServiceModifier =>
@@ -164,67 +166,69 @@ export function buildTradeProfile(lead: Record<string, unknown>): TradeProfile {
     getStringArray(existingProfile?.secondary_trades)
   );
 
-  if (
-    hasAny(sourceText, [
-      /\bsheet\s*metal\b/,
-      /\bsheetmetal\b/,
-      /\bmetal roofing\b/,
-      /\bflashings?\b/,
-    ])
-  ) {
-    addModifier(modifiers, secondaryTrades, "sheetmetal", "sheetmetal");
-    addModifier(modifiers, secondaryTrades, "roof_plumbing", "roof_plumbing");
-    addModifier(modifiers, secondaryTrades, "guttering", "guttering");
-    addModifier(modifiers, secondaryTrades, "flashing", "flashing");
-  }
-
-  if (hasAny(sourceText, [/\bgas fitting\b/, /\bgasfitting\b/, /\bgas\b/])) {
-    addModifier(modifiers, secondaryTrades, "gas_fitting", "gas_fitting");
-  }
-
-  if (hasAny(sourceText, [/\bdrains?\b/, /\bdrainage\b/, /\bblocked drains?\b/])) {
-    addModifier(modifiers, secondaryTrades, "drainage", "drainage");
-  }
-
-  if (hasAny(sourceText, [/\bbathrooms?\b/, /\bensuite\b/])) {
-    addModifier(modifiers, secondaryTrades, "bathrooms", "bathrooms");
-    addModifier(modifiers, secondaryTrades, "renovations", "renovations");
-  }
-
-  if (hasAny(sourceText, [/\brenovations?\b/, /\brenos?\b/, /\bremodel\b/])) {
-    addModifier(modifiers, secondaryTrades, "renovations", "renovations");
-  }
-
-  if (
-    hasAny(sourceText, [
-      /\broof plumbing\b/,
-      /\bguttering\b/,
-      /\bgutters?\b/,
-      /\bdownpipes?\b/,
-      /\bflashings?\b/,
-    ])
-  ) {
-    addModifier(modifiers, secondaryTrades, "roof_plumbing", "roof_plumbing");
-    addModifier(modifiers, secondaryTrades, "guttering", "guttering");
-    if (sourceText.includes("flashing")) {
+  if (!hasManualModifiers) {
+    if (
+      hasAny(sourceText, [
+        /\bsheet\s*metal\b/,
+        /\bsheetmetal\b/,
+        /\bmetal roofing\b/,
+        /\bflashings?\b/,
+      ])
+    ) {
+      addModifier(modifiers, secondaryTrades, "sheetmetal", "sheetmetal");
+      addModifier(modifiers, secondaryTrades, "roof_plumbing", "roof_plumbing");
+      addModifier(modifiers, secondaryTrades, "guttering", "guttering");
       addModifier(modifiers, secondaryTrades, "flashing", "flashing");
     }
-  }
 
-  if (hasAny(sourceText, [/\bmaintenance\b/, /\brepairs?\b/, /\bservicing\b/])) {
-    addModifier(modifiers, secondaryTrades, "maintenance", "maintenance");
-  }
+    if (hasAny(sourceText, [/\bgas fitting\b/, /\bgasfitting\b/, /\bgas\b/])) {
+      addModifier(modifiers, secondaryTrades, "gas_fitting", "gas_fitting");
+    }
 
-  if (hasAny(sourceText, [/\bemergency\b/, /\bafter hours\b/, /\b24\s*7\b/])) {
-    addModifier(modifiers, secondaryTrades, "emergency_plumbing", "emergency_plumbing");
-  }
+    if (hasAny(sourceText, [/\bdrains?\b/, /\bdrainage\b/, /\bblocked drains?\b/])) {
+      addModifier(modifiers, secondaryTrades, "drainage", "drainage");
+    }
 
-  if (hasAny(sourceText, [/\bhot water\b/, /\bhws\b/])) {
-    addModifier(modifiers, secondaryTrades, "hot_water", "hot_water");
-  }
+    if (hasAny(sourceText, [/\bbathrooms?\b/, /\bensuite\b/])) {
+      addModifier(modifiers, secondaryTrades, "bathrooms", "bathrooms");
+      addModifier(modifiers, secondaryTrades, "renovations", "renovations");
+    }
 
-  if (hasAny(sourceText, [/\bexcavat/, /\bearthworks?\b/, /\btrenching\b/])) {
-    addModifier(modifiers, secondaryTrades, "excavation", "excavation");
+    if (hasAny(sourceText, [/\brenovations?\b/, /\brenos?\b/, /\bremodel\b/])) {
+      addModifier(modifiers, secondaryTrades, "renovations", "renovations");
+    }
+
+    if (
+      hasAny(sourceText, [
+        /\broof plumbing\b/,
+        /\bguttering\b/,
+        /\bgutters?\b/,
+        /\bdownpipes?\b/,
+        /\bflashings?\b/,
+      ])
+    ) {
+      addModifier(modifiers, secondaryTrades, "roof_plumbing", "roof_plumbing");
+      addModifier(modifiers, secondaryTrades, "guttering", "guttering");
+      if (sourceText.includes("flashing")) {
+        addModifier(modifiers, secondaryTrades, "flashing", "flashing");
+      }
+    }
+
+    if (hasAny(sourceText, [/\bmaintenance\b/, /\brepairs?\b/, /\bservicing\b/])) {
+      addModifier(modifiers, secondaryTrades, "maintenance", "maintenance");
+    }
+
+    if (hasAny(sourceText, [/\bemergency\b/, /\bafter hours\b/, /\b24\s*7\b/])) {
+      addModifier(modifiers, secondaryTrades, "emergency_plumbing", "emergency_plumbing");
+    }
+
+    if (hasAny(sourceText, [/\bhot water\b/, /\bhws\b/])) {
+      addModifier(modifiers, secondaryTrades, "hot_water", "hot_water");
+    }
+
+    if (hasAny(sourceText, [/\bexcavat/, /\bearthworks?\b/, /\btrenching\b/])) {
+      addModifier(modifiers, secondaryTrades, "excavation", "excavation");
+    }
   }
 
   const existingTemplateProfile = getString(existingProfile?.template_profile);
@@ -234,6 +238,16 @@ export function buildTradeProfile(lead: Record<string, unknown>): TradeProfile {
     (tradeText.includes("plumb") && tradeText.includes("gas"))
       ? "plumbing-gas-fitting"
       : primaryTrade);
+
+  if (hasManualModifiers) {
+    return {
+      primary_trade: getString(existingProfile?.primary_trade) || primaryTrade,
+      template_profile: templateProfile,
+      secondary_trades: unique(Array.from(secondaryTrades)),
+      service_modifiers: unique(Array.from(modifiers)),
+      manual_service_modifiers: true,
+    };
+  }
 
   return {
     primary_trade: getString(existingProfile?.primary_trade) || primaryTrade,

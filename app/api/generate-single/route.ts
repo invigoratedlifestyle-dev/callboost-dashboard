@@ -16,7 +16,9 @@ import { isValidTradeLead } from "../../lib/tradeValidation";
 import {
   buildTradeProfile,
   getServiceModifierLabel,
+  serviceModifiers,
   withTradeProfile,
+  type ServiceModifier,
 } from "../../lib/leadTargeting/tradeModifiers";
 
 const client = new OpenAI({
@@ -185,12 +187,32 @@ export async function POST(req: Request) {
       );
     }
 
-    const initialTradeProfile = buildTradeProfile({
+    const requestedServiceModifiers = Array.isArray(body.serviceModifiers)
+      ? body.serviceModifiers.filter((modifier): modifier is ServiceModifier =>
+          typeof modifier === "string" &&
+          serviceModifiers.includes(modifier as ServiceModifier)
+        )
+      : null;
+    const detectedTradeProfile = buildTradeProfile({
       ...existingLead,
       ...requestLead,
       templateTrade,
       templateType,
     });
+    const initialTradeProfile = requestedServiceModifiers
+      ? {
+          ...detectedTradeProfile,
+          template_profile: templateTrade,
+          secondary_trades: Array.from(
+            new Set([
+              ...detectedTradeProfile.secondary_trades,
+              ...requestedServiceModifiers,
+            ])
+          ),
+          service_modifiers: requestedServiceModifiers,
+          manual_service_modifiers: true,
+        }
+      : detectedTradeProfile;
     const modifierLabels = initialTradeProfile.service_modifiers.map(
       getServiceModifierLabel
     );

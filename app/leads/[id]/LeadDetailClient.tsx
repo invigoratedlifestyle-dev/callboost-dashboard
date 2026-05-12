@@ -22,7 +22,11 @@ import {
   getLeadStatusBadgeClass,
   getLeadStatusLabel,
 } from "../../lib/leadWorkflow";
-import { getServiceModifierLabel } from "../../lib/leadTargeting/tradeModifiers";
+import {
+  getServiceModifierLabel,
+  serviceModifiers,
+  type ServiceModifier,
+} from "../../lib/leadTargeting/tradeModifiers";
 import { CALLBOOST_CHECKOUT_SUMMARY } from "../../lib/pricing";
 import {
   buildFollowUpBody,
@@ -144,6 +148,11 @@ const templateTypeOptions = [
   "minimal",
   "corporate",
 ];
+
+const serviceModifierOptions = serviceModifiers.map((modifier) => ({
+  value: modifier,
+  label: getServiceModifierLabel(modifier),
+}));
 
 const HERO_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 const HERO_IMAGE_ACCEPT = ".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp";
@@ -478,6 +487,40 @@ function formatTemplateTradeLabel(value: string) {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function getSelectedServiceModifiers(lead?: LeadWithGeneratedContent | null) {
+  const modifiers = lead?.trade_profile?.service_modifiers || [];
+
+  return modifiers.filter((modifier): modifier is ServiceModifier =>
+    serviceModifiers.includes(modifier as ServiceModifier)
+  );
+}
+
+function buildManualTradeProfile(
+  lead: LeadWithGeneratedContent,
+  selectedModifiers: ServiceModifier[],
+  templateTrade: string
+) {
+  const existingProfile = lead.trade_profile;
+  const secondaryTrades = Array.from(
+    new Set([
+      ...(existingProfile?.secondary_trades || []),
+      ...selectedModifiers,
+    ])
+  );
+
+  return {
+    primary_trade:
+      existingProfile?.primary_trade || normalizeTemplateTrade(lead.trade),
+    template_profile:
+      templateTrade ||
+      existingProfile?.template_profile ||
+      normalizeTemplateTrade(lead.trade),
+    secondary_trades: secondaryTrades,
+    service_modifiers: selectedModifiers,
+    manual_service_modifiers: true,
+  };
+}
+
 function isAllowedHeroImageFile(file: File) {
   const extension = file.name.split(".").pop()?.toLowerCase() || "";
 
@@ -600,6 +643,12 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const [opportunityError, setOpportunityError] = useState("");
   const [templateTrade, setTemplateTrade] = useState("plumber");
   const [templateType, setTemplateType] = useState("modern");
+  const [selectedServiceModifiers, setSelectedServiceModifiers] = useState<
+    ServiceModifier[]
+  >([]);
+  const [savingServiceModifiers, setSavingServiceModifiers] = useState(false);
+  const [serviceModifierNotice, setServiceModifierNotice] = useState("");
+  const [serviceModifierError, setServiceModifierError] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -631,6 +680,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
           ? loadedLead.templateType || "modern"
           : "modern"
       );
+      setSelectedServiceModifiers(getSelectedServiceModifiers(loadedLead));
       setCallbacks(data.callbacks || []);
       setContactDraft({
         trade: loadedLead.trade || "",
@@ -753,6 +803,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
         ? nextLead.templateType || "modern"
         : "modern"
     );
+    setSelectedServiceModifiers(getSelectedServiceModifiers(nextLead));
     setSiteHeroImageUrl(nextLead.heroImageUrl || "");
     setSiteBrandingUrl(nextLead.siteBrandingUrl || "");
     setSiteIconUrl(nextLead.siteIconUrl || "");
@@ -775,6 +826,69 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     if (!emailBodyEdited) {
       setEmailOfferBody(buildOpportunityEmail(nextLead, getPreviewUrl(nextLead)));
     }
+  };
+  const saveServiceModifiers = async (modifiers: ServiceModifier[]) => {
+    setSavingServiceModifiers(true);
+    setServiceModifierNotice("");
+    setServiceModifierError("");
+
+    try {
+      const tradeProfile = buildManualTradeProfile(
+        lead,
+        modifiers,
+        templateTrade
+      );
+      const res = await fetch(`/api/leads/${lead.slug}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          templateTrade,
+          templateType,
+          trade_profile: tradeProfile,
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to save service modifiers");
+      }
+
+      if (data.lead) {
+        handleLeadUpdated(data.lead);
+      } else {
+        setLead((current) =>
+          current
+            ? {
+                ...current,
+                templateTrade,
+                templateType,
+                trade_profile: tradeProfile,
+              }
+            : current
+        );
+      }
+
+      setServiceModifierNotice("Service modifiers saved.");
+    } catch (error) {
+      setServiceModifierError(
+        error instanceof Error
+          ? error.message
+          : "Failed to save service modifiers"
+      );
+      setSelectedServiceModifiers(getSelectedServiceModifiers(lead));
+    } finally {
+      setSavingServiceModifiers(false);
+    }
+  };
+  const toggleServiceModifier = (modifier: ServiceModifier) => {
+    const nextModifiers = selectedServiceModifiers.includes(modifier)
+      ? selectedServiceModifiers.filter((selected) => selected !== modifier)
+      : [...selectedServiceModifiers, modifier];
+
+    setSelectedServiceModifiers(nextModifiers);
+    void saveServiceModifiers(nextModifiers);
   };
   const handleOutreachChannelChange = (channel: OutreachChannel) => {
     setPendingFollowUpMetadata(null);
@@ -2363,6 +2477,81 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 </div>
               </div>
 
+              <div className="mt-4 rounded-xl border border-white/10 bg-slate-950/40 p-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-bold text-slate-200">
+                      Service Modifiers
+                    </p>
+                    <p className="mt-1 text-xs text-slate-400">
+                      Used to adjust services, hero copy, FAQs and trust sections.
+                    </p>
+                  </div>
+
+                  <details className="relative">
+                    <summary className="list-none rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800 [&::-webkit-details-marker]:hidden">
+                      Select modifiers
+                    </summary>
+                    <div className="absolute right-0 z-30 mt-2 grid w-72 gap-1 rounded-xl border border-white/10 bg-slate-950 p-2 shadow-2xl">
+                      {serviceModifierOptions.map((option) => (
+                        <label
+                          key={option.value}
+                          className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-sm text-slate-200 hover:bg-white/10"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedServiceModifiers.includes(
+                              option.value
+                            )}
+                            disabled={savingServiceModifiers}
+                            onChange={() => toggleServiceModifier(option.value)}
+                            className="h-4 w-4 rounded border-white/20 bg-slate-900 accent-blue-500"
+                          />
+                          <span>{option.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </details>
+                </div>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {selectedServiceModifiers.length ? (
+                    selectedServiceModifiers.map((modifier) => (
+                      <button
+                        key={modifier}
+                        type="button"
+                        onClick={() => toggleServiceModifier(modifier)}
+                        disabled={savingServiceModifiers}
+                        className="rounded-full border border-blue-400/30 bg-blue-500/15 px-2.5 py-1 text-xs font-bold text-blue-100 hover:bg-blue-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+                        title="Remove modifier"
+                      >
+                        {getServiceModifierLabel(modifier)} x
+                      </button>
+                    ))
+                  ) : (
+                    <span className="text-xs text-slate-500">
+                      No service modifiers selected.
+                    </span>
+                  )}
+                </div>
+
+                {savingServiceModifiers ? (
+                  <p className="mt-2 text-xs font-bold text-blue-200">
+                    Saving modifiers...
+                  </p>
+                ) : null}
+                {serviceModifierNotice ? (
+                  <p className="mt-2 text-xs font-bold text-emerald-300">
+                    {serviceModifierNotice}
+                  </p>
+                ) : null}
+                {serviceModifierError ? (
+                  <p className="mt-2 text-xs font-bold text-red-300">
+                    {serviceModifierError}
+                  </p>
+                ) : null}
+              </div>
+
               <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
                 {!isLeadArchived ? (
                   <div className="w-full [&>button]:min-h-11 [&>button]:w-full [&>button]:bg-blue-600 [&>button]:px-5 [&>button]:py-3 [&>button]:text-base [&>button]:hover:bg-blue-500 sm:w-auto sm:[&>button]:w-auto">
@@ -2370,6 +2559,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                       lead={lead}
                       templateTrade={templateTrade}
                       templateType={templateType}
+                      serviceModifiers={selectedServiceModifiers}
                       onGenerated={handleLeadUpdated}
                     />
                   </div>
