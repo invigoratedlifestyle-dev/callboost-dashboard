@@ -19,6 +19,16 @@ type TownBatchResult = {
   created: number;
   skipped: number;
   rejected: number;
+  totalFound: number;
+  success: boolean;
+  status:
+    | "created"
+    | "no_results"
+    | "duplicates"
+    | "rejected"
+    | "empty"
+    | "failed";
+  message: string;
   errors: string[];
 };
 
@@ -33,6 +43,89 @@ function getNumber(value: unknown) {
   const parsed = typeof value === "number" ? value : Number(value);
 
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function getTownStatus(args: {
+  created: number;
+  skipped: number;
+  rejected: number;
+  totalFound: number;
+  success: boolean;
+}) {
+  if (!args.success) return "failed";
+  if (args.created > 0) return "created";
+  if (args.totalFound === 0) return "no_results";
+  if (args.skipped > 0 && args.rejected === 0) return "duplicates";
+  if (args.rejected > 0 && args.skipped === 0) return "rejected";
+
+  return "empty";
+}
+
+function getTownMessage(args: {
+  trade: string;
+  created: number;
+  skipped: number;
+  rejected: number;
+  totalFound: number;
+  status: TownBatchResult["status"];
+  error?: string;
+}) {
+  if (args.status === "failed") {
+    return `request failed${args.error ? ` (${args.error})` : ""}`;
+  }
+
+  if (args.status === "created") {
+    return `${args.created} leads created`;
+  }
+
+  if (args.status === "no_results") {
+    return `no matching ${args.trade} businesses found`;
+  }
+
+  if (args.status === "duplicates") {
+    return "all results were duplicates";
+  }
+
+  if (args.status === "rejected") {
+    return "all results rejected by trade validation";
+  }
+
+  if (args.skipped > 0 || args.rejected > 0) {
+    return `${args.skipped} skipped, ${args.rejected} rejected`;
+  }
+
+  return `no matching ${args.trade} businesses found`;
+}
+
+function getAggregateMessage(args: {
+  trade: string;
+  created: number;
+  skipped: number;
+  rejected: number;
+  totalFound: number;
+  errors: number;
+}) {
+  if (args.created > 0) {
+    return `${args.created} leads created, ${args.skipped} skipped, ${args.rejected} rejected.`;
+  }
+
+  if (args.errors > 0 && args.totalFound === 0) {
+    return "No towns completed successfully.";
+  }
+
+  if (args.totalFound === 0) {
+    return `No matching ${args.trade} businesses found.`;
+  }
+
+  if (args.skipped > 0 && args.rejected === 0) {
+    return "All results were duplicates.";
+  }
+
+  if (args.rejected > 0 && args.skipped === 0) {
+    return "All results failed trade validation.";
+  }
+
+  return `${args.skipped} skipped, ${args.rejected} rejected.`;
 }
 
 export async function POST(req: Request) {
@@ -96,6 +189,10 @@ export async function POST(req: Request) {
           created: 0,
           skipped: 0,
           rejected: 0,
+          totalFound: 0,
+          success: false,
+          status: "failed",
+          message: "request failed (Invalid town/suburb target)",
           errors: ["Invalid town/suburb target"],
         });
         continue;
@@ -124,39 +221,92 @@ export async function POST(req: Request) {
         const data = await res.json().catch(() => ({}));
 
         if (!res.ok) {
+          const errorMessage =
+            data.message || data.error || "Lead generation failed";
+
           results.push({
             town: cityTarget.city,
             created: 0,
             skipped: 0,
             rejected: 0,
-            errors: [data.message || data.error || "Lead generation failed"],
+            totalFound: 0,
+            success: false,
+            status: "failed",
+            message: getTownMessage({
+              trade: tradeTarget.key,
+              created: 0,
+              skipped: 0,
+              rejected: 0,
+              totalFound: 0,
+              status: "failed",
+              error: errorMessage,
+            }),
+            errors: [errorMessage],
           });
           continue;
         }
 
-        const rejected = getNumber(data.skippedWrongTrade);
-        const skipped =
-          getNumber(data.existingSkipped) +
-          getNumber(data.skippedDuplicates) +
-          getNumber(data.skippedInvalidLocation) +
-          getNumber(data.skippedInvalidPhone);
+        const created = getNumber(data.created ?? data.saved);
+        const rejected = getNumber(data.rejected ?? data.skippedWrongTrade);
+        const skipped = getNumber(
+          data.skipped ??
+            getNumber(data.existingSkipped) +
+              getNumber(data.skippedDuplicates) +
+              getNumber(data.skippedInvalidLocation) +
+              getNumber(data.skippedInvalidPhone)
+        );
+        const totalFound = getNumber(data.totalFound ?? data.rawResults);
+        const status = getTownStatus({
+          created,
+          skipped,
+          rejected,
+          totalFound,
+          success: data.success !== false,
+        });
 
         results.push({
           town: cityTarget.city,
-          created: getNumber(data.saved),
+          created,
           skipped,
           rejected,
+          totalFound,
+          success: data.success !== false,
+          status,
+          message:
+            typeof data.message === "string" && data.message
+              ? data.message
+              : getTownMessage({
+                  trade: tradeTarget.key,
+                  created,
+                  skipped,
+                  rejected,
+                  totalFound,
+                  status,
+                }),
           errors: [],
         });
       } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : "Lead generation failed";
+
         results.push({
           town: cityTarget.city,
           created: 0,
           skipped: 0,
           rejected: 0,
-          errors: [
-            error instanceof Error ? error.message : "Lead generation failed",
-          ],
+          totalFound: 0,
+          success: false,
+          status: "failed",
+          message: getTownMessage({
+            trade: tradeTarget.key,
+            created: 0,
+            skipped: 0,
+            rejected: 0,
+            totalFound: 0,
+            status: "failed",
+            error: errorMessage,
+          }),
+          errors: [errorMessage],
         });
       }
     }
@@ -166,6 +316,7 @@ export async function POST(req: Request) {
         summary.created += result.created;
         summary.skipped += result.skipped;
         summary.rejected += result.rejected;
+        summary.totalFound += result.totalFound;
         summary.errors += result.errors.length;
 
         return summary;
@@ -175,9 +326,18 @@ export async function POST(req: Request) {
         created: 0,
         skipped: 0,
         rejected: 0,
+        totalFound: 0,
         errors: 0,
       }
     );
+    const message = getAggregateMessage({
+      trade: tradeTarget.key,
+      created: totals.created,
+      skipped: totals.skipped,
+      rejected: totals.rejected,
+      totalFound: totals.totalFound,
+      errors: totals.errors,
+    });
 
     return NextResponse.json({
       success: true,
@@ -186,6 +346,7 @@ export async function POST(req: Request) {
       limit,
       results,
       totals,
+      message,
     });
   } catch (error) {
     console.error("Failed to generate lead batch:", error);

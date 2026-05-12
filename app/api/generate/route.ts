@@ -52,6 +52,32 @@ function getString(value: unknown) {
   return typeof value === "string" ? value : "";
 }
 
+function getGenerationMessage(args: {
+  trade: string;
+  created: number;
+  skipped: number;
+  rejected: number;
+  totalFound: number;
+}) {
+  if (args.created > 0) {
+    return `${args.created} leads created`;
+  }
+
+  if (args.totalFound === 0) {
+    return `No matching ${args.trade} businesses found`;
+  }
+
+  if (args.rejected > 0 && args.skipped === 0) {
+    return "All results failed trade validation";
+  }
+
+  if (args.skipped > 0 && args.rejected === 0) {
+    return "All results were skipped";
+  }
+
+  return "No new leads created";
+}
+
 async function getGooglePlaceDetailsForLead(placeId: string, apiKey: string) {
   try {
     return await fetchGooglePlaceDetails(placeId, apiKey);
@@ -124,17 +150,21 @@ export async function POST(req: Request) {
 
     const places = await searchText(query, apiKey);
     const saved = [];
+    let rejected = 0;
+    let skipped = 0;
 
     for (const place of places.slice(0, limit)) {
       const businessName = place.displayName?.text || "";
 
       if (!place.id || !businessName) {
+        skipped += 1;
         continue;
       }
 
       const tradeValidation = isValidTradeLead(place, trade);
 
       if (!tradeValidation.isValid) {
+        rejected += 1;
         console.log("[lead-validation] rejected place", {
           name: businessName,
           trade,
@@ -148,6 +178,7 @@ export async function POST(req: Request) {
       const slug = slugify(businessName);
 
       if (!slug) {
+        skipped += 1;
         continue;
       }
 
@@ -210,9 +241,26 @@ export async function POST(req: Request) {
       saved.push(savedLead);
     }
 
+    const totalFound = places.length;
+    const created = saved.length;
+    const message = getGenerationMessage({
+      trade,
+      created,
+      skipped,
+      rejected,
+      totalFound,
+    });
+
     return NextResponse.json({
       success: true,
+      town: city,
+      city,
       query,
+      created,
+      skipped,
+      rejected,
+      totalFound,
+      message,
       saved,
     });
   } catch (error) {

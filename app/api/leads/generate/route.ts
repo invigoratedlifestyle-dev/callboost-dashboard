@@ -410,6 +410,36 @@ function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function getGenerationMessage(args: {
+  trade: string;
+  created: number;
+  skipped: number;
+  rejected: number;
+  totalFound: number;
+}) {
+  if (args.created > 0) {
+    return `${args.created} leads created`;
+  }
+
+  if (args.totalFound === 0) {
+    return `No matching ${args.trade} businesses found`;
+  }
+
+  if (args.skipped > 0 && args.rejected === 0) {
+    return "All results were duplicates";
+  }
+
+  if (args.rejected > 0 && args.skipped === 0) {
+    return "All results failed trade validation";
+  }
+
+  if (args.skipped > 0 || args.rejected > 0) {
+    return "No new leads created";
+  }
+
+  return `No matching ${args.trade} businesses found`;
+}
+
 async function textSearch(
   query: string,
   apiKey: string,
@@ -911,10 +941,29 @@ export async function POST(req: Request) {
       }
     }
 
+    const skipped =
+      existingSkipped +
+      skippedDuplicates +
+      skippedInvalidLocation +
+      skippedInvalidPhone;
+    const rejected = skippedWrongTrade;
+    const totalFound = rawResults;
+    const message = getGenerationMessage({
+      trade,
+      created: leads.length,
+      skipped,
+      rejected,
+      totalFound,
+    });
+
     console.log("Lead generation summary:", {
       rawResults,
       dedupedResults,
       saved: leads.length,
+      created: leads.length,
+      skipped,
+      rejected,
+      totalFound,
       existingSkipped,
       skippedDuplicates,
       skippedWrongTrade,
@@ -926,8 +975,14 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       success: true,
+      town: city,
       trade,
       city,
+      created: leads.length,
+      skipped,
+      rejected,
+      totalFound,
+      message,
       queriesRun: searchQueries.length,
       rawResults,
       dedupedResults,

@@ -70,6 +70,16 @@ type GenerateBatchTownResult = {
   created: number;
   skipped: number;
   rejected: number;
+  totalFound?: number;
+  success?: boolean;
+  status?:
+    | "created"
+    | "no_results"
+    | "duplicates"
+    | "rejected"
+    | "empty"
+    | "failed";
+  message?: string;
   errors: string[];
 };
 
@@ -79,8 +89,10 @@ type GenerateBatchSummary = {
     created: number;
     skipped: number;
     rejected: number;
+    totalFound?: number;
     errors: number;
   };
+  message?: string;
   results: GenerateBatchTownResult[];
 };
 
@@ -343,6 +355,34 @@ function getLeadSelectionKey(lead: DashboardLead) {
   }`;
 }
 
+function getGenerationResultClass(result: GenerateBatchTownResult) {
+  if (result.status === "failed" || result.success === false) {
+    return "text-red-300";
+  }
+
+  if (result.created > 0 || result.status === "created") {
+    return "text-green-300";
+  }
+
+  return "text-slate-400";
+}
+
+function getGenerationResultMessage(result: GenerateBatchTownResult) {
+  if (result.message) return result.message;
+  if (result.created > 0) return `${result.created} leads created`;
+  if (result.status === "duplicates") return "all results were duplicates";
+  if (result.status === "rejected") {
+    return "all results rejected by trade validation";
+  }
+  if (result.status === "failed") {
+    return `request failed${
+      result.errors.length ? ` (${result.errors.join(", ")})` : ""
+    }`;
+  }
+
+  return "no matching businesses found";
+}
+
 export default function DashboardPage() {
   const [leads, setLeads] = useState<DashboardLead[]>([]);
   const [clientRevenueLeads, setClientRevenueLeads] = useState<DashboardLead[]>([]);
@@ -583,14 +623,35 @@ export default function DashboardPage() {
             created: Number(result.saved) || 0,
             skipped,
             rejected,
+            totalFound: Number(result.totalFound ?? result.rawResults) || 0,
             errors: 0,
           },
+          message:
+            typeof result.message === "string" && result.message
+              ? result.message
+              : undefined,
           results: [
             {
               town: selectedTownNames[0],
               created: Number(result.saved) || 0,
               skipped,
               rejected,
+              totalFound: Number(result.totalFound ?? result.rawResults) || 0,
+              success: true,
+              status:
+                Number(result.saved) > 0
+                  ? "created"
+                  : Number(result.totalFound ?? result.rawResults) === 0
+                    ? "no_results"
+                    : skipped > 0 && rejected === 0
+                      ? "duplicates"
+                      : rejected > 0 && skipped === 0
+                        ? "rejected"
+                        : "empty",
+              message:
+                typeof result.message === "string" && result.message
+                  ? result.message
+                  : undefined,
               errors: [],
             },
           ],
@@ -1178,16 +1239,20 @@ export default function DashboardPage() {
                 {generationSummary.totals.skipped} skipped,{" "}
                 {generationSummary.totals.rejected} rejected.
               </p>
+              {generationSummary.message ? (
+                <p className="mt-1 text-slate-400">{generationSummary.message}</p>
+              ) : null}
 
-              {generationSummary.results.some((result) => result.errors.length) ? (
-                <div className="mt-2 text-red-300">
-                  {generationSummary.results
-                    .filter((result) => result.errors.length)
-                    .map((result) => (
-                      <p key={result.town}>
-                        {result.town}: {result.errors.join(", ")}
-                      </p>
-                    ))}
+              {generationSummary.results.length ? (
+                <div className="mt-2 grid gap-1">
+                  {generationSummary.results.map((result) => (
+                    <p
+                      key={result.town}
+                      className={getGenerationResultClass(result)}
+                    >
+                      {result.town}: {getGenerationResultMessage(result)}
+                    </p>
+                  ))}
                 </div>
               ) : null}
             </div>
