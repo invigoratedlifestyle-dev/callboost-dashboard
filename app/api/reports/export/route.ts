@@ -1,4 +1,3 @@
-import PDFDocument from "pdfkit";
 import {
   formatPercent,
   getCallBoostReport,
@@ -6,6 +5,10 @@ import {
 } from "../../../lib/reports";
 
 export const runtime = "nodejs";
+
+type PdfDocumentConstructor = new (
+  options?: PDFKit.PDFDocumentOptions
+) => PDFKit.PDFDocument;
 
 function formatDate(value: string | null) {
   if (!value) return "All time";
@@ -79,7 +82,15 @@ function drawTable(
   doc.y = y;
 }
 
-function createPdfBuffer(render: (doc: PDFKit.PDFDocument) => void) {
+async function getPdfDocumentConstructor() {
+  const pdfkit = await import("pdfkit");
+
+  return (pdfkit.default || pdfkit) as unknown as PdfDocumentConstructor;
+}
+
+async function createPdfBuffer(render: (doc: PDFKit.PDFDocument) => void) {
+  const PDFDocument = await getPdfDocumentConstructor();
+
   return new Promise<Buffer>((resolve, reject) => {
     const doc = new PDFDocument({ margin: 48, size: "A4" });
     const chunks: Buffer[] = [];
@@ -94,94 +105,122 @@ function createPdfBuffer(render: (doc: PDFKit.PDFDocument) => void) {
 }
 
 export async function GET(req: Request) {
-  const url = new URL(req.url);
-  const range = normalizeReportRange(url.searchParams.get("range"));
-  const report = await getCallBoostReport(range);
-  const pdf = await createPdfBuffer((doc) => {
-    doc
-      .font("Helvetica-Bold")
-      .fontSize(22)
-      .fillColor("#0f172a")
-      .text("CallBoost Outreach Report");
-    doc
-      .moveDown(0.4)
-      .font("Helvetica")
-      .fontSize(10)
-      .fillColor("#475569")
-      .text(
-        `${report.rangeLabel} | ${formatDate(report.startDate)} to ${formatDate(
-          report.endDate
-        )}`
+  try {
+    const url = new URL(req.url);
+    const range = normalizeReportRange(url.searchParams.get("range"));
+    const report = await getCallBoostReport(range);
+    const pdf = await createPdfBuffer((doc) => {
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(22)
+        .fillColor("#0f172a")
+        .text("CallBoost Outreach Report");
+      doc
+        .moveDown(0.4)
+        .font("Helvetica")
+        .fontSize(10)
+        .fillColor("#475569")
+        .text(
+          `${report.rangeLabel} | ${formatDate(report.startDate)} to ${formatDate(
+            report.endDate
+          )}`
+        );
+
+      drawHeading(doc, "KPI summary");
+      const kpiRows = [
+        ["Leads contacted today", report.kpis.leadsContactedToday],
+        ["Total leads contacted", report.kpis.totalLeadsContacted],
+        ["Total outbound SMS", report.kpis.totalOutboundSms],
+        ["Total outbound emails", report.kpis.totalOutboundEmails],
+        ["Total inbound replies", report.kpis.totalInboundReplies],
+        ["STOP replies", report.kpis.stopReplies],
+        ["Interested replies", report.kpis.interestedReplies],
+        ["Not interested replies", report.kpis.notInterestedReplies],
+        ["Contact-to-reply rate", formatPercent(report.kpis.contactToReplyRate)],
+        [
+          "Contact-to-interest rate",
+          formatPercent(report.kpis.contactToInterestRate),
+        ],
+        ["STOP rate", formatPercent(report.kpis.stopRate)],
+        ["Clients won", report.kpis.clientsWon],
+      ];
+      kpiRows.forEach(([label, value]) =>
+        drawKeyValue(doc, String(label), value)
       );
 
-    drawHeading(doc, "KPI summary");
-    const kpiRows = [
-      ["Leads contacted today", report.kpis.leadsContactedToday],
-      ["Total leads contacted", report.kpis.totalLeadsContacted],
-      ["Total outbound SMS", report.kpis.totalOutboundSms],
-      ["Total outbound emails", report.kpis.totalOutboundEmails],
-      ["Total inbound replies", report.kpis.totalInboundReplies],
-      ["STOP replies", report.kpis.stopReplies],
-      ["Interested replies", report.kpis.interestedReplies],
-      ["Not interested replies", report.kpis.notInterestedReplies],
-      ["Contact-to-reply rate", formatPercent(report.kpis.contactToReplyRate)],
-      [
-        "Contact-to-interest rate",
-        formatPercent(report.kpis.contactToInterestRate),
-      ],
-      ["STOP rate", formatPercent(report.kpis.stopRate)],
-      ["Clients won", report.kpis.clientsWon],
-    ];
-    kpiRows.forEach(([label, value]) => drawKeyValue(doc, String(label), value));
+      drawHeading(doc, "Daily activity");
+      drawTable(
+        doc,
+        ["Date", "Contacted", "Replies", "Interested", "STOP"],
+        report.dailyActivity.map((row) => [
+          row.date,
+          row.contacted,
+          row.replies,
+          row.interested,
+          row.stops,
+        ]),
+        [110, 80, 80, 80, 60]
+      );
 
-    drawHeading(doc, "Daily activity");
-    drawTable(
-      doc,
-      ["Date", "Contacted", "Replies", "Interested", "STOP"],
-      report.dailyActivity.map((row) => [
-        row.date,
-        row.contacted,
-        row.replies,
-        row.interested,
-        row.stops,
-      ]),
-      [110, 80, 80, 80, 60]
+      drawHeading(doc, "Channel performance");
+      drawTable(
+        doc,
+        [
+          "Channel",
+          "Outbound",
+          "Replies",
+          "Interested",
+          "Reply rate",
+          "Interest rate",
+        ],
+        report.channelPerformance.map((row) => [
+          row.channel.toUpperCase(),
+          row.outbound,
+          row.replies,
+          row.interested,
+          formatPercent(row.replyRate),
+          formatPercent(row.interestRate),
+        ]),
+        [70, 70, 70, 80, 80, 90]
+      );
+
+      drawHeading(doc, "Recent interested replies");
+      drawTable(
+        doc,
+        ["Business", "City", "Trade", "Reply", "Received"],
+        report.recentInterestedReplies.map((reply) => [
+          reply.businessName,
+          reply.city || "-",
+          reply.trade || "-",
+          reply.snippet,
+          formatDate(reply.receivedAt),
+        ]),
+        [110, 65, 65, 180, 100]
+      );
+    });
+
+    return new Response(new Uint8Array(pdf), {
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": `attachment; filename="callboost-report-${range}.pdf"`,
+      },
+    });
+  } catch (error) {
+    console.error("REPORT_EXPORT_ERROR", error);
+
+    const message =
+      process.env.NODE_ENV === "production"
+        ? "Failed to export report"
+        : error instanceof Error
+          ? error.message
+          : "Unknown error";
+
+    return Response.json(
+      {
+        error: "Failed to export report",
+        details: message,
+      },
+      { status: 500 }
     );
-
-    drawHeading(doc, "Channel performance");
-    drawTable(
-      doc,
-      ["Channel", "Outbound", "Replies", "Interested", "Reply rate", "Interest rate"],
-      report.channelPerformance.map((row) => [
-        row.channel.toUpperCase(),
-        row.outbound,
-        row.replies,
-        row.interested,
-        formatPercent(row.replyRate),
-        formatPercent(row.interestRate),
-      ]),
-      [70, 70, 70, 80, 80, 90]
-    );
-
-    drawHeading(doc, "Recent interested replies");
-    drawTable(
-      doc,
-      ["Business", "City", "Trade", "Reply", "Received"],
-      report.recentInterestedReplies.map((reply) => [
-        reply.businessName,
-        reply.city || "-",
-        reply.trade || "-",
-        reply.snippet,
-        formatDate(reply.receivedAt),
-      ]),
-      [110, 65, 65, 180, 100]
-    );
-  });
-
-  return new Response(new Uint8Array(pdf), {
-    headers: {
-      "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="callboost-report-${range}.pdf"`,
-    },
-  });
+  }
 }
