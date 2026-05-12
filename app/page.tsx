@@ -54,6 +54,15 @@ type DashboardNotification =
       label: string;
     }
   | {
+      type: "payment";
+      id: string;
+      leadSlug: string;
+      businessName: string;
+      body: string;
+      createdAt: string | null;
+      label: string;
+    }
+  | {
       type: "follow_up";
       id: string;
       leadSlug: string;
@@ -89,15 +98,6 @@ const leadFilters: Array<{ value: LeadFilter; label: string }> = [
   { value: "archived", label: "Archived" },
 ];
 
-const qualityLabels: Record<WebsiteEvaluation["quality"], string> = {
-  none: "No website",
-  bad: "Bad website",
-  weak: "Weak website",
-  average: "Average website",
-  good: "Good website",
-  unknown: "Unknown",
-};
-
 const stageLabels: Record<LeadStage, string> = {
   lead: "Lead",
   contacted: "Contacted",
@@ -113,26 +113,6 @@ const filterTitles: Record<LeadFilter, string> = {
   archived: "Archived Leads",
 };
 
-function getQualityBadgeClass(evaluation?: WebsiteEvaluation) {
-  if (!evaluation) return "bg-white/10 text-slate-400";
-  if (!evaluation.hasWebsite) return "bg-red-500/15 text-red-300";
-  if (evaluation.isWorking === false) return "bg-red-500/15 text-red-300";
-  if (evaluation.quality === "bad") return "bg-red-500/15 text-red-300";
-  if (evaluation.quality === "weak") return "bg-yellow-500/15 text-yellow-300";
-  if (evaluation.quality === "average") return "bg-blue-500/15 text-blue-300";
-  if (evaluation.quality === "good") return "bg-green-500/15 text-green-300";
-  return "bg-white/10 text-slate-400";
-}
-
-function getQualityLabel(evaluation?: WebsiteEvaluation) {
-  if (!evaluation) return "Unknown";
-  if (evaluation.hasWebsite && evaluation.isWorking === false) {
-    return "Broken website";
-  }
-
-  return qualityLabels[evaluation.quality] || "Unknown";
-}
-
 function getOpportunityScore(lead: DashboardLead) {
   return typeof lead.websiteEvaluation?.score === "number"
     ? lead.websiteEvaluation.score
@@ -142,7 +122,7 @@ function getOpportunityScore(lead: DashboardLead) {
 }
 
 function getOpportunityLabel(score: number | null) {
-  if (score === null) return "Unscored";
+  if (score === null) return "No score";
   if (score >= 70) return "High";
   if (score >= 40) return "Medium";
   return "Low";
@@ -155,12 +135,17 @@ function getOpportunityBadgeClass(score: number | null) {
   return "bg-slate-500/15 text-slate-300";
 }
 
-function getMainIssue(lead: DashboardLead) {
-  return (
-    lead.websiteEvaluation?.issues?.[0] ||
-    lead.websiteStatusReasons?.[0] ||
-    "No evaluation yet"
-  );
+function formatTradeLabel(value: unknown) {
+  const trade = String(value || "").trim();
+
+  if (!trade) return "Unknown trade";
+  if (trade === "plumbing-gas-fitting") return "Plumbing and Gas Fitting";
+
+  return trade
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function getLeadStage(lead: Pick<DashboardLead, "stage">) {
@@ -183,46 +168,11 @@ function getClientStartedAt(lead: DashboardLead) {
   return lead.clientStartedAt || lead.client_started_at || "";
 }
 
-function getPaymentStatusLabel(lead: DashboardLead) {
-  const paymentStatus = getPaymentStatus(lead);
-
-  if (paymentStatus === "paid") return "Paid";
-  if (paymentStatus === "payment_failed") return "Payment Failed";
-  if (paymentStatus === "cancelled") return "Cancelled";
-  if (getLeadStage(lead) === "client" && !paymentStatus) return "Pending";
-
-  return "";
-}
-
-function getPaymentStatusBadgeClass(lead: DashboardLead) {
-  const paymentStatus = getPaymentStatus(lead);
-
-  if (paymentStatus === "paid") return "bg-green-500 text-white";
-  if (paymentStatus === "payment_failed") return "bg-red-500 text-white";
-  if (paymentStatus === "cancelled") return "bg-slate-600 text-white";
-  if (getLeadStage(lead) === "client" && !paymentStatus) {
-    return "bg-amber-500 text-slate-950";
-  }
-
-  return "bg-white/10 text-slate-400";
-}
-
 function getClientStartedTime(lead: DashboardLead) {
   const value = getClientStartedAt(lead);
   const time = new Date(value || "").getTime();
 
   return Number.isFinite(time) ? time : 0;
-}
-
-function isPlaceholderEmail(email: string) {
-  const normalizedEmail = email.trim().toLowerCase();
-
-  return (
-    normalizedEmail === "contact@example.com" ||
-    normalizedEmail === "admin@example.com" ||
-    normalizedEmail === "test@example.com" ||
-    normalizedEmail.endsWith("@example.com")
-  );
 }
 
 function formatNotificationTime(value?: string) {
@@ -242,6 +192,10 @@ function getNotificationPreview(notification: DashboardNotification) {
     const details = [notification.trade, notification.city].filter(Boolean).join(" - ");
 
     return details || notification.nextFollowUpLabel;
+  }
+
+  if (notification.type === "payment") {
+    return notification.body;
   }
 
   const text = notification.body || notification.subject || "New reply";
@@ -1024,12 +978,16 @@ export default function DashboardPage() {
                               className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
                                 notification.type === "reply"
                                   ? "bg-cyan-500/15 text-cyan-300"
+                                  : notification.type === "payment"
+                                    ? "bg-emerald-500/15 text-emerald-300"
                                   : "bg-blue-500/15 text-blue-300"
                               }`}
                             >
                               {notification.type === "reply"
                                 ? "New reply"
-                                : "Follow-up due"}
+                                : notification.type === "payment"
+                                  ? "Payment"
+                                  : "Follow-up due"}
                             </span>
                             {notification.type === "reply" ? (
                               <span className="rounded-full bg-blue-500/15 px-2 py-0.5 text-[10px] font-bold uppercase text-blue-300">
@@ -1042,9 +1000,7 @@ export default function DashboardPage() {
                           </p>
                           <p className="mt-2 text-[11px] text-slate-500">
                             {formatNotificationTime(
-                              notification.type === "reply"
-                                ? notification.createdAt
-                                : notification.dueAt || notification.createdAt || ""
+                              notification.createdAt || ""
                             )}
                           </p>
                         </Link>
@@ -1273,10 +1229,9 @@ export default function DashboardPage() {
                     />
                   </th>
                   <th className="px-5 py-4">Lead</th>
+                  <th className="px-5 py-4">Trade</th>
+                  <th className="px-5 py-4">Location</th>
                   <th className="px-5 py-4">Opportunity</th>
-                  <th className="px-5 py-4">Contact</th>
-                  <th className="px-5 py-4">Rating</th>
-                  <th className="px-5 py-4">Payment</th>
                   <th className="px-5 py-4">Stage</th>
                   <th className="px-5 py-4">Status</th>
                   <th className="px-5 py-4">Last Activity</th>
@@ -1287,7 +1242,7 @@ export default function DashboardPage() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td className="px-5 py-6 text-slate-400" colSpan={10}>
+                    <td className="px-5 py-6 text-slate-400" colSpan={9}>
                       Loading leads...
                     </td>
                   </tr>
@@ -1300,13 +1255,6 @@ export default function DashboardPage() {
                     const leadRoute = lead.slug || lead.id;
                     const opportunityScore = getOpportunityScore(lead);
                     const opportunityLabel = getOpportunityLabel(opportunityScore);
-                    const qualityLabel = getQualityLabel(lead.websiteEvaluation);
-                    const mainIssue = getMainIssue(lead);
-                    const paymentStatusLabel = getPaymentStatusLabel(lead);
-                    const validEmail =
-                      lead.email && !isPlaceholderEmail(lead.email)
-                        ? lead.email
-                        : "";
                     const selected = isLeadSelected(lead);
                     const paymentFailed =
                       getPaymentStatus(lead) === "payment_failed";
@@ -1347,76 +1295,24 @@ export default function DashboardPage() {
                               </span>
                             ) : null}
                           </div>
-                          <p className="mt-1 text-xs text-slate-400">
-                            {lead.trade || "Unknown trade"} -{" "}
-                            {lead.city || "Unknown town/suburb"}
-                          </p>
                         </td>
 
-                        <td className="px-5 py-4">
-                          <div className="flex flex-col items-start gap-2">
-                            <span
-                              className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-bold ${getOpportunityBadgeClass(
-                                opportunityScore
-                              )}`}
-                            >
-                              {opportunityLabel}
-                            </span>
-                            <span className="text-xs font-bold text-slate-200">
-                              {opportunityScore !== null
-                                ? `${opportunityScore}/100`
-                                : "Unscored"}
-                            </span>
-                            <span
-                              className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-bold ${getQualityBadgeClass(
-                                lead.websiteEvaluation
-                              )}`}
-                            >
-                              {qualityLabel}
-                            </span>
-                            <span className="max-w-[180px] text-xs text-slate-400">
-                              {mainIssue}
-                            </span>
-                          </div>
-                        </td>
-
-                        <td className="px-5 py-4">
-                          <div className="space-y-1 text-sm">
-                            {lead.website ? (
-                              <a
-                                href={lead.website}
-                                target="_blank"
-                                className="text-blue-400 hover:text-blue-300"
-                              >
-                                Visit website
-                              </a>
-                            ) : (
-                              <p className="text-slate-500">No website</p>
-                            )}
-                            <p className="text-slate-300">
-                              {validEmail || (
-                                <span className="text-slate-500">No email</span>
-                              )}
-                            </p>
-                          </div>
+                        <td className="px-5 py-4 text-sm font-bold text-slate-200">
+                          {formatTradeLabel(lead.trade)}
                         </td>
 
                         <td className="px-5 py-4 text-sm text-slate-300">
-                          {lead.rating || "-"} ({lead.reviewCount || "0"})
+                          {lead.city || lead.address || "Unknown location"}
                         </td>
 
                         <td className="px-5 py-4">
-                          {paymentStatusLabel ? (
-                            <span
-                              className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-bold ${getPaymentStatusBadgeClass(
-                                lead
-                              )}`}
-                            >
-                              {paymentStatusLabel}
-                            </span>
-                          ) : (
-                            <span className="text-sm text-slate-500">-</span>
-                          )}
+                          <span
+                            className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-bold ${getOpportunityBadgeClass(
+                              opportunityScore
+                            )}`}
+                          >
+                            {opportunityLabel}
+                          </span>
                         </td>
 
                         <td className="px-5 py-4">
@@ -1465,7 +1361,7 @@ export default function DashboardPage() {
                   })
                 ) : (
                   <tr>
-                    <td className="px-5 py-6 text-slate-400" colSpan={10}>
+                    <td className="px-5 py-6 text-slate-400" colSpan={9}>
                       No leads found for this view.
                     </td>
                   </tr>

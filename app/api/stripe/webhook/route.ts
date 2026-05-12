@@ -95,6 +95,8 @@ async function markCheckoutComplete(session: Stripe.Checkout.Session) {
       stripe_checkout_session_id: session.id,
       stripe_subscription_id: getStripeId(session.subscription),
       payment_status: "paid",
+      status: "paid",
+      status_updated_at: now,
       paid_at: now,
       client_started_at: now,
       last_activity_at: now,
@@ -524,11 +526,15 @@ async function handlePaymentRecovered(invoice: Stripe.Invoice) {
 
   const updatePayload: {
     payment_status: string;
+    status: string;
+    status_updated_at: string;
     stage?: string;
     last_activity_at: string;
     updated_at: string;
   } = {
     payment_status: "paid",
+    status: "paid",
+    status_updated_at: new Date().toISOString(),
     last_activity_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };

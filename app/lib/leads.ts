@@ -13,6 +13,7 @@ export type LeadStatus =
   | "follow_up_2"
   | "final_follow_up"
   | "replied"
+  | "paid"
   | "closed";
 
 export type LeadReview = {

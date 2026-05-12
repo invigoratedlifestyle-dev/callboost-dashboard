@@ -7,12 +7,13 @@ export const leadStatuses = [
   "follow_up_2",
   "final_follow_up",
   "replied",
+  "paid",
   "closed",
 ] as const;
 
 export type LeadStatus = (typeof leadStatuses)[number];
 
-const terminalStatuses = new Set<LeadStatus>(["replied", "closed"]);
+const terminalStatuses = new Set<LeadStatus>(["replied", "paid", "closed"]);
 
 export const leadStatusLabels: Record<LeadStatus, string> = {
   new: "New",
@@ -23,6 +24,7 @@ export const leadStatusLabels: Record<LeadStatus, string> = {
   follow_up_2: "Follow-up 2",
   final_follow_up: "Final Follow-up",
   replied: "Replied",
+  paid: "Paid",
   closed: "Closed",
 };
 
@@ -55,6 +57,7 @@ export function getLeadStatusBadgeClass(value: unknown) {
   if (status === "follow_up_2") return "bg-orange-500/15 text-orange-300";
   if (status === "final_follow_up") return "bg-red-500/15 text-red-300";
   if (status === "replied") return "bg-cyan-500/15 text-cyan-300";
+  if (status === "paid") return "bg-emerald-500/15 text-emerald-300";
 
   return "bg-slate-700 text-slate-300";
 }
