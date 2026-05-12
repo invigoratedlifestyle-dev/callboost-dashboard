@@ -1879,11 +1879,6 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-xl font-bold">Business Info</h2>
-                {yellowPages || lead.yellow_pages_url ? (
-                  <span className="rounded-full border border-yellow-400/20 bg-yellow-500/10 px-2 py-1 text-[11px] font-bold uppercase tracking-[0.14em] text-yellow-300">
-                    Yellow Pages
-                  </span>
-                ) : null}
               </div>
 
               {isEditingContact ? (
