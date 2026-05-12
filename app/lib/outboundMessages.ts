@@ -1,7 +1,7 @@
 import "server-only";
 import { Resend } from "resend";
 import Twilio from "twilio";
-import { prepareOutboundSmsText } from "./smsOptOut";
+import { estimateSmsSegments, prepareOutboundSmsText } from "./smsOptOut";
 
 function getResendClient() {
   const apiKey = process.env.RESEND_API_KEY;
@@ -32,6 +32,14 @@ export async function sendSms(args: { to: string; body: string }) {
       normalizedLength: body.length,
     });
   }
+
+  const smsEstimate = estimateSmsSegments(body);
+
+  console.log("[SMS_DEBUG]", {
+    encoding: smsEstimate.encoding,
+    estimatedSegments: smsEstimate.estimatedSegments,
+    length: smsEstimate.length,
+  });
 
   const result = await twilio.messages.create({
     body,

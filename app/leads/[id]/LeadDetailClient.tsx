@@ -16,6 +16,7 @@ import {
   hasUsableFollowUpContact,
 } from "../../lib/contactMethods";
 import { appendEmailUnsubscribeFooter } from "../../lib/emailUnsubscribe";
+import { estimateSmsSegments } from "../../lib/smsOptOut";
 import { CALLBOOST_CHECKOUT_SUMMARY } from "../../lib/pricing";
 import {
   buildFollowUpBody,
@@ -1773,6 +1774,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     looksLikePaymentReadyReply(latestInboundMessage);
   const hasPaymentLink = Boolean(checkoutUrl);
   const brandedPaymentUrl = hasPaymentLink ? getBrandedPaymentUrl(lead) : "";
+  const smsSegmentEstimate = estimateSmsSegments(smsBody);
   const hasReplyAfterLastOutbound =
     latestInboundMessageTime > latestOutboundMessageTime;
   const canShowFollowUpActions = lead.status === "contacted";
@@ -3257,7 +3259,16 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
               </label>
 
               <label className="grid gap-2 text-sm font-bold text-slate-300">
-                Message
+                <span className="flex items-center justify-between gap-3">
+                  <span>Message</span>
+                  <span className="text-xs font-bold text-slate-500">
+                    {smsSegmentEstimate.encoding} |{" "}
+                    {smsSegmentEstimate.estimatedSegments}{" "}
+                    {smsSegmentEstimate.estimatedSegments === 1
+                      ? "segment"
+                      : "segments"}
+                  </span>
+                </span>
                 <textarea
                   value={smsBody}
                   onChange={(event) => {

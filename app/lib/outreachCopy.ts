@@ -1,6 +1,6 @@
 import type { Lead } from "./leads";
 import { appendEmailUnsubscribeFooter } from "./emailUnsubscribe";
-import { appendOptOut } from "./smsOptOut";
+import { appendOptOut, estimateSmsSegments, sanitizeForGsm } from "./smsOptOut";
 import { CALLBOOST_PRICE_SUMMARY } from "./pricing";
 
 type OutreachLead = Pick<
@@ -171,10 +171,10 @@ export function buildOpportunitySms(
   lead: OutreachLead,
   previewUrl: string
 ) {
-  if (hasNoWebsiteOpportunity(lead)) {
-    const leadName = getLeadName(lead);
+  const leadName = getLeadName(lead);
 
-    return appendOptOut([
+  if (hasNoWebsiteOpportunity(lead)) {
+    return buildShortOpportunitySms([
       `Hi ${leadName},`,
       "I put together a quick mobile-friendly website preview for you:",
       previewUrl,
@@ -182,12 +182,59 @@ export function buildOpportunitySms(
       "Happy to set this up properly for you if you like.",
       "",
       "- Jamie, CallBoost Tasmania",
-    ].join("\n"));
+    ]);
   }
 
-  return appendOptOut(
-    buildInitialOpportunityOutreachLines(lead, previewUrl).join("\n")
+  return buildShortOpportunitySms([
+    `Hey ${leadName} - I made a quick mobile-friendly website preview for you:`,
+    previewUrl,
+    "",
+    "I noticed a few areas that could make it easier for customers to call/contact you from mobile.",
+    "",
+    "- Jamie, CallBoost Tasmania",
+  ]);
+}
+
+function buildShortOpportunitySms(lines: string[]) {
+  const candidates = [
+    lines,
+    lines.map((line) =>
+      line ===
+      "I noticed a few areas that could make it easier for customers to call/contact you from mobile."
+        ? "Could help make mobile enquiries easier."
+        : line
+    ),
+    lines
+      .map((line) =>
+        line === "- Jamie, CallBoost Tasmania" ? "- Jamie - CallBoost" : line
+      )
+      .map((line) =>
+        line ===
+        "I noticed a few areas that could make it easier for customers to call/contact you from mobile."
+          ? "Could help make mobile enquiries easier."
+          : line
+      ),
+  ];
+  let selected = estimateSmsSegments(
+    sanitizeForGsm(appendOptOut(candidates[0].filter(Boolean).join("\n")))
   );
+
+  for (const candidate of candidates) {
+    const estimate = estimateSmsSegments(
+      sanitizeForGsm(appendOptOut(candidate.filter(Boolean).join("\n")))
+    );
+
+    selected = estimate;
+    if (estimate.length <= 320) break;
+  }
+
+  console.log("[SMS_DEBUG]", {
+    encoding: selected.encoding,
+    estimatedSegments: selected.estimatedSegments,
+    length: selected.length,
+  });
+
+  return selected.text;
 }
 
 export function buildOpportunityEmailSubject(
