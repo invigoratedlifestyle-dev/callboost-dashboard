@@ -7,7 +7,7 @@ import type {
   CallbackRequest,
   Lead,
   LeadMessage,
-  LeadStatus,
+  LeadStage,
   WebsiteEvaluation,
 } from "../../lib/leads";
 import type { BusinessInfoMatch } from "../../lib/businessInfoMatch";
@@ -171,13 +171,13 @@ type TimelineItem =
       callback: CallbackRequest;
     };
 
-const statusOptions: Array<{ status: LeadStatus; label: string }> = [
-  { status: "contacted", label: "Mark Contacted" },
-  { status: "client", label: "Mark Client" },
-  { status: "archived", label: "Archive" },
+const stageOptions: Array<{ stage: LeadStage; label: string }> = [
+  { stage: "contacted", label: "Mark Contacted" },
+  { stage: "client", label: "Mark Client" },
+  { stage: "archived", label: "Archive" },
 ];
 
-const statusLabels: Record<LeadStatus, string> = {
+const stageLabels: Record<LeadStage, string> = {
   lead: "Lead",
   contacted: "Contacted",
   client: "Client",
@@ -193,11 +193,15 @@ const qualityLabels: Record<WebsiteEvaluation["quality"], string> = {
   unknown: "Unknown",
 };
 
-function getStatusBadgeClass(status?: string) {
-  if (status === "lead") return "bg-blue-500/15 text-blue-300";
-  if (status === "contacted") return "bg-slate-500/15 text-slate-300";
-  if (status === "client") return "bg-green-500/15 text-green-300";
-  if (status === "archived") return "bg-slate-700 text-slate-300";
+function getLeadStage(lead: Pick<LeadWithGeneratedContent, "stage" | "status">) {
+  return lead.stage || lead.status || "lead";
+}
+
+function getStageBadgeClass(stage?: string) {
+  if (stage === "lead") return "bg-blue-500/15 text-blue-300";
+  if (stage === "contacted") return "bg-slate-500/15 text-slate-300";
+  if (stage === "client") return "bg-green-500/15 text-green-300";
+  if (stage === "archived") return "bg-slate-700 text-slate-300";
   return "bg-white/10 text-slate-400";
 }
 
@@ -492,7 +496,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const [callbacks, setCallbacks] = useState<CallbackRequest[]>([]);
   const [messages, setMessages] = useState<LeadMessage[]>([]);
   const [loading, setLoading] = useState(true);
-  const [updatingStatus, setUpdatingStatus] = useState("");
+  const [updatingStage, setUpdatingStage] = useState("");
   const [savingForwarding, setSavingForwarding] = useState(false);
   const [outreachChannel, setOutreachChannel] =
     useState<OutreachChannel>("sms");
@@ -1396,11 +1400,11 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       setSavingForwarding(false);
     }
   };
-  const handleStatusChange = async (status: LeadStatus) => {
+  const handleStageChange = async (stage: LeadStage) => {
     if (!lead) return;
-    if (status === lead.status) return;
+    if (stage === getLeadStage(lead)) return;
 
-    setUpdatingStatus(status);
+    setUpdatingStage(stage);
 
     try {
       const res = await fetch(`/api/leads/${lead.slug || lead.id}`, {
@@ -1409,7 +1413,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          status,
+          stage,
           reviewNotes: lead.reviewNotes || "",
         }),
       });
@@ -1421,10 +1425,10 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
 
       setLead(data.lead);
     } catch (error) {
-      console.error("Failed to update lead status:", error);
+      console.error("Failed to update lead stage:", error);
       alert("Failed to update lead.");
     } finally {
-      setUpdatingStatus("");
+      setUpdatingStage("");
     }
   };
   const handleCreateCheckoutLink = async () => {
@@ -1779,7 +1783,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   };
   const generatedDescription =
     lead.description || lead.solution || lead.subheadline || "";
-  const isLeadArchived = lead.status === "archived";
+  const leadStage = getLeadStage(lead);
+  const isLeadArchived = leadStage === "archived";
   const generatedSiteUrl = isLeadArchived ? "" : lead.generatedSiteUrl || "";
   const websiteEvaluation = lead.websiteEvaluation;
   const reviewSource = getReviewSource(lead);
@@ -1816,7 +1821,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const smsSegmentEstimate = estimateSmsSegments(smsBody);
   const hasReplyAfterLastOutbound =
     latestInboundMessageTime > latestOutboundMessageTime;
-  const canShowFollowUpActions = lead.status === "contacted";
+  const canShowFollowUpActions = leadStage === "contacted";
   const hasFollowUpDestination = hasUsableFollowUpContact({
     phone: lead.phone,
     email: lead.email,
@@ -1844,23 +1849,23 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <span
-              className={`rounded-full px-3 py-1 text-xs font-bold ${getStatusBadgeClass(
-                lead.status
+              className={`rounded-full px-3 py-1 text-xs font-bold ${getStageBadgeClass(
+                leadStage
               )}`}
             >
-              {statusLabels[lead.status || "lead"] || "Lead"}
+              {stageLabels[leadStage] || "Lead"}
             </span>
 
-            {statusOptions
-              .filter((option) => option.status !== lead.status)
+            {stageOptions
+              .filter((option) => option.stage !== leadStage)
               .map((option) => (
                 <button
-                  key={option.status}
-                  onClick={() => handleStatusChange(option.status)}
-                  disabled={Boolean(updatingStatus)}
+                  key={option.stage}
+                  onClick={() => handleStageChange(option.stage)}
+                  disabled={Boolean(updatingStage)}
                   className="rounded-lg bg-slate-700 px-3 py-2 text-xs font-bold text-white hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {updatingStatus === option.status ? "Saving..." : option.label}
+                  {updatingStage === option.stage ? "Saving..." : option.label}
                 </button>
               ))}
 
@@ -2196,8 +2201,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
               </p>
 
               <p>
-                <strong className="text-white">Status:</strong>{" "}
-                {statusLabels[lead.status || "lead"] || "Lead"}
+                <strong className="text-white">Stage:</strong>{" "}
+                {stageLabels[leadStage] || "Lead"}
               </p>
 
               {lead.contactedAt ? (
@@ -2986,7 +2991,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
           </section>
         </div>
 
-        {lead.status === "client" ? (
+        {leadStage === "client" ? (
           <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
             <h2 className="mb-4 text-xl font-bold">Client Details</h2>
 
@@ -3041,7 +3046,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
               </div>
             </div>
 
-            {lead.status === "client" && lead.stripeCustomerId ? (
+            {leadStage === "client" && lead.stripeCustomerId ? (
               <div className="mt-5">
                 <button
                   onClick={handleOpenBillingPortal}
@@ -3845,3 +3850,4 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     </main>
   );
 }
+

@@ -2,7 +2,7 @@ import {
   getFollowUpDueStatus,
   type FollowUpStage,
 } from "../followUps";
-import { getLeadStatus } from "../leadLifecycle";
+import { getLeadStage } from "../leadLifecycle";
 import { listLeadMessages } from "./leadMessages";
 import {
   listLeadRows,
@@ -37,7 +37,11 @@ export async function listNeedsFollowUp() {
   const contactedLeadRows = leadRows.filter((row) => {
     const data = row.data && typeof row.data === "object" ? row.data : {};
 
-    return getLeadStatus({ ...data, status: row.status || data.status }) ===
+    return getLeadStage({
+      ...data,
+      stage: row.stage || data.stage,
+      status: row.status || data.status,
+    }) ===
       "contacted";
   });
   const now = Date.now();

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getLeadStage } from "../../../../lib/leadLifecycle";
 import {
   buildFollowUpBody,
   getFollowUpDestination,
@@ -71,7 +72,7 @@ export async function POST(
 
     const lead = rowToLead(leadRow);
 
-    if (lead.status !== "contacted") {
+    if (getLeadStage(lead) !== "contacted") {
       return NextResponse.json(
         { error: "Follow-ups are only available for contacted leads" },
         { status: 400 }

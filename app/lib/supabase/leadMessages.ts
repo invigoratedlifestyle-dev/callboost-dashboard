@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from "./server";
+import { getLeadStage } from "../leadLifecycle";
 
 export type LeadMessageChannel = "sms" | "email";
 export type LeadMessageDirection = "inbound" | "outbound";
@@ -220,6 +221,7 @@ type LeadLookupRow = {
   id?: string | number | null;
   slug?: string | null;
   name?: string | null;
+  stage?: string | null;
   status?: string | null;
   data?: Record<string, unknown> | null;
 };
@@ -261,7 +263,7 @@ export async function listUnreadReplyNotifications(limit = 20) {
   if (leadIds.length) {
     const { data, error: leadsError } = await supabase
       .from("leads")
-      .select("id, slug, name, status, data")
+      .select("id, slug, name, stage, data")
       .in("id", leadIds);
 
     if (leadsError) throw leadsError;
@@ -271,7 +273,7 @@ export async function listUnreadReplyNotifications(limit = 20) {
   if (slugs.length) {
     const { data, error: leadsError } = await supabase
       .from("leads")
-      .select("id, slug, name, status, data")
+      .select("id, slug, name, stage, data")
       .in("slug", slugs);
 
     if (leadsError) throw leadsError;
@@ -300,7 +302,7 @@ export async function listUnreadReplyNotifications(limit = 20) {
       lead_id: message.lead_id || lead?.id || null,
       lead_slug: leadSlug,
       business_name: getLeadName(lead) || leadSlug || "Unknown business",
-      lead_status: getString(lead?.status) || "lead",
+      lead_status: lead ? getLeadStage(lead as Record<string, unknown>) : "lead",
       channel: getChannel(message.channel),
       body: getString(message.body),
       subject: getString(message.subject),

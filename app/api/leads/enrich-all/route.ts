@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { enrichLead } from "../../../lib/enrichLead";
+import { getLeadStage } from "../../../lib/leadLifecycle";
 import { listLeads } from "../../../lib/supabase/leads";
 
 function isPlaceholderEmail(email?: string) {
@@ -30,9 +31,9 @@ function needsEnrichment(lead: Record<string, unknown>) {
 }
 
 function isActiveLead(lead: Record<string, unknown>) {
-  const status = typeof lead.status === "string" ? lead.status : "lead";
+  const stage = getLeadStage(lead);
 
-  return status === "lead" || status === "contacted";
+  return stage === "lead" || stage === "contacted";
 }
 
 export async function POST() {
@@ -60,7 +61,7 @@ export async function POST() {
           skippedInactiveCount += 1;
           console.log("Enrich active skipped inactive lead:", {
             slug,
-            status: lead.status || "lead",
+            stage: getLeadStage(lead),
           });
           continue;
         }

@@ -1,14 +1,15 @@
-export const lifecycleStatuses = [
+export const lifecycleStages = [
   "lead",
   "contacted",
   "client",
   "archived",
 ] as const;
 
-export type LifecycleStatus = (typeof lifecycleStatuses)[number];
+export type LifecycleStage = (typeof lifecycleStages)[number];
+export type LifecycleStatus = LifecycleStage;
 
 export const lifecycleTimestampFields: Record<
-  Exclude<LifecycleStatus, "lead">,
+  Exclude<LifecycleStage, "lead">,
   string
 > = {
   contacted: "contactedAt",
@@ -18,15 +19,23 @@ export const lifecycleTimestampFields: Record<
 
 export type LeadRecord = Record<string, unknown>;
 
-export function isLifecycleStatus(status: unknown): status is LifecycleStatus {
+export function isLifecycleStage(stage: unknown): stage is LifecycleStage {
   return (
-    typeof status === "string" &&
-    lifecycleStatuses.includes(status as LifecycleStatus)
+    typeof stage === "string" &&
+    lifecycleStages.includes(stage as LifecycleStage)
   );
 }
 
-export function getLeadStatus(lead: LeadRecord): LifecycleStatus {
-  if (isLifecycleStatus(lead.status)) {
+export function isLifecycleStatus(status: unknown): status is LifecycleStatus {
+  return isLifecycleStage(status);
+}
+
+export function getLeadStage(lead: LeadRecord): LifecycleStage {
+  if (isLifecycleStage(lead.stage)) {
+    return lead.stage;
+  }
+
+  if (isLifecycleStage(lead.status)) {
     return lead.status;
   }
 
@@ -45,8 +54,12 @@ export function getLeadStatus(lead: LeadRecord): LifecycleStatus {
   return "lead";
 }
 
+export function getLeadStatus(lead: LeadRecord): LifecycleStatus {
+  return getLeadStage(lead);
+}
+
 export function isArchivedLead(lead: LeadRecord | null | undefined) {
-  return Boolean(lead && getLeadStatus(lead) === "archived");
+  return Boolean(lead && getLeadStage(lead) === "archived");
 }
 
 export function withLifecycleDefaults<T extends LeadRecord>(lead: T): T {
@@ -64,7 +77,8 @@ export function withLifecycleDefaults<T extends LeadRecord>(lead: T): T {
 
   return {
     ...currentLead,
-    status: getLeadStatus(lead),
+    stage: getLeadStage(lead),
+    status: getLeadStage(lead),
     contactedAt: typeof lead.contactedAt === "string" ? lead.contactedAt : null,
     clientAt: typeof lead.clientAt === "string" ? lead.clientAt : null,
     archivedAt: typeof lead.archivedAt === "string" ? lead.archivedAt : null,
@@ -105,5 +119,6 @@ export function normalizeLeadIdentity(lead: LeadRecord) {
 }
 
 export function shouldSkipExistingLead(existingLead: LeadRecord) {
-  return Boolean(getLeadStatus(existingLead));
+  return Boolean(getLeadStage(existingLead));
 }
+

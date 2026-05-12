@@ -770,6 +770,7 @@ export async function generateLeadsForTown(args: GenerateLeadsForTownArgs) {
       phone: place.internationalPhoneNumber || place.nationalPhoneNumber || "",
       leadPriorityScore,
       tradeValidation,
+      stage: "lead",
       status: "lead",
       contactedAt: null,
       clientAt: null,

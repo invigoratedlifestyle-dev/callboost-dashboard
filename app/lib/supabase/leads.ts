@@ -6,9 +6,10 @@ import {
   removeGeneratedSiteReferencesFromLead,
 } from "./generatedSites";
 import {
-  getLeadStatus,
+  getLeadStage,
   normalizeLeadIdentity,
   withLifecycleDefaults,
+  type LifecycleStage,
   type LifecycleStatus,
   type LeadRecord,
 } from "../leadLifecycle";
@@ -26,6 +27,7 @@ export type LeadRow = {
   email?: string | null;
   rating?: string | number | null;
   user_ratings_total?: string | number | null;
+  stage?: LifecycleStage | string | null;
   status?: LifecycleStatus | string | null;
   opportunity_score?: number | null;
   data?: LeadRecord | null;
@@ -90,8 +92,9 @@ export function rowToLead(row: LeadRow): LeadRecord {
       ? (data.business_presence as Record<string, unknown>)
       : {};
   const slug = getString(row.slug) || getString(data.slug);
-  const status = getLeadStatus({
+  const stage = getLeadStage({
     ...data,
+    stage: row.stage || data.stage || row.status || data.status,
     status: row.status || data.status,
   });
   const rowWebsite = getString(row.website) || getString(data.website);
@@ -166,7 +169,8 @@ export function rowToLead(row: LeadRow): LeadRecord {
         : typeof row.opportunity_score === "number"
           ? row.opportunity_score
           : data.leadScore,
-    status,
+    stage,
+    status: stage,
     createdAt: getString(row.created_at) || getString(data.createdAt),
     updatedAt: getString(row.updated_at) || getString(data.updatedAt),
     stripeCustomerId:
@@ -216,9 +220,12 @@ export function leadToRow(lead: LeadRecord) {
     email: getString(leadWithDefaults.email) || null,
     rating: getString(leadWithDefaults.rating) || null,
     user_ratings_total: getString(leadWithDefaults.reviewCount) || null,
-    status: getLeadStatus(leadWithDefaults),
+    stage: getLeadStage(leadWithDefaults),
     opportunity_score: opportunityScore,
-    data: leadWithDefaults,
+    data: {
+      ...leadWithDefaults,
+      stage: getLeadStage(leadWithDefaults),
+    },
   };
 }
 
@@ -240,25 +247,16 @@ export async function listLeads() {
   return rows.map((row) => rowToLead(row as LeadRow));
 }
 
+export async function listLeadsByStage(stage: LifecycleStage) {
+  const rows = await listLeadRows();
+
+  return rows
+    .map((row) => rowToLead(row as LeadRow))
+    .filter((lead) => getLeadStage(lead) === stage);
+}
+
 export async function listLeadsByStatus(status: LifecycleStatus) {
-  const supabase = getSupabaseAdmin();
-
-  let query = supabase
-    .from("leads")
-    .select("*")
-    .order("created_at", { ascending: false });
-
-  if (status === "lead") {
-    query = query.or("status.eq.lead,status.is.null");
-  } else {
-    query = query.eq("status", status);
-  }
-
-  const { data, error } = await query;
-
-  if (error) throw error;
-
-  return (data || []).map((row) => rowToLead(row as LeadRow));
+  return listLeadsByStage(status);
 }
 
 export async function getLeadRowBySlug(slug: string) {
@@ -377,9 +375,9 @@ export async function updateLeadBrandingAssets(
   return rowToLead(data as LeadRow);
 }
 
-export async function updateLeadStatusBySlug(
+export async function updateLeadStageBySlug(
   slug: string,
-  status: LifecycleStatus,
+  stage: LifecycleStage,
   reviewNotes?: string
 ) {
   const existingLeadRow = await getLeadRowBySlug(slug);
@@ -391,7 +389,8 @@ export async function updateLeadStatusBySlug(
   const now = new Date().toISOString();
   let updatedLead = withLifecycleDefaults({
     ...existingLead,
-    status,
+    stage,
+    status: stage,
     reviewNotes:
       typeof reviewNotes === "string"
         ? reviewNotes
@@ -400,22 +399,22 @@ export async function updateLeadStatusBySlug(
           : "",
   } as LeadRecord);
 
-  if (status === "contacted") {
+  if (stage === "contacted") {
     updatedLead.contactedAt = now;
   }
 
-  if (status === "client") {
+  if (stage === "client") {
     updatedLead.clientAt = now;
   }
 
-  if (status === "archived") {
+  if (stage === "archived") {
     updatedLead.archivedAt = now;
     updatedLead = removeGeneratedSiteReferencesFromLead(updatedLead);
   }
 
   const savedLead = await updateLeadBySlug(slug, updatedLead);
 
-  if (status === "archived") {
+  if (stage === "archived") {
     try {
       await purgeGeneratedSiteForLead({
         lead: savedLead,
@@ -431,6 +430,14 @@ export async function updateLeadStatusBySlug(
   }
 
   return savedLead;
+}
+
+export async function updateLeadStatusBySlug(
+  slug: string,
+  status: LifecycleStatus,
+  reviewNotes?: string
+) {
+  return updateLeadStageBySlug(slug, status, reviewNotes);
 }
 
 export async function deleteLeadsBySlugs(slugs: string[]) {
@@ -587,3 +594,4 @@ export async function insertIgnoredLead(lead: LeadRecord) {
 
   if (error) throw error;
 }
+

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import {
-  isLifecycleStatus,
+  isLifecycleStage,
   type LeadRecord,
 } from "../../../lib/leadLifecycle";
 import { listCallbacksForLead } from "../../../lib/supabase/callbacks";
@@ -9,7 +9,7 @@ import {
   getLeadRowBySlug,
   rowToLead,
   updateLeadBySlug,
-  updateLeadStatusBySlug,
+  updateLeadStageBySlug,
 } from "../../../lib/supabase/leads";
 
 function getNullableString(value: unknown) {
@@ -63,19 +63,19 @@ export async function PATCH(
 ) {
   const { slug } = await params;
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-  const status = body.status;
+  const stage = body.stage ?? body.status;
   const reviewNotes =
     typeof body.reviewNotes === "string" ? body.reviewNotes : undefined;
 
   try {
     let updatedLead: LeadRecord | null = null;
 
-    if (status !== undefined) {
-      if (!isLifecycleStatus(status)) {
-        return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+    if (stage !== undefined) {
+      if (!isLifecycleStage(stage)) {
+        return NextResponse.json({ error: "Invalid stage" }, { status: 400 });
       }
 
-      updatedLead = await updateLeadStatusBySlug(slug, status, reviewNotes);
+      updatedLead = await updateLeadStageBySlug(slug, stage, reviewNotes);
     } else {
       const existingLead = await getLeadBySlug(slug);
 

@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Lead, LeadStatus, WebsiteEvaluation } from "./lib/leads";
+import type { Lead, LeadStage, WebsiteEvaluation } from "./lib/leads";
 import { CALLBOOST_MONTHLY_RECURRING_REVENUE } from "./lib/pricing";
 
 type LeadPriority = "high" | "medium" | "low";
 type WebsiteStatus = "no_website" | "weak_website" | "has_website";
-type LeadFilter = "all" | LeadStatus;
+type LeadFilter = "all" | LeadStage;
 const DEFAULT_LEAD_FILTER: LeadFilter = "lead";
 type DashboardLead = Lead & {
   priority?: LeadPriority;
@@ -25,7 +25,8 @@ type DashboardNotification =
       id: string;
       leadSlug: string;
       businessName: string;
-      leadStatus: LeadStatus;
+      leadStage: LeadStage;
+      leadStatus?: LeadStage;
       channel: "sms" | "email";
       body: string;
       subject: string;
@@ -77,7 +78,7 @@ const qualityLabels: Record<WebsiteEvaluation["quality"], string> = {
   unknown: "Unknown",
 };
 
-const statusLabels: Record<LeadStatus, string> = {
+const stageLabels: Record<LeadStage, string> = {
   lead: "Lead",
   contacted: "Contacted",
   client: "Client",
@@ -142,11 +143,15 @@ function getMainIssue(lead: DashboardLead) {
   );
 }
 
-function getStatusBadgeClass(status?: string) {
-  if (status === "lead") return "bg-blue-500/15 text-blue-300";
-  if (status === "contacted") return "bg-slate-500/15 text-slate-300";
-  if (status === "client") return "bg-green-500/15 text-green-300";
-  if (status === "archived") return "bg-slate-700 text-slate-300";
+function getLeadStage(lead: Pick<DashboardLead, "stage" | "status">) {
+  return lead.stage || lead.status || "lead";
+}
+
+function getStageBadgeClass(stage?: string) {
+  if (stage === "lead") return "bg-blue-500/15 text-blue-300";
+  if (stage === "contacted") return "bg-slate-500/15 text-slate-300";
+  if (stage === "client") return "bg-green-500/15 text-green-300";
+  if (stage === "archived") return "bg-slate-700 text-slate-300";
   return "bg-white/10 text-slate-400";
 }
 
@@ -164,7 +169,7 @@ function getPaymentStatusLabel(lead: DashboardLead) {
   if (paymentStatus === "paid") return "Paid";
   if (paymentStatus === "payment_failed") return "Payment Failed";
   if (paymentStatus === "cancelled") return "Cancelled";
-  if (lead.status === "client" && !paymentStatus) return "Pending";
+  if (getLeadStage(lead) === "client" && !paymentStatus) return "Pending";
 
   return "";
 }
@@ -175,7 +180,7 @@ function getPaymentStatusBadgeClass(lead: DashboardLead) {
   if (paymentStatus === "paid") return "bg-green-500 text-white";
   if (paymentStatus === "payment_failed") return "bg-red-500 text-white";
   if (paymentStatus === "cancelled") return "bg-slate-600 text-white";
-  if (lead.status === "client" && !paymentStatus) {
+  if (getLeadStage(lead) === "client" && !paymentStatus) {
     return "bg-amber-500 text-slate-950";
   }
 
@@ -349,8 +354,8 @@ export default function DashboardPage() {
 
   const loadLeads = useCallback(async (filter: LeadFilter) => {
     const url =
-      filter === "all" ? "/api/leads" : `/api/leads?status=${filter}`;
-    console.log("Lead tab filter:", filter);
+      filter === "all" ? "/api/leads" : `/api/leads?stage=${filter}`;
+    console.log("Lead stage filter:", filter);
 
     const res = await fetch(url, {
       cache: "no-store",
@@ -366,7 +371,7 @@ export default function DashboardPage() {
   }, []);
 
   const loadClientRevenueLeads = useCallback(async () => {
-    const res = await fetch("/api/leads?status=client", {
+    const res = await fetch("/api/leads?stage=client", {
       cache: "no-store",
     });
 
@@ -561,7 +566,7 @@ export default function DashboardPage() {
     visibleLeads.every((lead) => selectedLeadKeys.has(getLeadSelectionKey(lead)));
   const someVisibleSelected = selectedLeads.length > 0;
   const selectedClientCount = selectedLeads.filter(
-    (lead) => lead.status === "client"
+    (lead) => getLeadStage(lead) === "client"
   ).length;
 
   useEffect(() => {
@@ -630,19 +635,19 @@ export default function DashboardPage() {
     setBulkActionError("");
 
     try {
-      const isStatusAction = action === "contacted" || action === "archived";
+      const isStageAction = action === "contacted" || action === "archived";
       const res = await fetch(
-        isStatusAction ? "/api/leads/bulk-status" : "/api/leads/enrich-selected",
+        isStageAction ? "/api/leads/bulk-stage" : "/api/leads/enrich-selected",
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify(
-            isStatusAction
+            isStageAction
               ? {
                   slugs,
-                  status: action,
+                  stage: action,
                 }
               : { slugs }
           ),
@@ -727,7 +732,7 @@ export default function DashboardPage() {
 
   const revenueSummary = useMemo(() => {
     const payingClients = clientRevenueLeads.filter(
-      (lead) => lead.status === "client" && getPaymentStatus(lead) === "paid"
+      (lead) => getLeadStage(lead) === "client" && getPaymentStatus(lead) === "paid"
     );
 
     return {
@@ -1074,7 +1079,7 @@ export default function DashboardPage() {
                   <th className="px-5 py-4">Contact</th>
                   <th className="px-5 py-4">Rating</th>
                   <th className="px-5 py-4">Payment</th>
-                  <th className="px-5 py-4">Status</th>
+                  <th className="px-5 py-4">Stage</th>
                   <th className="px-5 py-4">Action</th>
                 </tr>
               </thead>
@@ -1105,6 +1110,7 @@ export default function DashboardPage() {
                     const selected = isLeadSelected(lead);
                     const paymentFailed =
                       getPaymentStatus(lead) === "payment_failed";
+                    const leadStage = getLeadStage(lead);
 
                     return (
                       <tr
@@ -1213,11 +1219,11 @@ export default function DashboardPage() {
 
                         <td className="px-5 py-4">
                           <span
-                            className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-bold ${getStatusBadgeClass(
-                              lead.status
+                            className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-bold ${getStageBadgeClass(
+                              leadStage
                             )}`}
                           >
-                            {statusLabels[lead.status || "lead"] || "Lead"}
+                            {stageLabels[leadStage] || "Lead"}
                           </span>
                         </td>
 
@@ -1256,3 +1262,4 @@ export default function DashboardPage() {
     </main>
   );
 }
+

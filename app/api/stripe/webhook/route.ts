@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { sendEmail, sendSms } from "../../../lib/outboundMessages";
+import { getLeadStage } from "../../../lib/leadLifecycle";
 import { prepareOutboundSmsText } from "../../../lib/smsOptOut";
 import { getStripe } from "../../../lib/stripe";
 import {
@@ -54,6 +55,7 @@ type PaymentRecoveryLeadRow = {
   name?: string | null;
   phone?: string | null;
   email?: string | null;
+  stage?: string | null;
   status?: string | null;
   stripe_customer_id?: string | null;
   stripe_subscription_id?: string | null;
@@ -88,7 +90,7 @@ async function markCheckoutComplete(session: Stripe.Checkout.Session) {
   const { error } = await supabase
     .from("leads")
     .update({
-      status: "client",
+      stage: "client",
       stripe_customer_id: getStripeId(session.customer),
       stripe_checkout_session_id: session.id,
       stripe_subscription_id: getStripeId(session.subscription),
@@ -138,10 +140,10 @@ async function findPaymentRecoveryLead(invoice: Stripe.Invoice) {
     const { data, error } = await supabase
       .from("leads")
       .select(
-        "id, slug, name, phone, email, status, stripe_customer_id, stripe_subscription_id, data"
+        "id, slug, name, phone, email, stage, stripe_customer_id, stripe_subscription_id, data"
       )
       .eq(field, value)
-      .eq("status", "client")
+      .eq("stage", "client")
       .limit(1)
       .maybeSingle();
 
@@ -521,7 +523,7 @@ async function handlePaymentRecovered(invoice: Stripe.Invoice) {
 
   const updatePayload: {
     payment_status: string;
-    status?: string;
+    stage?: string;
     updated_at: string;
   } = {
     payment_status: "paid",
@@ -529,11 +531,11 @@ async function handlePaymentRecovered(invoice: Stripe.Invoice) {
   };
 
   if (
-    lead.status === "client" ||
-    lead.status === "contacted" ||
-    lead.status === "lead"
+    getLeadStage(lead as Record<string, unknown>) === "client" ||
+    getLeadStage(lead as Record<string, unknown>) === "contacted" ||
+    getLeadStage(lead as Record<string, unknown>) === "lead"
   ) {
-    updatePayload.status = "client";
+    updatePayload.stage = "client";
   }
 
   const { error: updateError } = await supabase

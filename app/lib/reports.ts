@@ -1,4 +1,5 @@
 import "server-only";
+import { getLeadStage } from "./leadLifecycle";
 import { getSupabaseAdmin } from "./supabase/server";
 
 export type ReportRange = "today" | "7d" | "30d" | "all";
@@ -19,6 +20,7 @@ type ReportLeadRow = {
   name?: string | null;
   trade?: string | null;
   city?: string | null;
+  stage?: string | null;
   status?: string | null;
   data?: Record<string, unknown> | null;
 };
@@ -232,7 +234,7 @@ async function fetchLeads() {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
     .from("leads")
-    .select("id, slug, name, trade, city, status, data")
+    .select("id, slug, name, trade, city, stage, data")
     .limit(10000);
 
   if (error) throw error;
@@ -287,9 +289,7 @@ export async function getCallBoostReport(range: ReportRange) {
     (message) => message.channel === "email"
   );
   const clientsWon = leads.filter((lead) => {
-    const status = getText(lead.status) || getText(lead.data?.status);
-
-    return status === "client";
+    return getLeadStage(lead as Record<string, unknown>) === "client";
   }).length;
   const dailyMap = new Map<string, DailyActivityRow>();
 

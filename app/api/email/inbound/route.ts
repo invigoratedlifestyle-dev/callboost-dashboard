@@ -9,7 +9,7 @@ import {
   listLeadRows,
   rowToLead,
   type LeadRow,
-  updateLeadStatusBySlug,
+  updateLeadStageBySlug,
 } from "../../../lib/supabase/leads";
 
 type InboundEmailMatch = {
@@ -293,7 +293,7 @@ export async function POST(req: Request) {
       }
 
       try {
-        await updateLeadStatusBySlug(match.slug, "archived");
+        await updateLeadStageBySlug(match.slug, "archived");
       } catch (archiveError) {
         console.error("Inbound email unsubscribe archive update failed", {
           from,

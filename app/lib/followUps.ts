@@ -14,6 +14,7 @@ export type FollowUpChannel = "sms" | "email";
 export type FollowUpLead = {
   id?: string | number | null;
   slug?: string | null;
+  stage?: string | null;
   status?: string | null;
   phone?: string | null;
   email?: string | null;
@@ -528,7 +529,7 @@ export function getFollowUpDueStatus(
     latestOutboundAt: null,
   };
 
-  if (lead.status !== "contacted" || !hasContactMethod(lead)) {
+  if ((lead.stage || lead.status) !== "contacted" || !hasContactMethod(lead)) {
     return emptyStatus;
   }
 

@@ -95,7 +95,7 @@ async function main() {
 
     const update = await supabase
       .from("leads")
-      .update({ status: "archived" })
+      .update({ stage: "archived" })
       .eq("id", lead.id);
 
     if (update.error) {

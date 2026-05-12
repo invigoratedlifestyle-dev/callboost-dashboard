@@ -13,6 +13,7 @@ export async function GET() {
       id: `reply-${reply.id}`,
       leadSlug: reply.lead_slug,
       businessName: reply.business_name,
+      leadStage: reply.lead_status,
       leadStatus: reply.lead_status,
       channel: reply.channel,
       body: reply.body,

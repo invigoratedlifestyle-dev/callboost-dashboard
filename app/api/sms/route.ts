@@ -6,7 +6,7 @@ import {
   getLeadRowBySlug,
   listLeadRows,
   rowToLead,
-  updateLeadStatusBySlug,
+  updateLeadStageBySlug,
   type LeadRow,
 } from "../../lib/supabase/leads";
 
@@ -145,7 +145,7 @@ export async function POST(req: Request) {
       }
 
       try {
-        await updateLeadStatusBySlug(match.slug, "archived");
+        await updateLeadStageBySlug(match.slug, "archived");
       } catch (archiveError) {
         console.error("Inbound SMS STOP archive update failed", {
           from,

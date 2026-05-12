@@ -32,6 +32,7 @@ type Lead = {
     service_area_card_color?: string;
     footer_background_color?: string;
   };
+  stage?: string | null;
   status?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
@@ -97,10 +98,10 @@ const workflowLabels: Record<WorkflowKey, string> = {
   design: "Design Colours",
 };
 
-const selectableLeadStatuses = new Set(["lead", "contacted", "client"]);
+const selectableLeadStages = new Set(["lead", "contacted", "client"]);
 
-function normalizeLeadStatus(status: unknown) {
-  const normalized = String(status ?? "")
+function normalizeLeadStage(stage: unknown, fallbackStatus?: unknown) {
+  const normalized = String(stage ?? fallbackStatus ?? "")
     .trim()
     .toLowerCase();
 
@@ -110,12 +111,12 @@ function normalizeLeadStatus(status: unknown) {
   return normalized;
 }
 
-function getDisplayStatus(lead?: Lead | null) {
-  const status = normalizeLeadStatus(lead?.status);
+function getDisplayStage(lead?: Lead | null) {
+  const stage = normalizeLeadStage(lead?.stage, lead?.status);
 
-  if (status === "lead") return "Lead";
-  if (status === "contacted") return "Contacted";
-  if (status === "client") return "Client";
+  if (stage === "lead") return "Lead";
+  if (stage === "contacted") return "Contacted";
+  if (stage === "client") return "Client";
 
   return "Unknown";
 }
@@ -128,7 +129,9 @@ function getLeadSortTime(lead: Lead) {
 
 function getSelectableBrandingLeads(leads: Lead[]) {
   return leads
-    .filter((lead) => selectableLeadStatuses.has(normalizeLeadStatus(lead.status)))
+    .filter((lead) =>
+      selectableLeadStages.has(normalizeLeadStage(lead.stage, lead.status))
+    )
     .sort((a, b) => getLeadSortTime(b) - getLeadSortTime(a));
 }
 
@@ -156,7 +159,7 @@ function getLeadLocation(lead?: Lead | null) {
 function getLeadDropdownLabel(lead: Lead) {
   return [
     getLeadName(lead),
-    getDisplayStatus(lead),
+    getDisplayStage(lead),
     getLeadLocation(lead),
   ]
     .filter(Boolean)
@@ -785,9 +788,9 @@ export default function BrandingPage() {
               </p>
               <p className="min-w-0 overflow-hidden">
                 <span className="block text-xs font-bold uppercase tracking-wide text-slate-500">
-                  Status
+                  Stage
                 </span>
-                <span className="block truncate">{getDisplayStatus(selectedLead)}</span>
+                <span className="block truncate">{getDisplayStage(selectedLead)}</span>
               </p>
               <p className="min-w-0 overflow-hidden">
                 <span className="block text-xs font-bold uppercase tracking-wide text-slate-500">
