@@ -20,10 +20,12 @@ export type YellowPagesCandidate = {
   title: string;
   url: string;
   snippet?: string;
+  phone?: string;
 };
 
 export type YellowPagesSearchResult = {
   query: string;
+  searchUrl: string;
   candidates: YellowPagesCandidate[];
   chosenUrl: string;
   reason: string;
@@ -117,16 +119,42 @@ function getStateFromAddress(address: string) {
   return match?.[1]?.toUpperCase() || "";
 }
 
-function buildSearchQuery(lead: LeadLike) {
-  return [getLeadName(lead), getLeadSuburb(lead), getLeadState(lead), "Yellow Pages"]
+function buildSearchQuery(lead: LeadLike, clue = getLeadName(lead)) {
+  return [clue, getLeadSuburb(lead), getLeadState(lead)]
     .filter(Boolean)
     .join(" ");
+}
+
+function buildYellowPagesSearchUrl(lead: LeadLike, clue: string) {
+  const locationClue = [getLeadSuburb(lead), getLeadState(lead)]
+    .filter(Boolean)
+    .join(" ");
+  const searchUrl = new URL("https://www.yellowpages.com.au/search/listings");
+
+  searchUrl.searchParams.set("clue", clue);
+
+  if (locationClue) {
+    searchUrl.searchParams.set("locationClue", locationClue);
+  }
+
+  return searchUrl.toString();
+}
+
+function getSearchClueVariations(lead: LeadLike) {
+  const name = getLeadName(lead);
+  const withoutSuffixes = name
+    .replace(/\b(?:pty\.?|ltd\.?|limited|proprietary)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const firstTwoWords = withoutSuffixes.split(/\s+/).slice(0, 2).join(" ");
+
+  return [...new Set([name, withoutSuffixes, firstTwoWords].filter(Boolean))];
 }
 
 function normalizeBusinessName(value: string) {
   return value
     .toLowerCase()
-    .replace(/&/g, " and ")
+    .replace(/&/g, " ")
     .replace(/\b(?:pty|ltd|limited|proprietary|company|co|inc|pl|aust|australia)\b/g, " ")
     .replace(/\b(?:and|the)\b/g, " ")
     .replace(/[^a-z0-9]+/g, " ")
@@ -150,11 +178,30 @@ function isCandidateMatch(lead: LeadLike, candidate: YellowPagesCandidate) {
   }
 
   const leadTokens = getNameTokens(leadName);
-  const candidateTokens = new Set(getNameTokens(candidateTitle));
+  const candidateTokens = getNameTokens(candidateTitle);
+  const leadTokenText = leadTokens.join(" ");
+  const candidateTokenText = candidateTokens.join(" ");
+  const partialLeadTexts = [
+    leadTokenText,
+    leadTokens.slice(0, 3).join(" "),
+    leadTokens.slice(0, 2).join(" "),
+    leadTokens.slice(1, 3).join(" "),
+  ].filter((value) => value.length >= 5);
+
+  if (
+    partialLeadTexts.some(
+      (partial) =>
+        candidateTokenText.includes(partial) || partial.includes(candidateTokenText)
+    )
+  ) {
+    return true;
+  }
+
+  const candidateTokenSet = new Set(candidateTokens);
 
   if (leadTokens.length === 0) return false;
 
-  const matchedTokens = leadTokens.filter((token) => candidateTokens.has(token));
+  const matchedTokens = leadTokens.filter((token) => candidateTokenSet.has(token));
   const requiredMatches = Math.max(1, Math.ceil(leadTokens.length * 0.7));
 
   return matchedTokens.length >= requiredMatches;
@@ -200,36 +247,77 @@ function normalizeYellowPagesUrl(rawUrl: string) {
   }
 }
 
+function isInvalidYellowPagesListingUrl(url: string) {
+  return (
+    !url ||
+    /\/httpservice\//i.test(url) ||
+    /\/retry\//i.test(url) ||
+    /enablejs/i.test(url) ||
+    /captcha/i.test(url) ||
+    /\/search\//i.test(url) ||
+    /\/advertise\//i.test(url) ||
+    /\/contact-us/i.test(url)
+  );
+}
+
+function isGenericAnchorText(value: string) {
+  return /^(?:click\s+)?here$/i.test(value.trim()) || /^learn more$/i.test(value.trim());
+}
+
+function extractPhoneFromText(value: string) {
+  const match = value.match(
+    /(?:\+?61[\s.-]?)?(?:0[\s.-]?)?[2378][\d\s.-]{7,12}|(?:\+?61[\s.-]?)?(?:0[\s.-]?)?4[\d\s.-]{7,12}/
+  );
+
+  return match ? normalizePhone(match[0]) : "";
+}
+
+function uniqueCandidates(candidates: YellowPagesCandidate[]) {
+  const seenUrls = new Set<string>();
+  const unique: YellowPagesCandidate[] = [];
+
+  for (const candidate of candidates) {
+    if (!candidate.url || seenUrls.has(candidate.url)) continue;
+
+    seenUrls.add(candidate.url);
+    unique.push(candidate);
+  }
+
+  return unique;
+}
+
 function extractSearchCandidates(html: string) {
-  const candidates: YellowPagesCandidate[] = [];
+  const rawCandidates: YellowPagesCandidate[] = [];
   const seenUrls = new Set<string>();
   const linkMatches = [...html.matchAll(/<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)];
 
   for (const match of linkMatches) {
     const url = normalizeYellowPagesUrl(match[1] || "");
+    const title = stripHtml(match[2] || "");
 
     if (
       !url ||
       seenUrls.has(url) ||
-      /\/search\//i.test(url) ||
-      /\/advertise\//i.test(url) ||
-      /\/contact-us/i.test(url)
+      isInvalidYellowPagesListingUrl(url) ||
+      !title ||
+      isGenericAnchorText(title)
     ) {
       continue;
     }
 
-    const title = stripHtml(match[2] || "");
     const startIndex = typeof match.index === "number" ? match.index + match[0].length : 0;
-    const nearbyHtml = html.slice(startIndex, startIndex + 700);
+    const nearbyHtml = html.slice(Math.max(0, startIndex - 500), startIndex + 1000);
     const snippet = stripHtml(nearbyHtml)
       .replace(/^Cached\s*/i, "")
       .slice(0, 240);
+    const phone = extractPhoneFromText(snippet);
 
     seenUrls.add(url);
-    candidates.push({
+    rawCandidates.push({
       title: title || url,
       url,
       ...(snippet ? { snippet } : {}),
+      ...(phone ? { phone } : {}),
     });
   }
 
@@ -237,15 +325,15 @@ function extractSearchCandidates(html: string) {
 
   if (plainMatch) {
     const url = normalizeYellowPagesUrl(plainMatch[0]);
-    if (url && !seenUrls.has(url)) {
-      candidates.push({
+    if (url && !seenUrls.has(url) && !isInvalidYellowPagesListingUrl(url)) {
+      rawCandidates.push({
         title: url,
         url,
       });
     }
   }
 
-  return candidates.slice(0, 10);
+  return uniqueCandidates(rawCandidates).slice(0, 15);
 }
 
 function extractJsonLd(html: string) {
@@ -483,16 +571,18 @@ function compactDetails(details: YellowPagesDetails) {
 export async function searchYellowPagesListings(
   lead: LeadLike
 ): Promise<YellowPagesSearchResult> {
-  const query = buildSearchQuery(lead);
+  const searchClues = getSearchClueVariations(lead);
+  const query = buildSearchQuery(lead, searchClues[0] || getLeadName(lead));
   const name = getLeadName(lead);
 
-  if (!query || !name) {
+  if (!query || !name || searchClues.length === 0) {
     console.log("YELLOW_PAGES_NO_LISTING", {
       name,
       reason: "missing_search_terms",
     });
     return {
       query,
+      searchUrl: "",
       candidates: [],
       chosenUrl: "",
       reason: "missing_search_terms",
@@ -506,76 +596,129 @@ export async function searchYellowPagesListings(
     query,
   });
 
-  try {
-    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
-    const html = await fetchTextWithTimeout(searchUrl);
-    const candidates = extractSearchCandidates(html);
-    const matchedCandidate = candidates.find((candidate) =>
-      isCandidateMatch(lead, candidate)
-    );
-    const fallbackCandidate = candidates.length === 1 ? candidates[0] : undefined;
-    const chosenCandidate = matchedCandidate || fallbackCandidate;
+  let lastSearchUrl = "";
+  let lastQuery = query;
+  let lastCandidates: YellowPagesCandidate[] = [];
+  let lastReason = "no_search_attempted";
 
-    console.log("YELLOW_PAGES_SEARCH_CANDIDATES", {
+  for (const clue of searchClues) {
+    const attemptQuery = buildSearchQuery(lead, clue);
+    const searchUrl = buildYellowPagesSearchUrl(lead, clue);
+    lastSearchUrl = searchUrl;
+    lastQuery = attemptQuery;
+
+    console.log("YELLOW_PAGES_SEARCH_URL", {
       name,
-      query,
-      candidates: candidates.map((candidate) => ({
-        title: candidate.title,
-        url: candidate.url,
-      })),
-      chosenUrl: chosenCandidate?.url || "",
-      reason: matchedCandidate
+      query: attemptQuery,
+      clue,
+      searchUrl,
+    });
+
+    try {
+      const html = await fetchTextWithTimeout(searchUrl);
+      const candidates = extractSearchCandidates(html);
+      lastCandidates = candidates;
+
+      console.log("YELLOW_PAGES_RAW_CANDIDATES", {
+        name,
+        query: attemptQuery,
+        searchUrl,
+        candidates: candidates.map((candidate) => ({
+          title: candidate.title,
+          url: candidate.url,
+          phone: candidate.phone,
+          snippet: candidate.snippet,
+        })),
+      });
+
+      const filteredCandidates = candidates.filter(
+        (candidate) =>
+          !isInvalidYellowPagesListingUrl(candidate.url) &&
+          !isGenericAnchorText(candidate.title)
+      );
+      lastCandidates = filteredCandidates;
+
+      console.log("YELLOW_PAGES_FILTERED_CANDIDATES", {
+        name,
+        query: attemptQuery,
+        searchUrl,
+        candidates: filteredCandidates.map((candidate) => ({
+          title: candidate.title,
+          url: candidate.url,
+          phone: candidate.phone,
+        })),
+      });
+
+      const matchedCandidate = filteredCandidates.find((candidate) =>
+        isCandidateMatch(lead, candidate)
+      );
+      const fallbackCandidate =
+        filteredCandidates.length === 1 ? filteredCandidates[0] : undefined;
+      const chosenCandidate = matchedCandidate || fallbackCandidate;
+      const reason = matchedCandidate
         ? "matched_business_name"
         : fallbackCandidate
           ? "single_candidate_fallback"
-          : candidates.length
+          : filteredCandidates.length
             ? "no_candidate_matched"
-            : "no_candidates_found",
-    });
+            : "no_candidates_found";
 
-    if (chosenCandidate?.url) {
-      console.log("YELLOW_PAGES_LISTING_FOUND", {
+      console.log("YELLOW_PAGES_MATCH_DECISION", {
         name,
-        url: chosenCandidate.url,
-        title: chosenCandidate.title,
-        reason: matchedCandidate ? "matched_business_name" : "single_candidate_fallback",
+        query: attemptQuery,
+        searchUrl,
+        chosenUrl: chosenCandidate?.url || "",
+        chosenTitle: chosenCandidate?.title || "",
+        reason,
       });
-      return {
-        query,
-        candidates,
-        chosenUrl: chosenCandidate.url,
-        reason: matchedCandidate ? "matched_business_name" : "single_candidate_fallback",
-      };
-    }
 
-    console.log("YELLOW_PAGES_NO_LISTING", {
-      name,
-      query,
-      candidates: candidates.map((candidate) => ({
-        title: candidate.title,
-        url: candidate.url,
-      })),
-      reason: candidates.length ? "no_candidate_matched" : "no_candidates_found",
-    });
-    return {
-      query,
-      candidates,
-      chosenUrl: "",
-      reason: candidates.length ? "no_candidate_matched" : "no_candidates_found",
-    };
-  } catch (error) {
-    console.log("YELLOW_PAGES_NO_LISTING", {
-      name,
-      query,
-      reason: error instanceof Error ? error.message : "search_failed",
-    });
-    return {
-      query,
-      candidates: [],
-      chosenUrl: "",
-      reason: error instanceof Error ? error.message : "search_failed",
-    };
+      if (chosenCandidate?.url) {
+        console.log("YELLOW_PAGES_LISTING_FOUND", {
+          name,
+          url: chosenCandidate.url,
+          title: chosenCandidate.title,
+          reason,
+        });
+
+        return {
+          query: attemptQuery,
+          searchUrl,
+          candidates: filteredCandidates,
+          chosenUrl: chosenCandidate.url,
+          reason,
+        };
+      }
+
+      lastReason = reason;
+    } catch (error) {
+      lastReason = error instanceof Error ? error.message : "search_failed";
+      console.log("YELLOW_PAGES_NO_LISTING", {
+        name,
+        query: attemptQuery,
+        searchUrl,
+        reason: lastReason,
+      });
+    }
   }
+
+  console.log("YELLOW_PAGES_NO_LISTING", {
+    name,
+    query: lastQuery,
+    searchUrl: lastSearchUrl,
+    candidates: lastCandidates.map((candidate) => ({
+      title: candidate.title,
+      url: candidate.url,
+    })),
+    reason: lastReason,
+  });
+
+  return {
+    query: lastQuery,
+    searchUrl: lastSearchUrl,
+    candidates: lastCandidates,
+    chosenUrl: "",
+    reason: lastReason,
+  };
 }
 
 export async function findYellowPagesListing(lead: LeadLike) {
@@ -647,9 +790,23 @@ export async function enrichLeadFromYellowPages(lead: LeadLike) {
       return searchResult.candidates.length
         ? {
             ...lead,
+            yellow_pages_search: {
+              query: searchResult.query,
+              searchUrl: searchResult.searchUrl,
+              candidateCount: searchResult.candidates.length,
+              fetchedAt: new Date().toISOString(),
+            },
             yellow_pages_candidates: searchResult.candidates,
           }
-        : lead;
+        : {
+            ...lead,
+            yellow_pages_search: {
+              query: searchResult.query,
+              searchUrl: searchResult.searchUrl,
+              candidateCount: 0,
+              fetchedAt: new Date().toISOString(),
+            },
+          };
     }
 
     const yellowPages = await scrapeYellowPagesListing(listingUrl);
@@ -657,6 +814,12 @@ export async function enrichLeadFromYellowPages(lead: LeadLike) {
     const nextLead: LeadLike = {
       ...lead,
       yellow_pages: yellowPages,
+      yellow_pages_search: {
+        query: searchResult.query,
+        searchUrl: searchResult.searchUrl,
+        candidateCount: searchResult.candidates.length,
+        fetchedAt: new Date().toISOString(),
+      },
       yellow_pages_candidates: searchResult.candidates,
     };
     const updatedFields: string[] = [];
