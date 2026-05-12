@@ -3,6 +3,7 @@ export type TradeValidationResult = {
   score: number;
   matchedTerms: string[];
   rejectedTerms: string[];
+  reason?: string;
   validatedAt: string;
   isValid: boolean;
 };
@@ -10,10 +11,16 @@ export type TradeValidationResult = {
 type TradeValidationPlace = {
   displayName?: {
     text?: string;
-  };
+  } | string;
+  businessName?: string;
+  name?: string;
   formattedAddress?: string;
   websiteUri?: string;
+  website?: string;
   types?: string[];
+  primaryType?: string;
+  primary_type?: string;
+  businessStatus?: string;
   searchQueryFoundFrom?: string;
 };
 
@@ -46,7 +53,6 @@ const tradeRules: Record<string, TradeRuleSet> = {
       "roofer",
       "landscaper",
       "cleaner",
-      "general contractor",
       "renovation",
     ],
   },
@@ -85,11 +91,59 @@ const tradeRules: Record<string, TradeRuleSet> = {
       "roofer",
       "landscaper",
       "cleaner",
-      "general contractor",
       "renovation",
     ],
   },
 };
+
+const foodHospitalityRetailTypes = new Set([
+  "restaurant",
+  "meal_takeaway",
+  "food",
+  "cafe",
+  "bakery",
+  "bar",
+  "lodging",
+  "store",
+  "supermarket",
+  "convenience_store",
+  "tourist_attraction",
+]);
+
+const negativeNameTerms = [
+  "takeaway",
+  "restaurant",
+  "cafe",
+  "food",
+  "pizza",
+  "bakery",
+  "hotel",
+  "motel",
+  "accommodation",
+  "supermarket",
+  "bottle shop",
+];
+
+const plumberTradeTypes = new Set([
+  "plumber",
+  "plumbing",
+  "contractor",
+  "general_contractor",
+]);
+
+const plumberIntentTerms = [
+  "plumber",
+  "plumbers",
+  "plumbing",
+  "gas fitting",
+  "gas fitter",
+  "gasfitter",
+  "gas fitters",
+  "gasfitters",
+  "blocked drain",
+  "drain",
+  "hot water",
+];
 
 function normalizeTrade(value: string) {
   const normalized = value.toLowerCase().trim();
@@ -131,16 +185,144 @@ function includesTerm(text: string, term: string) {
   return pattern.test(text);
 }
 
+function getDisplayNameText(place: TradeValidationPlace) {
+  if (typeof place.displayName === "string") {
+    return place.displayName;
+  }
+
+  return place.displayName?.text || place.businessName || place.name || "";
+}
+
+function getPrimaryType(place: TradeValidationPlace) {
+  return normalizeText(place.primaryType || place.primary_type || "");
+}
+
+function getNormalizedTypes(place: TradeValidationPlace) {
+  return Array.from(
+    new Set(
+      [...(place.types || []), getPrimaryType(place)]
+        .map((type) => normalizeText(type).replace(/\s+/g, "_"))
+        .filter(Boolean)
+    )
+  );
+}
+
+function hasAnyTerm(text: string, terms: string[]) {
+  return terms.some((term) => includesTerm(text, term));
+}
+
+export function isGooglePlaceRelevantForTrade(
+  place: TradeValidationPlace,
+  targetTrade: string
+) {
+  const normalizedTargetTrade = normalizeTrade(targetTrade);
+  const name = normalizeText(getDisplayNameText(place));
+  const website = normalizeText(place.websiteUri || place.website || "");
+  const primaryType = getPrimaryType(place).replace(/\s+/g, "_");
+  const types = getNormalizedTypes(place);
+  const categoryTypes = new Set([...types, primaryType].filter(Boolean));
+  const nameAndWebsite = `${name} ${website}`;
+  const matchedNegativeNameTerm = negativeNameTerms.find((term) =>
+    includesTerm(name, term)
+  );
+  const matchedNegativeType = [...categoryTypes].find((type) =>
+    foodHospitalityRetailTypes.has(type)
+  );
+
+  if (matchedNegativeNameTerm) {
+    return {
+      isRelevant: false,
+      reason: `negative_name_keyword:${matchedNegativeNameTerm}`,
+      primaryType,
+      types,
+    };
+  }
+
+  if (matchedNegativeType) {
+    return {
+      isRelevant: false,
+      reason: `negative_place_type:${matchedNegativeType}`,
+      primaryType,
+      types,
+    };
+  }
+
+  if (
+    normalizedTargetTrade !== "plumber" &&
+    normalizedTargetTrade !== "plumbing-gas-fitting"
+  ) {
+    return {
+      isRelevant: true,
+      reason: "no_strict_place_type_rules",
+      primaryType,
+      types,
+    };
+  }
+
+  const matchedPlumberType = [...categoryTypes].find((type) =>
+    plumberTradeTypes.has(type)
+  );
+
+  if (matchedPlumberType) {
+    return {
+      isRelevant: true,
+      reason: `matched_place_type:${matchedPlumberType}`,
+      primaryType,
+      types,
+    };
+  }
+
+  if (
+    categoryTypes.has("home_goods_store") &&
+    hasAnyTerm(nameAndWebsite, plumberIntentTerms)
+  ) {
+    return {
+      isRelevant: true,
+      reason: "matched_home_goods_store_with_plumbing_intent",
+      primaryType,
+      types,
+    };
+  }
+
+  if (
+    (categoryTypes.size === 0 ||
+      [...categoryTypes].every((type) =>
+        ["point_of_interest", "establishment"].includes(type)
+      )) &&
+    hasAnyTerm(nameAndWebsite, plumberIntentTerms)
+  ) {
+    return {
+      isRelevant: true,
+      reason: "matched_name_or_website_plumbing_intent",
+      primaryType,
+      types,
+    };
+  }
+
+  return {
+    isRelevant: false,
+    reason: categoryTypes.has("point_of_interest")
+      ? "point_of_interest_without_trade_specific_type"
+      : "missing_plumbing_place_type",
+    primaryType,
+    types,
+  };
+}
+
 export function isValidTradeLead(
   place: TradeValidationPlace,
   targetTrade: string
 ): TradeValidationResult {
   const normalizedTargetTrade = normalizeTrade(targetTrade);
   const rules = tradeRules[normalizedTargetTrade];
+  const placeRelevance = isGooglePlaceRelevantForTrade(place, targetTrade);
   const searchableText = normalizeText([
-    place.displayName?.text,
+    getDisplayNameText(place),
     place.formattedAddress,
     place.websiteUri,
+    place.website,
+    place.primaryType,
+    place.primary_type,
     place.searchQueryFoundFrom,
     ...(place.types || []),
   ].join(" "));
@@ -154,8 +336,21 @@ export function isValidTradeLead(
       score: 3,
       matchedTerms: [normalizedTargetTrade],
       rejectedTerms: [],
+      reason: placeRelevance.reason,
       validatedAt: new Date().toISOString(),
-      isValid: true,
+      isValid: placeRelevance.isRelevant,
+    };
+  }
+
+  if (!placeRelevance.isRelevant) {
+    return {
+      targetTrade: normalizedTargetTrade,
+      score,
+      matchedTerms: [],
+      rejectedTerms: [placeRelevance.reason],
+      reason: placeRelevance.reason,
+      validatedAt: new Date().toISOString(),
+      isValid: false,
     };
   }
 
@@ -173,6 +368,14 @@ export function isValidTradeLead(
     }
   }
 
+  if (
+    matchedTerms.length === 0 &&
+    placeRelevance.reason?.startsWith("matched_place_type:")
+  ) {
+    score += 3;
+    matchedTerms.push(placeRelevance.reason.replace("matched_place_type:", ""));
+  }
+
   for (const term of rules.rejectedTerms) {
     if (includesTerm(searchableText, term)) {
       score -= 5;
@@ -185,6 +388,7 @@ export function isValidTradeLead(
     score,
     matchedTerms: Array.from(new Set(matchedTerms)),
     rejectedTerms: Array.from(new Set(rejectedTerms)),
+    reason: rejectedTerms.length ? "rejected_keyword" : placeRelevance.reason,
     validatedAt: new Date().toISOString(),
     isValid: score >= 3,
   };

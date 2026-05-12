@@ -9,6 +9,7 @@ import {
   insertLead,
   updateLeadBySlug,
 } from "../../lib/supabase/leads";
+import { isValidTradeLead } from "../../lib/tradeValidation";
 
 type GenerateRequest = {
   query?: string;
@@ -26,6 +27,11 @@ type GooglePlace = {
   userRatingCount?: number;
   nationalPhoneNumber?: string;
   websiteUri?: string;
+  formattedAddress?: string;
+  types?: string[];
+  primaryType?: string;
+  primary_type?: string;
+  businessStatus?: string;
 };
 
 type GoogleSearchTextResponse = {
@@ -66,7 +72,7 @@ async function searchText(query: string, apiKey: string) {
       "Content-Type": "application/json",
       "X-Goog-Api-Key": apiKey,
       "X-Goog-FieldMask":
-        "places.id,places.displayName,places.rating,places.userRatingCount,places.nationalPhoneNumber,places.websiteUri",
+        "places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.nationalPhoneNumber,places.websiteUri,places.types,places.primaryType,places.businessStatus",
     },
     body: JSON.stringify({
       textQuery: query,
@@ -126,6 +132,19 @@ export async function POST(req: Request) {
         continue;
       }
 
+      const tradeValidation = isValidTradeLead(place, trade);
+
+      if (!tradeValidation.isValid) {
+        console.log("[lead-validation] rejected place", {
+          name: businessName,
+          trade,
+          primaryType: place.primaryType || place.primary_type || "",
+          types: place.types || [],
+          reason: tradeValidation.reason || "wrong_trade",
+        });
+        continue;
+      }
+
       const slug = slugify(businessName);
 
       if (!slug) {
@@ -151,6 +170,7 @@ export async function POST(req: Request) {
         businessName,
         trade,
         city,
+        formattedAddress: place.formattedAddress || getString(existingLead.formattedAddress),
         phone,
         website,
         rating:
@@ -167,6 +187,11 @@ export async function POST(req: Request) {
               : getString(existingLead.reviewCount),
         email: getString(existingLead.email),
         status: getString(existingLead.status) || "new",
+        tradeValidation,
+        source: "google_places",
+        types: place.types || [],
+        primaryType: place.primaryType || place.primary_type || "",
+        businessStatus: place.businessStatus || "",
         description: getString(existingLead.description),
         services: Array.isArray(existingLead.services)
           ? existingLead.services

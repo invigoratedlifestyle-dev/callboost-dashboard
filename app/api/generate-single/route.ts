@@ -10,6 +10,7 @@ import {
   rowToLead,
   updateLeadBySlug,
 } from "../../lib/supabase/leads";
+import { isValidTradeLead } from "../../lib/tradeValidation";
 
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -106,6 +107,14 @@ function getStringField(record: Record<string, unknown>, field: string) {
   return typeof value === "string" ? value : "";
 }
 
+function hasGooglePlaceCategorySignals(lead: Record<string, unknown>) {
+  return (
+    (Array.isArray(lead.types) && lead.types.length > 0) ||
+    Boolean(getStringField(lead, "primaryType")) ||
+    Boolean(getStringField(lead, "primary_type"))
+  );
+}
+
 export async function POST(req: Request) {
   try {
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
@@ -142,6 +151,33 @@ export async function POST(req: Request) {
       existingLead.trade
     );
     const templateType = normalizeTemplateType(body.templateType);
+    const tradeValidation = hasGooglePlaceCategorySignals(existingLead)
+      ? isValidTradeLead(existingLead, templateTrade)
+      : null;
+
+    if (tradeValidation && !tradeValidation.isValid) {
+      console.log("[lead-validation] rejected place", {
+        name:
+          getStringField(existingLead, "businessName") ||
+          getStringField(existingLead, "name"),
+        trade: templateTrade,
+        primaryType:
+          getStringField(existingLead, "primaryType") ||
+          getStringField(existingLead, "primary_type"),
+        types: Array.isArray(existingLead.types) ? existingLead.types : [],
+        reason: tradeValidation.reason || "wrong_trade",
+      });
+
+      return NextResponse.json(
+        {
+          error:
+            "This lead does not look like a match for the selected trade. Check the Google business category before generating a site.",
+          details: tradeValidation.reason || "wrong_trade",
+        },
+        { status: 400 }
+      );
+    }
+
     const prompt = `
 Generate local business website content.
 

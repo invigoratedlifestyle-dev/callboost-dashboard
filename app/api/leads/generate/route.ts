@@ -67,6 +67,9 @@ type GooglePlace = {
   nationalPhoneNumber?: string;
   internationalPhoneNumber?: string;
   types?: string[];
+  primaryType?: string;
+  primary_type?: string;
+  businessStatus?: string;
   searchQueryFoundFrom?: string;
 };
 
@@ -447,7 +450,7 @@ async function textSearch(
         "Content-Type": "application/json",
         "X-Goog-Api-Key": apiKey,
         "X-Goog-FieldMask":
-          "places.id,places.displayName,places.addressComponents,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.websiteUri,places.nationalPhoneNumber,places.internationalPhoneNumber,places.types",
+          "places.id,places.displayName,places.addressComponents,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.websiteUri,places.nationalPhoneNumber,places.internationalPhoneNumber,places.types,places.primaryType,places.businessStatus",
       },
       body: JSON.stringify(body),
     });
@@ -756,9 +759,13 @@ export async function POST(req: Request) {
 
       if (!tradeValidation.isValid) {
         skippedWrongTrade += 1;
-        console.log(
-          `Skipped wrong trade: ${businessName} | targetTrade: ${trade} | score: ${tradeValidation.score}`
-        );
+        console.log("[lead-validation] rejected place", {
+          name: businessName,
+          trade,
+          primaryType: place.primaryType || place.primary_type || "",
+          types: place.types || [],
+          reason: tradeValidation.reason || "wrong_trade",
+        });
 
         await saveIgnoredLead(
           place,
@@ -862,6 +869,8 @@ export async function POST(req: Request) {
         targetRadiusMeters: cityTarget.radiusMeters,
         sourceQuery: place.searchQueryFoundFrom || "",
         types: place.types || [],
+        primaryType: place.primaryType || place.primary_type || "",
+        businessStatus: place.businessStatus || "",
         email: "",
         description: "",
         services: [],
