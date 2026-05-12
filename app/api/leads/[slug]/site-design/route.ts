@@ -12,6 +12,7 @@ import {
   getLeadRowBySlug,
   rowToLead,
   updateLeadBySlug,
+  updateLeadStatus,
 } from "../../../../lib/supabase/leads";
 
 const DEFAULT_BUTTON_COLOR = "#14b8a6";
@@ -145,7 +146,9 @@ export async function POST(
         footer_background_color: footerBackgroundColor,
       },
     });
-    const savedLead = await updateLeadBySlug(slug, updatedLead);
+    let savedLead = await updateLeadBySlug(slug, updatedLead);
+    savedLead =
+      (await updateLeadStatus(slug, "ready_for_client")) || savedLead;
     const existingSite = await getGeneratedSiteBySlug(slug);
     const generatedSite = existingSite
       ? await saveGeneratedSite({

@@ -7,12 +7,18 @@ import {
 } from "./generatedSites";
 import {
   getLeadStage,
+  isLifecycleStage,
   normalizeLeadIdentity,
   withLifecycleDefaults,
   type LifecycleStage,
   type LifecycleStatus,
   type LeadRecord,
 } from "../leadLifecycle";
+import {
+  normalizeLeadStatus,
+  shouldPreserveLeadStatus,
+  type LeadStatus,
+} from "../leadWorkflow";
 
 export type LeadRow = {
   id?: string | number;
@@ -28,7 +34,9 @@ export type LeadRow = {
   rating?: string | number | null;
   user_ratings_total?: string | number | null;
   stage?: LifecycleStage | string | null;
-  status?: LifecycleStatus | string | null;
+  status?: LeadStatus | string | null;
+  status_updated_at?: string | null;
+  last_activity_at?: string | null;
   opportunity_score?: number | null;
   data?: LeadRecord | null;
   created_at?: string | null;
@@ -92,11 +100,15 @@ export function rowToLead(row: LeadRow): LeadRecord {
       ? (data.business_presence as Record<string, unknown>)
       : {};
   const slug = getString(row.slug) || getString(data.slug);
+  const legacyDataStatus = data.status;
   const stage = getLeadStage({
     ...data,
-    stage: row.stage || data.stage || row.status || data.status,
-    status: row.status || data.status,
+    stage:
+      row.stage ||
+      data.stage ||
+      (isLifecycleStage(legacyDataStatus) ? legacyDataStatus : ""),
   });
+  const status = normalizeLeadStatus(row.status || data.workflowStatus || data.status);
   const rowWebsite = getString(row.website) || getString(data.website);
   const canonicalWebsite = getString(businessPresence.canonicalWebsiteUrl);
   const rowWebsitePresenceType = getBusinessPresenceType(rowWebsite);
@@ -170,7 +182,16 @@ export function rowToLead(row: LeadRow): LeadRecord {
           ? row.opportunity_score
           : data.leadScore,
     stage,
-    status: stage,
+    status,
+    workflowStatus: status,
+    statusUpdatedAt:
+      getString(row.status_updated_at) || getString(data.statusUpdatedAt),
+    status_updated_at:
+      getString(row.status_updated_at) || getString(data.status_updated_at),
+    lastActivityAt:
+      getString(row.last_activity_at) || getString(data.lastActivityAt),
+    last_activity_at:
+      getString(row.last_activity_at) || getString(data.last_activity_at),
     createdAt: getString(row.created_at) || getString(data.createdAt),
     updatedAt: getString(row.updated_at) || getString(data.updatedAt),
     stripeCustomerId:
@@ -193,6 +214,17 @@ export function rowToLead(row: LeadRow): LeadRecord {
 
 export function leadToRow(lead: LeadRecord) {
   const leadWithDefaults = withLifecycleDefaults(lead);
+  const status = normalizeLeadStatus(
+    leadWithDefaults.status || leadWithDefaults.workflowStatus
+  );
+  const statusUpdatedAt =
+    getString(leadWithDefaults.statusUpdatedAt) ||
+    getString(leadWithDefaults.status_updated_at) ||
+    null;
+  const lastActivityAt =
+    getString(leadWithDefaults.lastActivityAt) ||
+    getString(leadWithDefaults.last_activity_at) ||
+    null;
   const websiteEvaluation = leadWithDefaults.websiteEvaluation as
     | Record<string, unknown>
     | undefined;
@@ -221,10 +253,17 @@ export function leadToRow(lead: LeadRecord) {
     rating: getString(leadWithDefaults.rating) || null,
     user_ratings_total: getString(leadWithDefaults.reviewCount) || null,
     stage: getLeadStage(leadWithDefaults),
+    status,
+    status_updated_at: statusUpdatedAt,
+    last_activity_at: lastActivityAt,
     opportunity_score: opportunityScore,
     data: {
       ...leadWithDefaults,
       stage: getLeadStage(leadWithDefaults),
+      status,
+      workflowStatus: status,
+      statusUpdatedAt,
+      lastActivityAt,
     },
   };
 }
@@ -257,6 +296,14 @@ export async function listLeadsByStage(stage: LifecycleStage) {
 
 export async function listLeadsByStatus(status: LifecycleStatus) {
   return listLeadsByStage(status);
+}
+
+export async function listLeadsByWorkflowStatus(status: LeadStatus) {
+  const rows = await listLeadRows();
+
+  return rows
+    .map((row) => rowToLead(row as LeadRow))
+    .filter((lead) => normalizeLeadStatus(lead.status) === status);
 }
 
 export async function getLeadRowBySlug(slug: string) {
@@ -299,7 +346,13 @@ export async function getLeadById(id: string | number) {
 
 export async function insertLead(lead: LeadRecord) {
   const supabase = getSupabaseAdmin();
-  const row = leadToRow(lead);
+  const now = new Date().toISOString();
+  const row = leadToRow({
+    ...lead,
+    status: normalizeLeadStatus(lead.status),
+    statusUpdatedAt: getString(lead.statusUpdatedAt) || now,
+    lastActivityAt: getString(lead.lastActivityAt) || now,
+  });
   const { data, error } = await supabase
     .from("leads")
     .insert(row)
@@ -335,6 +388,65 @@ export async function updateLeadBySlug(slug: string, lead: LeadRecord) {
   return rowToLead(data as LeadRow);
 }
 
+export async function updateLeadStatus(
+  slug: string,
+  status: LeadStatus,
+  options: { touchActivity?: boolean; preserveTerminal?: boolean } = {}
+) {
+  const existingLeadRow = await getLeadRowBySlug(slug);
+
+  if (!existingLeadRow) return null;
+
+  const existingLead = rowToLead(existingLeadRow);
+
+  if (
+    options.preserveTerminal !== false &&
+    shouldPreserveLeadStatus(existingLead.status)
+  ) {
+    return existingLead;
+  }
+
+  const now = new Date().toISOString();
+
+  return updateLeadBySlug(slug, {
+    ...existingLead,
+    status,
+    workflowStatus: status,
+    statusUpdatedAt: now,
+    lastActivityAt: options.touchActivity === false
+      ? getString(existingLead.lastActivityAt) ||
+        getString(existingLead.last_activity_at) ||
+        now
+      : now,
+  });
+}
+
+export async function touchLeadActivity(slug: string) {
+  const existingLeadRow = await getLeadRowBySlug(slug);
+
+  if (!existingLeadRow) return null;
+
+  const existingLead = rowToLead(existingLeadRow);
+  const now = new Date().toISOString();
+  const nextStatus =
+    normalizeLeadStatus(existingLead.status) === "new"
+      ? "in_progress"
+      : normalizeLeadStatus(existingLead.status);
+
+  return updateLeadBySlug(slug, {
+    ...existingLead,
+    status: nextStatus,
+    workflowStatus: nextStatus,
+    statusUpdatedAt:
+      nextStatus === "in_progress" && normalizeLeadStatus(existingLead.status) === "new"
+        ? now
+        : getString(existingLead.statusUpdatedAt) ||
+          getString(existingLead.status_updated_at) ||
+          now,
+    lastActivityAt: now,
+  });
+}
+
 export async function updateLeadBrandingAssets(
   slug: string,
   assets: {
@@ -348,11 +460,28 @@ export async function updateLeadBrandingAssets(
   if (!existingLeadRow) return null;
 
   const now = new Date().toISOString();
+  const existingStatus = normalizeLeadStatus(rowToLead(existingLeadRow).status);
+  const hasGeneratedSite =
+    Boolean(getString(rowToLead(existingLeadRow).generatedSiteUrl)) ||
+    Boolean(getString(rowToLead(existingLeadRow).generatedSitePublicUrl));
+  const nextStatus =
+    assets.siteBrandingUrl && hasGeneratedSite && !shouldPreserveLeadStatus(existingStatus)
+      ? "ready_for_client"
+      : existingStatus;
   const nextLead = withLifecycleDefaults({
     ...rowToLead(existingLeadRow),
     ...(assets.siteBrandingUrl ? { siteBrandingUrl: assets.siteBrandingUrl } : {}),
     ...(assets.heroImageUrl ? { heroImageUrl: assets.heroImageUrl } : {}),
     ...(assets.siteIconUrl ? { siteIconUrl: assets.siteIconUrl } : {}),
+    status: nextStatus,
+    workflowStatus: nextStatus,
+    statusUpdatedAt:
+      nextStatus !== existingStatus
+        ? now
+        : getString(rowToLead(existingLeadRow).statusUpdatedAt) ||
+          getString(rowToLead(existingLeadRow).status_updated_at) ||
+          now,
+    lastActivityAt: now,
     updatedAt: now,
   });
   const row = {
@@ -390,7 +519,6 @@ export async function updateLeadStageBySlug(
   let updatedLead = withLifecycleDefaults({
     ...existingLead,
     stage,
-    status: stage,
     reviewNotes:
       typeof reviewNotes === "string"
         ? reviewNotes

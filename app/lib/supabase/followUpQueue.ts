@@ -7,6 +7,7 @@ import { listLeadMessages } from "./leadMessages";
 import {
   listLeadRows,
   rowToLead,
+  updateLeadStatus,
   type LeadRow,
 } from "./leads";
 
@@ -40,7 +41,6 @@ export async function listNeedsFollowUp() {
     return getLeadStage({
       ...data,
       stage: row.stage || data.stage,
-      status: row.status || data.status,
     }) ===
       "contacted";
   });
@@ -63,6 +63,17 @@ export async function listNeedsFollowUp() {
       const dueStatus = getFollowUpDueStatus(lead, messages, now);
 
       if (!dueStatus.isDue || !dueStatus.nextStage) return null;
+
+      const nextWorkflowStatus =
+        dueStatus.nextStage === 1
+          ? "follow_up_1"
+          : dueStatus.nextStage === 2
+            ? "follow_up_2"
+            : "final_follow_up";
+
+      await updateLeadStatus(slug, nextWorkflowStatus, {
+        touchActivity: false,
+      });
 
       return {
         id: leadId || slug,

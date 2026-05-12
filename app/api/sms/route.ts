@@ -7,6 +7,7 @@ import {
   listLeadRows,
   rowToLead,
   updateLeadStageBySlug,
+  updateLeadStatus,
   type LeadRow,
 } from "../../lib/supabase/leads";
 
@@ -130,6 +131,8 @@ export async function POST(req: Request) {
     });
 
     if (isOptOut) {
+      await updateLeadStatus(match.slug, "closed", { preserveTerminal: false });
+
       console.log("Inbound SMS STOP detected", {
         from,
         leadId: match.leadId,
@@ -154,6 +157,8 @@ export async function POST(req: Request) {
           error: archiveError,
         });
       }
+    } else {
+      await updateLeadStatus(match.slug, "replied");
     }
 
     return new Response("", { status: 200 });

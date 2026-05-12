@@ -771,7 +771,7 @@ export async function generateLeadsForTown(args: GenerateLeadsForTownArgs) {
       leadPriorityScore,
       tradeValidation,
       stage: "lead",
-      status: "lead",
+      status: "new",
       contactedAt: null,
       clientAt: null,
       archivedAt: null,

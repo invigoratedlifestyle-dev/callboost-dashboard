@@ -39,7 +39,7 @@ export function getLeadStage(lead: LeadRecord): LifecycleStage {
     return lead.status;
   }
 
-  if (lead.status === "new") {
+  if (lead.status === "new" || lead.status === "in_progress") {
     return "lead";
   }
 
@@ -78,7 +78,6 @@ export function withLifecycleDefaults<T extends LeadRecord>(lead: T): T {
   return {
     ...currentLead,
     stage: getLeadStage(lead),
-    status: getLeadStage(lead),
     contactedAt: typeof lead.contactedAt === "string" ? lead.contactedAt : null,
     clientAt: typeof lead.clientAt === "string" ? lead.clientAt : null,
     archivedAt: typeof lead.archivedAt === "string" ? lead.archivedAt : null,

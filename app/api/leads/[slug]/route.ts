@@ -3,13 +3,16 @@ import {
   isLifecycleStage,
   type LeadRecord,
 } from "../../../lib/leadLifecycle";
+import { isLeadStatus } from "../../../lib/leadWorkflow";
 import { listCallbacksForLead } from "../../../lib/supabase/callbacks";
 import {
   getLeadBySlug,
   getLeadRowBySlug,
   rowToLead,
+  touchLeadActivity,
   updateLeadBySlug,
   updateLeadStageBySlug,
+  updateLeadStatus,
 } from "../../../lib/supabase/leads";
 
 function getNullableString(value: unknown) {
@@ -37,7 +40,8 @@ export async function GET(
       return NextResponse.json({ error: "Lead not found" }, { status: 404 });
     }
 
-    const lead = rowToLead(leadRow);
+    const touchedLead = await touchLeadActivity(slug);
+    const lead = touchedLead || rowToLead(leadRow);
     const callbacks = await listCallbacksForLead({
       leadId: leadRow.id || null,
       slug,
@@ -63,7 +67,8 @@ export async function PATCH(
 ) {
   const { slug } = await params;
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-  const stage = body.stage ?? body.status;
+  const stage = body.stage;
+  const status = body.status;
   const reviewNotes =
     typeof body.reviewNotes === "string" ? body.reviewNotes : undefined;
 
@@ -76,6 +81,14 @@ export async function PATCH(
       }
 
       updatedLead = await updateLeadStageBySlug(slug, stage, reviewNotes);
+    } else if (status !== undefined) {
+      if (!isLeadStatus(status)) {
+        return NextResponse.json({ error: "Invalid status" }, { status: 400 });
+      }
+
+      updatedLead = await updateLeadStatus(slug, status, {
+        preserveTerminal: false,
+      });
     } else {
       const existingLead = await getLeadBySlug(slug);
 
@@ -227,6 +240,14 @@ export async function PATCH(
 
       try {
         updatedLead = await updateLeadBySlug(slug, nextLead);
+        if (hasOwn(body, "siteBrandingUrl")) {
+          if (updatedLead.generatedSiteUrl && updatedLead.siteBrandingUrl) {
+            updatedLead =
+              (await updateLeadStatus(slug, "ready_for_client")) || updatedLead;
+          } else {
+            updatedLead = (await touchLeadActivity(slug)) || updatedLead;
+          }
+        }
       } catch (error) {
         console.error("LEAD_UPDATE_ERROR", error);
         throw error;

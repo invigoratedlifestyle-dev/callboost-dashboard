@@ -3,13 +3,21 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Lead, LeadStage, WebsiteEvaluation } from "./lib/leads";
+import type { Lead, LeadStage, LeadStatus, WebsiteEvaluation } from "./lib/leads";
+import {
+  getLastActivityLabel,
+  getLeadStatusBadgeClass,
+  getLeadStatusLabel,
+  leadStatuses,
+} from "./lib/leadWorkflow";
 import { CALLBOOST_MONTHLY_RECURRING_REVENUE } from "./lib/pricing";
 
 type LeadPriority = "high" | "medium" | "low";
 type WebsiteStatus = "no_website" | "weak_website" | "has_website";
 type LeadFilter = "all" | LeadStage;
+type StatusFilter = "all" | LeadStatus;
 const DEFAULT_LEAD_FILTER: LeadFilter = "lead";
+const DEFAULT_STATUS_FILTER: StatusFilter = "all";
 type NavigationMenuKey = "leads" | "tools" | "account";
 type NavigationMenuItem =
   | {
@@ -82,6 +90,14 @@ const leadFilters: Array<{ value: LeadFilter; label: string }> = [
   { value: "contacted", label: "Contacted" },
   { value: "client", label: "Clients" },
   { value: "archived", label: "Archived" },
+];
+
+const statusFilters: Array<{ value: StatusFilter; label: string }> = [
+  { value: "all", label: "All statuses" },
+  ...leadStatuses.map((status) => ({
+    value: status,
+    label: getLeadStatusLabel(status),
+  })),
 ];
 
 const qualityLabels: Record<WebsiteEvaluation["quality"], string> = {
@@ -158,8 +174,8 @@ function getMainIssue(lead: DashboardLead) {
   );
 }
 
-function getLeadStage(lead: Pick<DashboardLead, "stage" | "status">) {
-  return lead.stage || lead.status || "lead";
+function getLeadStage(lead: Pick<DashboardLead, "stage">) {
+  return lead.stage || "lead";
 }
 
 function getStageBadgeClass(stage?: string) {
@@ -458,6 +474,8 @@ export default function DashboardPage() {
   );
   const [activeFilter, setActiveFilter] =
     useState<LeadFilter>(DEFAULT_LEAD_FILTER);
+  const [activeStatusFilter, setActiveStatusFilter] =
+    useState<StatusFilter>(DEFAULT_STATUS_FILTER);
   const [notifications, setNotifications] = useState<
     DashboardNotification[]
   >([]);
@@ -473,23 +491,33 @@ export default function DashboardPage() {
   const topNavigationRef = useRef<HTMLDivElement | null>(null);
   const actionRunning = enriching || Boolean(bulkActionRunning);
 
-  const loadLeads = useCallback(async (filter: LeadFilter) => {
-    const url =
-      filter === "all" ? "/api/leads" : `/api/leads?stage=${filter}`;
-    console.log("Lead stage filter:", filter);
+  const loadLeads = useCallback(
+    async (filter: LeadFilter, statusFilter: StatusFilter) => {
+      const params = new URLSearchParams();
 
-    const res = await fetch(url, {
-      cache: "no-store",
-    });
+      if (filter !== "all") params.set("stage", filter);
+      if (statusFilter !== "all") params.set("status", statusFilter);
 
-    const data = await res.json();
-    const fetchedLeads = data.leads || [];
+      const query = params.toString();
+      const url = query ? `/api/leads?${query}` : "/api/leads";
 
-    console.log("Fetched leads count:", fetchedLeads.length);
+      console.log("Lead stage filter:", filter);
+      console.log("Lead status filter:", statusFilter);
 
-    setLeads(fetchedLeads);
-    setLoading(false);
-  }, []);
+      const res = await fetch(url, {
+        cache: "no-store",
+      });
+
+      const data = await res.json();
+      const fetchedLeads = data.leads || [];
+
+      console.log("Fetched leads count:", fetchedLeads.length);
+
+      setLeads(fetchedLeads);
+      setLoading(false);
+    },
+    []
+  );
 
   const loadClientRevenueLeads = useCallback(async () => {
     const res = await fetch("/api/leads?stage=client", {
@@ -591,7 +619,7 @@ export default function DashboardPage() {
 
       console.log("Enrich Active result:", result);
 
-      await loadLeads(activeFilter);
+      await loadLeads(activeFilter, activeStatusFilter);
       await loadClientRevenueLeads();
       await loadFollowUpQueue();
     } finally {
@@ -639,8 +667,8 @@ export default function DashboardPage() {
   useEffect(() => {
     // Initial dashboard data load.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadLeads(activeFilter);
-  }, [activeFilter, loadLeads]);
+    loadLeads(activeFilter, activeStatusFilter);
+  }, [activeFilter, activeStatusFilter, loadLeads]);
 
   useEffect(() => {
     // Initial revenue snapshot for the dashboard summary.
@@ -812,7 +840,7 @@ export default function DashboardPage() {
       }
 
       console.log("Bulk action result:", { action, result });
-      await loadLeads(activeFilter);
+      await loadLeads(activeFilter, activeStatusFilter);
       await loadClientRevenueLeads();
       await loadFollowUpQueue();
       clearSelectedLeads();
@@ -869,7 +897,7 @@ export default function DashboardPage() {
           : `Deleted ${deleted} leads.`
       );
       clearSelectedLeads();
-      await loadLeads(activeFilter);
+      await loadLeads(activeFilter, activeStatusFilter);
       await loadClientRevenueLeads();
       await loadFollowUpQueue();
     } catch (error) {
@@ -1144,20 +1172,44 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="mb-4 flex flex-wrap gap-2">
-          {leadFilters.map((filter) => (
-            <button
-              key={filter.value}
-              onClick={() => setActiveFilter(filter.value)}
-              className={`rounded-lg px-4 py-2 text-sm font-bold ${
-                activeFilter === filter.value
-                  ? "bg-blue-600 text-white"
-                  : "bg-white/10 text-slate-300 hover:bg-white/15"
-              }`}
-            >
-              {filter.label}
-            </button>
-          ))}
+        <div className="mb-4 grid gap-3 lg:grid-cols-[auto_1fr] lg:items-start">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+              Stage
+            </span>
+            {leadFilters.map((filter) => (
+              <button
+                key={filter.value}
+                onClick={() => setActiveFilter(filter.value)}
+                className={`rounded-lg px-4 py-2 text-sm font-bold ${
+                  activeFilter === filter.value
+                    ? "bg-blue-600 text-white"
+                    : "bg-white/10 text-slate-300 hover:bg-white/15"
+                }`}
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+              Status
+            </span>
+            {statusFilters.map((filter) => (
+              <button
+                key={filter.value}
+                onClick={() => setActiveStatusFilter(filter.value)}
+                className={`rounded-lg px-4 py-2 text-sm font-bold ${
+                  activeStatusFilter === filter.value
+                    ? "bg-blue-600 text-white"
+                    : "bg-white/10 text-slate-300 hover:bg-white/15"
+                }`}
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {selectedLeads.length > 0 ? (
@@ -1262,6 +1314,8 @@ export default function DashboardPage() {
                   <th className="px-5 py-4">Rating</th>
                   <th className="px-5 py-4">Payment</th>
                   <th className="px-5 py-4">Stage</th>
+                  <th className="px-5 py-4">Status</th>
+                  <th className="px-5 py-4">Last Activity</th>
                   <th className="px-5 py-4">Action</th>
                 </tr>
               </thead>
@@ -1269,7 +1323,7 @@ export default function DashboardPage() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td className="px-5 py-6 text-slate-400" colSpan={8}>
+                    <td className="px-5 py-6 text-slate-400" colSpan={10}>
                       Loading leads...
                     </td>
                   </tr>
@@ -1293,6 +1347,8 @@ export default function DashboardPage() {
                     const paymentFailed =
                       getPaymentStatus(lead) === "payment_failed";
                     const leadStage = getLeadStage(lead);
+                    const lastActivity =
+                      lead.lastActivityAt || lead.last_activity_at || "";
 
                     return (
                       <tr
@@ -1410,6 +1466,20 @@ export default function DashboardPage() {
                         </td>
 
                         <td className="px-5 py-4">
+                          <span
+                            className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-bold ${getLeadStatusBadgeClass(
+                              lead.status
+                            )}`}
+                          >
+                            {getLeadStatusLabel(lead.status)}
+                          </span>
+                        </td>
+
+                        <td className="px-5 py-4 text-sm text-slate-300">
+                          {getLastActivityLabel(lastActivity)}
+                        </td>
+
+                        <td className="px-5 py-4">
                           <div className="flex max-w-[280px] flex-wrap gap-2">
                             {leadRoute ? (
                               <Link
@@ -1431,7 +1501,7 @@ export default function DashboardPage() {
                   })
                 ) : (
                   <tr>
-                    <td className="px-5 py-6 text-slate-400" colSpan={8}>
+                    <td className="px-5 py-6 text-slate-400" colSpan={10}>
                       No leads found for this view.
                     </td>
                   </tr>

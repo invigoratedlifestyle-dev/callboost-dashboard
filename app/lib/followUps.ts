@@ -529,7 +529,7 @@ export function getFollowUpDueStatus(
     latestOutboundAt: null,
   };
 
-  if ((lead.stage || lead.status) !== "contacted" || !hasContactMethod(lead)) {
+  if (lead.stage !== "contacted" || !hasContactMethod(lead)) {
     return emptyStatus;
   }
 

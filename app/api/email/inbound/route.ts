@@ -10,6 +10,7 @@ import {
   rowToLead,
   type LeadRow,
   updateLeadStageBySlug,
+  updateLeadStatus,
 } from "../../../lib/supabase/leads";
 
 type InboundEmailMatch = {
@@ -275,6 +276,8 @@ export async function POST(req: Request) {
     });
 
     if (isUnsubscribe) {
+      await updateLeadStatus(match.slug, "closed", { preserveTerminal: false });
+
       console.log("Inbound email unsubscribe detected", {
         from,
         leadId: match.leadId,
@@ -302,6 +305,8 @@ export async function POST(req: Request) {
           error: archiveError,
         });
       }
+    } else {
+      await updateLeadStatus(match.slug, "replied");
     }
 
     return new Response("ok", { status: 200 });

@@ -8,7 +8,9 @@ import {
 import {
   getLeadRowBySlug,
   rowToLead,
+  touchLeadActivity,
   updateLeadBySlug,
+  updateLeadStatus,
 } from "../../lib/supabase/leads";
 import { isValidTradeLead } from "../../lib/tradeValidation";
 
@@ -265,7 +267,13 @@ Return ONLY valid JSON:
       slug,
       html,
     });
-    const savedLead = await updateLeadBySlug(slug, updatedLead);
+    let savedLead = await updateLeadBySlug(slug, updatedLead);
+
+    if (getStringField(savedLead, "generatedSiteUrl") && getStringField(savedLead, "siteBrandingUrl")) {
+      savedLead = (await updateLeadStatus(slug, "ready_for_client")) || savedLead;
+    } else {
+      savedLead = (await touchLeadActivity(slug)) || savedLead;
+    }
 
     console.log("GENERATED_SITE_STORED_ICON_DEBUG", {
       slug,

@@ -16,6 +16,7 @@ import {
 import {
   getLeadRowBySlug,
   rowToLead,
+  updateLeadStatus,
 } from "../../../../lib/supabase/leads";
 
 type FollowUpStage = 1 | 2 | 3;
@@ -188,6 +189,10 @@ export async function POST(
         follow_up_stage: stage,
       },
     });
+
+    if (status === "sent") {
+      await updateLeadStatus(slug, "waiting_client");
+    }
 
     return NextResponse.json(
       {

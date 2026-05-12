@@ -17,6 +17,11 @@ import {
 } from "../../lib/contactMethods";
 import { appendEmailUnsubscribeFooter } from "../../lib/emailUnsubscribe";
 import { estimateSmsSegments } from "../../lib/smsOptOut";
+import {
+  getLastActivityLabel,
+  getLeadStatusBadgeClass,
+  getLeadStatusLabel,
+} from "../../lib/leadWorkflow";
 import { CALLBOOST_CHECKOUT_SUMMARY } from "../../lib/pricing";
 import {
   buildFollowUpBody,
@@ -193,8 +198,8 @@ const qualityLabels: Record<WebsiteEvaluation["quality"], string> = {
   unknown: "Unknown",
 };
 
-function getLeadStage(lead: Pick<LeadWithGeneratedContent, "stage" | "status">) {
-  return lead.stage || lead.status || "lead";
+function getLeadStage(lead: Pick<LeadWithGeneratedContent, "stage">) {
+  return lead.stage || "lead";
 }
 
 function getStageBadgeClass(stage?: string) {
@@ -1785,6 +1790,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     lead.description || lead.solution || lead.subheadline || "";
   const leadStage = getLeadStage(lead);
   const isLeadArchived = leadStage === "archived";
+  const leadStatusUpdatedAt = lead.statusUpdatedAt || lead.status_updated_at || "";
+  const leadLastActivityAt = lead.lastActivityAt || lead.last_activity_at || "";
   const generatedSiteUrl = isLeadArchived ? "" : lead.generatedSiteUrl || "";
   const websiteEvaluation = lead.websiteEvaluation;
   const reviewSource = getReviewSource(lead);
@@ -2203,6 +2210,27 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
               <p>
                 <strong className="text-white">Stage:</strong>{" "}
                 {stageLabels[leadStage] || "Lead"}
+              </p>
+
+              <p>
+                <strong className="text-white">Status:</strong>{" "}
+                <span
+                  className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${getLeadStatusBadgeClass(
+                    lead.status
+                  )}`}
+                >
+                  {getLeadStatusLabel(lead.status)}
+                </span>
+              </p>
+
+              <p>
+                <strong className="text-white">Last Activity:</strong>{" "}
+                {getLastActivityLabel(leadLastActivityAt)}
+              </p>
+
+              <p>
+                <strong className="text-white">Status Updated:</strong>{" "}
+                {leadStatusUpdatedAt ? formatTimestamp(leadStatusUpdatedAt) : "-"}
               </p>
 
               {lead.contactedAt ? (

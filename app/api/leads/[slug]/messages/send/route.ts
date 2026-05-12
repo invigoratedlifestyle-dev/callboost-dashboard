@@ -8,6 +8,7 @@ import {
   getLeadRowBySlug,
   rowToLead,
   updateLeadStageBySlug,
+  updateLeadStatus,
 } from "../../../../../lib/supabase/leads";
 
 type Channel = "sms" | "email";
@@ -233,6 +234,14 @@ export async function POST(
 
       if (stageUpdated) {
         updatedLead = stageUpdated;
+      }
+    }
+
+    if (status === "sent") {
+      const statusUpdated = await updateLeadStatus(slug, "waiting_client");
+
+      if (statusUpdated) {
+        updatedLead = statusUpdated;
       }
     }
 

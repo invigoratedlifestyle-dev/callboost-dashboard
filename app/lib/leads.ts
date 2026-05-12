@@ -4,7 +4,16 @@ export type LeadStage =
   | "client"
   | "archived";
 
-export type LeadStatus = LeadStage;
+export type LeadStatus =
+  | "new"
+  | "in_progress"
+  | "ready_for_client"
+  | "waiting_client"
+  | "follow_up_1"
+  | "follow_up_2"
+  | "final_follow_up"
+  | "replied"
+  | "closed";
 
 export type LeadReview = {
   name?: string;
@@ -76,7 +85,11 @@ export type Lead = {
   facebook?: string;
   instagram?: string;
   stage: LeadStage;
-  status?: LeadStatus;
+  status: LeadStatus;
+  statusUpdatedAt?: string | null;
+  status_updated_at?: string | null;
+  lastActivityAt?: string | null;
+  last_activity_at?: string | null;
   contactedAt?: string | null;
   clientAt?: string | null;
   archivedAt?: string | null;
@@ -117,7 +130,9 @@ export const leads: Lead[] = [
     facebook: "",
     instagram: "",
     stage: "lead",
-    status: "lead",
+    status: "new",
+    statusUpdatedAt: null,
+    lastActivityAt: null,
     contactedAt: null,
     clientAt: null,
     archivedAt: null,

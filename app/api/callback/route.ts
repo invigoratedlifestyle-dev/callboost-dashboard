@@ -7,7 +7,11 @@ import {
   markCallbackForwarded,
 } from "../../lib/supabase/callbacks";
 import { normalizeSmsText } from "../../lib/smsOptOut";
-import { getLeadRowBySlug, rowToLead } from "../../lib/supabase/leads";
+import {
+  getLeadRowBySlug,
+  rowToLead,
+  touchLeadActivity,
+} from "../../lib/supabase/leads";
 
 function getString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -151,6 +155,7 @@ export async function POST(req: Request) {
       visitorPhone: phone,
       visitorMessage: message,
     });
+    await touchLeadActivity(slug);
 
     const forwardingEnabled = isForwardingEnabled(
       lead.callbackForwardingEnabled

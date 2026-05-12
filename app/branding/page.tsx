@@ -33,7 +33,6 @@ type Lead = {
     footer_background_color?: string;
   };
   stage?: string | null;
-  status?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
 };
@@ -100,8 +99,8 @@ const workflowLabels: Record<WorkflowKey, string> = {
 
 const selectableLeadStages = new Set(["lead", "contacted", "client"]);
 
-function normalizeLeadStage(stage: unknown, fallbackStatus?: unknown) {
-  const normalized = String(stage ?? fallbackStatus ?? "")
+function normalizeLeadStage(stage: unknown) {
+  const normalized = String(stage ?? "")
     .trim()
     .toLowerCase();
 
@@ -112,7 +111,7 @@ function normalizeLeadStage(stage: unknown, fallbackStatus?: unknown) {
 }
 
 function getDisplayStage(lead?: Lead | null) {
-  const stage = normalizeLeadStage(lead?.stage, lead?.status);
+  const stage = normalizeLeadStage(lead?.stage);
 
   if (stage === "lead") return "Lead";
   if (stage === "contacted") return "Contacted";
@@ -130,7 +129,7 @@ function getLeadSortTime(lead: Lead) {
 function getSelectableBrandingLeads(leads: Lead[]) {
   return leads
     .filter((lead) =>
-      selectableLeadStages.has(normalizeLeadStage(lead.stage, lead.status))
+      selectableLeadStages.has(normalizeLeadStage(lead.stage))
     )
     .sort((a, b) => getLeadSortTime(b) - getLeadSortTime(a));
 }
