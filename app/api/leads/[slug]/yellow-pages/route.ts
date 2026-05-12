@@ -80,6 +80,17 @@ function applyYellowPagesDetails(
   return { nextLead, updatedFields, skippedFields };
 }
 
+function getManualResult(value: unknown) {
+  const result = getRecord(value);
+
+  return {
+    website: getString(result.website),
+    email: getString(result.email),
+    phone: getString(result.phone),
+    description: getString(result.description),
+  };
+}
+
 export async function POST(
   req: Request,
   { params }: { params: Promise<{ slug: string }> }
@@ -87,6 +98,7 @@ export async function POST(
   const { slug: leadIdOrSlug } = await params;
   const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
   const listingUrl = getString(body.listingUrl);
+  const manualResult = getManualResult(body.manualResult);
   const saveOnly = body.saveOnly === true;
 
   console.log("[YELLOW_PAGES_MANUAL_START]", {
@@ -128,6 +140,56 @@ export async function POST(
       });
 
       const existingYellowPages = getRecord(existingLead.yellow_pages);
+
+      if (
+        manualResult.website ||
+        manualResult.email ||
+        manualResult.phone ||
+        manualResult.description
+      ) {
+        console.log("[YELLOW_PAGES_BROWSER_SCRAPE_RECEIVED]", {
+          slug,
+          listingUrl,
+          foundFields: {
+            website: Boolean(manualResult.website),
+            email: Boolean(manualResult.email),
+            phone: Boolean(manualResult.phone),
+            description: Boolean(manualResult.description),
+          },
+        });
+
+        const yellowPages = {
+          ...existingYellowPages,
+          manual_listing_url: listingUrl,
+          browser_scraped_at: new Date().toISOString(),
+          ...(manualResult.website ? { website: manualResult.website } : {}),
+          ...(manualResult.email ? { email: manualResult.email } : {}),
+          ...(manualResult.phone ? { phone: manualResult.phone } : {}),
+          ...(manualResult.description
+            ? { description: manualResult.description }
+            : {}),
+        };
+        const { nextLead, updatedFields, skippedFields } = applyYellowPagesDetails(
+          existingLead,
+          yellowPages
+        );
+
+        console.log("[YELLOW_PAGES_BROWSER_SCRAPE_UPDATED_FIELDS]", {
+          slug,
+          updatedFields,
+          skippedFields,
+          enrichmentSources: getRecord(nextLead.enrichment_sources),
+        });
+
+        const updatedLead = await updateLeadBySlug(slug, nextLead);
+
+        return NextResponse.json({
+          success: true,
+          lead: updatedLead,
+          updatedFields,
+          browserScraped: true,
+        });
+      }
 
       if (saveOnly) {
         const nextLead = {

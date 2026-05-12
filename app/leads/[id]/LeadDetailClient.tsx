@@ -83,6 +83,7 @@ type LeadWithGeneratedContent = Lead & {
     email?: string;
     phone?: string;
     mobile?: string;
+    description?: string;
     address?: string;
     abn?: string;
     established_year?: string;
@@ -518,6 +519,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const [rerunningYellowPages, setRerunningYellowPages] = useState(false);
   const [savingYellowPagesUrl, setSavingYellowPagesUrl] = useState(false);
   const [scrapingYellowPagesUrl, setScrapingYellowPagesUrl] = useState(false);
+  const [scrapingYellowPagesInBrowser, setScrapingYellowPagesInBrowser] =
+    useState(false);
   const [yellowPagesListingUrl, setYellowPagesListingUrl] = useState("");
   const [yellowPagesNotice, setYellowPagesNotice] = useState("");
   const [yellowPagesError, setYellowPagesError] = useState("");
@@ -978,6 +981,157 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       );
     } finally {
       setScrapingYellowPagesUrl(false);
+    }
+  };
+  const handleScrapeYellowPagesInBrowser = async () => {
+    if (!lead) return;
+
+    const listingUrl = yellowPagesListingUrl.trim();
+
+    if (!listingUrl) {
+      setYellowPagesError("Paste a Yellow Pages listing URL first.");
+      setYellowPagesNotice("");
+      return;
+    }
+
+    setScrapingYellowPagesInBrowser(true);
+    setYellowPagesNotice("Scraping Yellow Pages in browser...");
+    setYellowPagesError("");
+
+    try {
+      const response = await fetch(listingUrl, {
+        method: "GET",
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        throw new Error(`Browser fetch failed with HTTP ${response.status}`);
+      }
+
+      const html = await response.text();
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, "text/html");
+      const text = doc.body?.innerText || "";
+      const findMeta = (selectors: string[]) => {
+        for (const selector of selectors) {
+          const content = doc.querySelector<HTMLMetaElement>(selector)?.content?.trim();
+          if (content) return content;
+        }
+
+        return "";
+      };
+      const externalLink = Array.from(doc.querySelectorAll<HTMLAnchorElement>("a[href]"))
+        .map((anchor) => anchor.href)
+        .find((href) => {
+          try {
+            const parsedUrl = new URL(href);
+            const nestedUrl =
+              parsedUrl.searchParams.get("url") ||
+              parsedUrl.searchParams.get("u") ||
+              parsedUrl.searchParams.get("target") ||
+              parsedUrl.searchParams.get("redirect");
+            const candidate = new URL(nestedUrl || href);
+            const host = candidate.hostname.toLowerCase();
+
+            return (
+              /^https?:/i.test(candidate.protocol) &&
+              !host.includes("yellowpages.com.au") &&
+              !host.includes("google.com") &&
+              !host.includes("facebook.com") &&
+              !host.includes("instagram.com")
+            );
+          } catch {
+            return false;
+          }
+        });
+      const website = externalLink
+        ? (() => {
+            const parsedUrl = new URL(externalLink);
+            const nestedUrl =
+              parsedUrl.searchParams.get("url") ||
+              parsedUrl.searchParams.get("u") ||
+              parsedUrl.searchParams.get("target") ||
+              parsedUrl.searchParams.get("redirect");
+
+            return nestedUrl || externalLink;
+          })()
+        : "";
+      const email =
+        doc.querySelector<HTMLAnchorElement>('a[href^="mailto:"]')?.href
+          .replace(/^mailto:/i, "")
+          .split("?")[0]
+          .trim() ||
+        text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] ||
+        "";
+      const phone =
+        doc.querySelector<HTMLAnchorElement>('a[href^="tel:"]')?.href
+          .replace(/^tel:/i, "")
+          .trim() ||
+        text.match(
+          /(?:\+?61[\s.-]?)?(?:0[\s.-]?)?[2378][\d\s.-]{7,12}|(?:\+?61[\s.-]?)?(?:0[\s.-]?)?4[\d\s.-]{7,12}/
+        )?.[0]?.trim() ||
+        "";
+      const description =
+        findMeta([
+          'meta[name="description"]',
+          'meta[property="og:description"]',
+        ]) ||
+        doc.querySelector('[class*="description" i]')?.textContent?.trim() ||
+        "";
+      const manualResult = {
+        website,
+        email,
+        phone,
+        description,
+      };
+      const foundFields = Object.entries(manualResult)
+        .filter(([, value]) => Boolean(value))
+        .map(([field]) => field);
+
+      if (foundFields.length === 0) {
+        throw new Error("Extraction failed. No website, email, phone or description found.");
+      }
+
+      setYellowPagesNotice(`Fields found: ${foundFields.join(", ")}. Saving...`);
+
+      const res = await fetch(`/api/leads/${lead.slug || lead.id}/yellow-pages`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          listingUrl,
+          manualResult,
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to save browser scrape result");
+      }
+
+      if (data.lead) {
+        handleLeadUpdated(data.lead);
+      }
+
+      const updatedFields = Array.isArray(data.updatedFields)
+        ? data.updatedFields
+        : [];
+
+      setYellowPagesNotice(
+        updatedFields.length
+          ? `Browser scrape saved. Updated ${updatedFields.join(", ")}.`
+          : `Browser scrape saved. Fields found: ${foundFields.join(", ")}.`
+      );
+    } catch (error) {
+      setYellowPagesError(
+        error instanceof Error
+          ? error.message
+          : "Yellow Pages browser extraction failed"
+      );
+      setYellowPagesNotice("");
+    } finally {
+      setScrapingYellowPagesInBrowser(false);
     }
   };
   const handleStartContactEdit = () => {
@@ -2096,20 +2250,41 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                   className="min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none placeholder:text-slate-600"
                   placeholder="https://www.yellowpages.com.au/..."
                 />
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <button
                     onClick={handleSaveYellowPagesUrl}
-                    disabled={savingYellowPagesUrl || scrapingYellowPagesUrl}
+                    disabled={
+                      savingYellowPagesUrl ||
+                      scrapingYellowPagesUrl ||
+                      scrapingYellowPagesInBrowser
+                    }
                     className="rounded-lg bg-slate-700 px-3 py-2 text-xs font-bold text-white hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {savingYellowPagesUrl ? "Saving..." : "Save URL"}
                   </button>
                   <button
                     onClick={handleScrapeYellowPagesUrl}
-                    disabled={savingYellowPagesUrl || scrapingYellowPagesUrl}
+                    disabled={
+                      savingYellowPagesUrl ||
+                      scrapingYellowPagesUrl ||
+                      scrapingYellowPagesInBrowser
+                    }
                     className="rounded-lg border border-yellow-400/20 bg-yellow-500/10 px-3 py-2 text-xs font-bold text-yellow-200 hover:bg-yellow-500/15 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {scrapingYellowPagesUrl ? "Scraping..." : "Scrape Listing"}
+                  </button>
+                  <button
+                    onClick={handleScrapeYellowPagesInBrowser}
+                    disabled={
+                      savingYellowPagesUrl ||
+                      scrapingYellowPagesUrl ||
+                      scrapingYellowPagesInBrowser
+                    }
+                    className="rounded-lg border border-blue-400/20 bg-blue-500/10 px-3 py-2 text-xs font-bold text-blue-200 hover:bg-blue-500/15 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {scrapingYellowPagesInBrowser
+                      ? "Scraping..."
+                      : "Scrape In Browser"}
                   </button>
                 </div>
               </div>
