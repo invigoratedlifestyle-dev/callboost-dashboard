@@ -87,6 +87,18 @@ async function removeStoragePrefix(
   return paths.length;
 }
 
+export type GeneratedSiteCleanupWarning = {
+  type: "storage_cleanup_failed";
+  leadId: string | number | null;
+  slug: string;
+  storagePath: string;
+  message: string;
+};
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export async function purgeGeneratedSiteForLead(args: {
   supabase?: SupabaseAdminClient;
   lead: LeadRecord;
@@ -94,7 +106,11 @@ export async function purgeGeneratedSiteForLead(args: {
 }) {
   const supabase = args.supabase || getSupabaseAdmin();
   const slug = getText(args.lead.slug || args.lead.id).trim();
-  const leadId = args.leadId ?? args.lead.id ?? null;
+  const rawLeadId = args.leadId ?? args.lead.id ?? null;
+  const leadId =
+    typeof rawLeadId === "string" || typeof rawLeadId === "number"
+      ? rawLeadId
+      : null;
   const storageKeys = Array.from(
     new Set(
       [slug, leadId]
@@ -126,6 +142,76 @@ export async function purgeGeneratedSiteForLead(args: {
     await removeStoragePrefix(supabase, `site-branding/${key}`);
     await removeStoragePrefix(supabase, `site-icons/${key}`);
   }
+}
+
+export async function purgeGeneratedSiteForLeadBestEffort(args: {
+  supabase?: SupabaseAdminClient;
+  lead: LeadRecord;
+  leadId?: string | number | null;
+}) {
+  const supabase = args.supabase || getSupabaseAdmin();
+  const slug = getText(args.lead.slug || args.lead.id).trim();
+  const rawLeadId = args.leadId ?? args.lead.id ?? null;
+  const leadId =
+    typeof rawLeadId === "string" || typeof rawLeadId === "number"
+      ? rawLeadId
+      : null;
+  const storageKeys = Array.from(
+    new Set(
+      [slug, leadId]
+        .map((value) => normalizeStorageKey(value, ""))
+        .filter(Boolean)
+    )
+  );
+  const warnings: GeneratedSiteCleanupWarning[] = [];
+
+  if (slug) {
+    const { error } = await supabase
+      .from("generated_sites")
+      .delete()
+      .eq("slug", slug);
+
+    if (error) throw error;
+  }
+
+  if (leadId !== null && leadId !== undefined && String(leadId).trim()) {
+    const { error } = await supabase
+      .from("generated_sites")
+      .delete()
+      .eq("lead_id", leadId);
+
+    if (error) throw error;
+  }
+
+  for (const key of storageKeys) {
+    for (const storagePath of [
+      `hero-images/${key}`,
+      `site-branding/${key}`,
+      `site-icons/${key}`,
+    ]) {
+      try {
+        await removeStoragePrefix(supabase, storagePath);
+      } catch (error) {
+        const message = getErrorMessage(error);
+
+        console.warn("[bulk-delete] storage cleanup failed", {
+          leadId,
+          slug,
+          storagePath,
+          error: message,
+        });
+        warnings.push({
+          type: "storage_cleanup_failed",
+          leadId,
+          slug,
+          storagePath,
+          message,
+        });
+      }
+    }
+  }
+
+  return warnings;
 }
 
 export async function saveGeneratedSite(args: {

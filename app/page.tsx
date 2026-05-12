@@ -706,8 +706,13 @@ export default function DashboardPage() {
       }
 
       const deleted = Number(result.deleted) || 0;
+      const warnings = Array.isArray(result.warnings) ? result.warnings : [];
 
-      setBulkActionNotice(`Deleted ${deleted} leads.`);
+      setBulkActionNotice(
+        warnings.length
+          ? `Deleted ${deleted} leads. Some generated asset cleanup failed and can be retried later.`
+          : `Deleted ${deleted} leads.`
+      );
       clearSelectedLeads();
       await loadLeads(activeFilter);
       await loadClientRevenueLeads();

@@ -1,5 +1,7 @@
 import { getSupabaseAdmin } from "./server";
 import {
+  type GeneratedSiteCleanupWarning,
+  purgeGeneratedSiteForLeadBestEffort,
   purgeGeneratedSiteForLead,
   removeGeneratedSiteReferencesFromLead,
 } from "./generatedSites";
@@ -437,7 +439,10 @@ export async function deleteLeadsBySlugs(slugs: string[]) {
   );
 
   if (!uniqueSlugs.length) {
-    return 0;
+    return {
+      deleted: 0,
+      warnings: [] as GeneratedSiteCleanupWarning[],
+    };
   }
 
   const supabase = getSupabaseAdmin();
@@ -449,22 +454,16 @@ export async function deleteLeadsBySlugs(slugs: string[]) {
   if (fetchError) throw fetchError;
 
   const leadRows = (rows || []) as LeadRow[];
+  const warnings: GeneratedSiteCleanupWarning[] = [];
 
   for (const row of leadRows) {
-    try {
-      await purgeGeneratedSiteForLead({
-        supabase,
-        lead: rowToLead(row),
-        leadId: row.id || null,
-      });
-    } catch (error) {
-      console.error("GENERATED_SITE_PURGE_FAILED_BEFORE_DELETE", {
-        slug: row.slug,
-        leadId: row.id || null,
-        error: error instanceof Error ? error.message : error,
-      });
-      throw error;
-    }
+    const rowWarnings = await purgeGeneratedSiteForLeadBestEffort({
+      supabase,
+      lead: rowToLead(row),
+      leadId: row.id || null,
+    });
+
+    warnings.push(...rowWarnings);
   }
 
   const { error: callbackSlugError } = await supabase
@@ -488,7 +487,10 @@ export async function deleteLeadsBySlugs(slugs: string[]) {
 
   if (deleteError) throw deleteError;
 
-  return leadRows.length;
+  return {
+    deleted: leadRows.length,
+    warnings,
+  };
 }
 
 export async function duplicateLeadExists(lead: LeadRecord) {

@@ -19,11 +19,12 @@ export async function DELETE(req: Request) {
       return NextResponse.json({ error: "Missing ids" }, { status: 400 });
     }
 
-    const deleted = await deleteLeadsBySlugs(ids);
+    const result = await deleteLeadsBySlugs(ids);
 
     return NextResponse.json({
       success: true,
-      deleted,
+      deleted: result.deleted,
+      warnings: result.warnings,
     });
   } catch (error) {
     console.error("BULK_DELETE_FATAL", error);
