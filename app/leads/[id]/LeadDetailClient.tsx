@@ -239,6 +239,10 @@ function formatClientValue(value?: string | null) {
   return value || "Not available";
 }
 
+function buildGoogleMapsUrl(address: string) {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+}
+
 function formatClientTimestamp(value?: string | null) {
   return value ? formatTimestamp(value) : "Not available";
 }
@@ -1748,6 +1752,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const websiteEvaluation = lead.websiteEvaluation;
   const reviewSource = getReviewSource(lead);
   const reviewCount = lead.reviews?.length || 0;
+  const leadAddress = (lead.address || lead.formattedAddress || "").trim();
+  const googleMapsUrl = leadAddress ? buildGoogleMapsUrl(leadAddress) : "";
   const hasPageCopy =
     Boolean(lead.headline) ||
     Boolean(lead.subheadline) ||
@@ -1951,6 +1957,22 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                   >
                     {lead.address || lead.formattedAddress || "Not found yet"}
                   </span>
+                )}
+              </div>
+
+              <div>
+                <strong className="text-white">Google Maps:</strong>{" "}
+                {googleMapsUrl ? (
+                  <a
+                    href={googleMapsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-400 hover:text-blue-300 hover:underline"
+                  >
+                    Open in Google Maps
+                  </a>
+                ) : (
+                  <span className="text-slate-500">Not available</span>
                 )}
               </div>
 
