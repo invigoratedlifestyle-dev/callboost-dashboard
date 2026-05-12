@@ -1,4 +1,11 @@
 import {
+  PDFDocument,
+  StandardFonts,
+  rgb,
+  type PDFFont,
+  type PDFPage,
+} from "pdf-lib";
+import {
   formatPercent,
   getCallBoostReport,
   normalizeReportRange,
@@ -6,9 +13,22 @@ import {
 
 export const runtime = "nodejs";
 
-type PdfDocumentConstructor = new (
-  options?: PDFKit.PDFDocumentOptions
-) => PDFKit.PDFDocument;
+type PdfContext = {
+  doc: PDFDocument;
+  page: PDFPage;
+  fonts: {
+    regular: PDFFont;
+    bold: PDFFont;
+  };
+  y: number;
+};
+
+const pageSize: [number, number] = [595.28, 841.89];
+const margin = 48;
+const bottomMargin = 48;
+const textColor = rgb(0.07, 0.09, 0.16);
+const mutedColor = rgb(0.29, 0.33, 0.41);
+const lineColor = rgb(0.82, 0.85, 0.9);
 
 function formatDate(value: string | null) {
   if (!value) return "All time";
@@ -23,183 +43,242 @@ function formatDate(value: string | null) {
   });
 }
 
-function drawHeading(doc: PDFKit.PDFDocument, text: string) {
-  doc.moveDown(1.2);
-  doc.fontSize(15).font("Helvetica-Bold").fillColor("#111827").text(text);
-  doc.moveDown(0.4);
+function addPage(ctx: PdfContext) {
+  ctx.page = ctx.doc.addPage(pageSize);
+  ctx.y = ctx.page.getHeight() - margin;
 }
 
-function drawKeyValue(doc: PDFKit.PDFDocument, label: string, value: string | number) {
-  doc
-    .fontSize(10)
-    .font("Helvetica-Bold")
-    .fillColor("#374151")
-    .text(`${label}: `, { continued: true })
-    .font("Helvetica")
-    .fillColor("#111827")
-    .text(String(value));
+function ensureSpace(ctx: PdfContext, height: number) {
+  if (ctx.y - height < bottomMargin) {
+    addPage(ctx);
+  }
+}
+
+function drawText(
+  ctx: PdfContext,
+  text: string,
+  x: number,
+  y: number,
+  options: {
+    size?: number;
+    bold?: boolean;
+    color?: ReturnType<typeof rgb>;
+    maxWidth?: number;
+  } = {}
+) {
+  const size = options.size || 10;
+  const font = options.bold ? ctx.fonts.bold : ctx.fonts.regular;
+  const color = options.color || textColor;
+  const content =
+    options.maxWidth && font.widthOfTextAtSize(text, size) > options.maxWidth
+      ? truncateText(font, text, size, options.maxWidth)
+      : text;
+
+  ctx.page.drawText(content, {
+    x,
+    y,
+    size,
+    font,
+    color,
+  });
+}
+
+function truncateText(font: PDFFont, text: string, size: number, maxWidth: number) {
+  const suffix = "...";
+  let output = text.replace(/\s+/g, " ").trim();
+
+  while (
+    output.length > 0 &&
+    font.widthOfTextAtSize(`${output}${suffix}`, size) > maxWidth
+  ) {
+    output = output.slice(0, -1);
+  }
+
+  return output ? `${output}${suffix}` : suffix;
+}
+
+function drawHeading(ctx: PdfContext, text: string) {
+  ensureSpace(ctx, 42);
+  ctx.y -= 26;
+  drawText(ctx, text, margin, ctx.y, { size: 15, bold: true });
+  ctx.y -= 12;
+}
+
+function drawKeyValue(ctx: PdfContext, label: string, value: string | number) {
+  ensureSpace(ctx, 18);
+  drawText(ctx, `${label}:`, margin, ctx.y, { size: 10, bold: true, color: mutedColor });
+  drawText(ctx, String(value), margin + 190, ctx.y, { size: 10 });
+  ctx.y -= 16;
+}
+
+function drawRule(ctx: PdfContext, y: number, width: number) {
+  ctx.page.drawLine({
+    start: { x: margin, y },
+    end: { x: margin + width, y },
+    thickness: 0.6,
+    color: lineColor,
+  });
 }
 
 function drawTable(
-  doc: PDFKit.PDFDocument,
+  ctx: PdfContext,
   headers: string[],
   rows: Array<Array<string | number>>,
   widths: number[]
 ) {
-  const left = doc.x;
-  let y = doc.y;
+  const tableWidth = widths.reduce((sum, width) => sum + width, 0);
+  const rowHeight = 18;
 
-  function ensureSpace(height = 24) {
-    if (y + height > doc.page.height - doc.page.margins.bottom) {
-      doc.addPage();
-      y = doc.y;
-    }
+  function drawHeader() {
+    ensureSpace(ctx, 36);
+    let x = margin;
+
+    headers.forEach((header, index) => {
+      drawText(ctx, header, x, ctx.y, {
+        size: 8,
+        bold: true,
+        maxWidth: widths[index] - 4,
+      });
+      x += widths[index];
+    });
+    ctx.y -= 8;
+    drawRule(ctx, ctx.y, tableWidth);
+    ctx.y -= 12;
   }
 
-  ensureSpace();
-  doc.font("Helvetica-Bold").fontSize(8).fillColor("#111827");
-  headers.forEach((header, index) => {
-    doc.text(header, left + widths.slice(0, index).reduce((a, b) => a + b, 0), y, {
-      width: widths[index],
+  drawHeader();
+
+  if (!rows.length) {
+    ensureSpace(ctx, rowHeight);
+    drawText(ctx, "No data for this range.", margin, ctx.y, {
+      size: 9,
+      color: mutedColor,
     });
-  });
-  y += 16;
-  doc.moveTo(left, y - 4).lineTo(left + widths.reduce((a, b) => a + b, 0), y - 4).strokeColor("#d1d5db").stroke();
-  doc.font("Helvetica").fontSize(8).fillColor("#374151");
+    ctx.y -= rowHeight;
+    return;
+  }
 
   for (const row of rows) {
-    ensureSpace();
+    if (ctx.y - rowHeight < bottomMargin) {
+      addPage(ctx);
+      drawHeader();
+    }
+
+    let x = margin;
+
     row.forEach((cell, index) => {
-      doc.text(String(cell), left + widths.slice(0, index).reduce((a, b) => a + b, 0), y, {
-        width: widths[index],
-        height: 20,
-        ellipsis: true,
+      drawText(ctx, String(cell), x, ctx.y, {
+        size: 8,
+        color: mutedColor,
+        maxWidth: widths[index] - 4,
       });
+      x += widths[index];
     });
-    y += 18;
+    ctx.y -= rowHeight;
   }
-
-  doc.y = y;
 }
 
-async function getPdfDocumentConstructor() {
-  const pdfkit = await import("pdfkit");
+async function createReportPdf(range: ReturnType<typeof normalizeReportRange>) {
+  const report = await getCallBoostReport(range);
+  const doc = await PDFDocument.create();
+  const regular = await doc.embedFont(StandardFonts.Helvetica);
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const ctx: PdfContext = {
+    doc,
+    page: doc.addPage(pageSize),
+    fonts: { regular, bold },
+    y: pageSize[1] - margin,
+  };
 
-  return (pdfkit.default || pdfkit) as unknown as PdfDocumentConstructor;
-}
-
-async function createPdfBuffer(render: (doc: PDFKit.PDFDocument) => void) {
-  const PDFDocument = await getPdfDocumentConstructor();
-
-  return new Promise<Buffer>((resolve, reject) => {
-    const doc = new PDFDocument({ margin: 48, size: "A4" });
-    const chunks: Buffer[] = [];
-
-    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
-    doc.on("end", () => resolve(Buffer.concat(chunks)));
-    doc.on("error", reject);
-
-    render(doc);
-    doc.end();
+  drawText(ctx, "CallBoost Reports", margin, ctx.y, {
+    size: 22,
+    bold: true,
   });
+  ctx.y -= 22;
+  drawText(
+    ctx,
+    `${report.rangeLabel} | ${formatDate(report.startDate)} to ${formatDate(
+      report.endDate
+    )}`,
+    margin,
+    ctx.y,
+    { size: 10, color: mutedColor }
+  );
+
+  drawHeading(ctx, "KPI summary");
+  [
+    ["Leads contacted today", report.kpis.leadsContactedToday],
+    ["Total leads contacted", report.kpis.totalLeadsContacted],
+    ["Total outbound SMS", report.kpis.totalOutboundSms],
+    ["Total outbound emails", report.kpis.totalOutboundEmails],
+    ["Total inbound replies", report.kpis.totalInboundReplies],
+    ["STOP replies", report.kpis.stopReplies],
+    ["Interested replies", report.kpis.interestedReplies],
+    ["Not interested replies", report.kpis.notInterestedReplies],
+    ["Contact-to-reply rate", formatPercent(report.kpis.contactToReplyRate)],
+    ["Contact-to-interest rate", formatPercent(report.kpis.contactToInterestRate)],
+    ["STOP rate", formatPercent(report.kpis.stopRate)],
+    ["Clients won", report.kpis.clientsWon],
+  ].forEach(([label, value]) => drawKeyValue(ctx, String(label), value));
+
+  drawHeading(ctx, "Daily activity");
+  drawTable(
+    ctx,
+    ["Date", "Contacted", "Replies", "Interested", "STOP"],
+    report.dailyActivity.map((row) => [
+      row.date,
+      row.contacted,
+      row.replies,
+      row.interested,
+      row.stops,
+    ]),
+    [110, 80, 80, 80, 60]
+  );
+
+  drawHeading(ctx, "Channel performance");
+  drawTable(
+    ctx,
+    ["Channel", "Outbound", "Replies", "Interested", "Reply rate", "Interest rate"],
+    report.channelPerformance.map((row) => [
+      row.channel.toUpperCase(),
+      row.outbound,
+      row.replies,
+      row.interested,
+      formatPercent(row.replyRate),
+      formatPercent(row.interestRate),
+    ]),
+    [70, 70, 70, 80, 80, 90]
+  );
+
+  drawHeading(ctx, "Recent interested replies");
+  drawTable(
+    ctx,
+    ["Business", "City", "Trade", "Reply", "Received"],
+    report.recentInterestedReplies.map((reply) => [
+      reply.businessName,
+      reply.city || "-",
+      reply.trade || "-",
+      reply.snippet,
+      formatDate(reply.receivedAt),
+    ]),
+    [110, 65, 65, 180, 100]
+  );
+
+  return doc.save();
 }
 
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
     const range = normalizeReportRange(url.searchParams.get("range"));
-    const report = await getCallBoostReport(range);
-    const pdf = await createPdfBuffer((doc) => {
-      doc
-        .font("Helvetica-Bold")
-        .fontSize(22)
-        .fillColor("#0f172a")
-        .text("CallBoost Outreach Report");
-      doc
-        .moveDown(0.4)
-        .font("Helvetica")
-        .fontSize(10)
-        .fillColor("#475569")
-        .text(
-          `${report.rangeLabel} | ${formatDate(report.startDate)} to ${formatDate(
-            report.endDate
-          )}`
-        );
+    const pdf = await createReportPdf(range);
 
-      drawHeading(doc, "KPI summary");
-      const kpiRows = [
-        ["Leads contacted today", report.kpis.leadsContactedToday],
-        ["Total leads contacted", report.kpis.totalLeadsContacted],
-        ["Total outbound SMS", report.kpis.totalOutboundSms],
-        ["Total outbound emails", report.kpis.totalOutboundEmails],
-        ["Total inbound replies", report.kpis.totalInboundReplies],
-        ["STOP replies", report.kpis.stopReplies],
-        ["Interested replies", report.kpis.interestedReplies],
-        ["Not interested replies", report.kpis.notInterestedReplies],
-        ["Contact-to-reply rate", formatPercent(report.kpis.contactToReplyRate)],
-        [
-          "Contact-to-interest rate",
-          formatPercent(report.kpis.contactToInterestRate),
-        ],
-        ["STOP rate", formatPercent(report.kpis.stopRate)],
-        ["Clients won", report.kpis.clientsWon],
-      ];
-      kpiRows.forEach(([label, value]) =>
-        drawKeyValue(doc, String(label), value)
-      );
+    const body = pdf.buffer.slice(
+      pdf.byteOffset,
+      pdf.byteOffset + pdf.byteLength
+    ) as ArrayBuffer;
 
-      drawHeading(doc, "Daily activity");
-      drawTable(
-        doc,
-        ["Date", "Contacted", "Replies", "Interested", "STOP"],
-        report.dailyActivity.map((row) => [
-          row.date,
-          row.contacted,
-          row.replies,
-          row.interested,
-          row.stops,
-        ]),
-        [110, 80, 80, 80, 60]
-      );
-
-      drawHeading(doc, "Channel performance");
-      drawTable(
-        doc,
-        [
-          "Channel",
-          "Outbound",
-          "Replies",
-          "Interested",
-          "Reply rate",
-          "Interest rate",
-        ],
-        report.channelPerformance.map((row) => [
-          row.channel.toUpperCase(),
-          row.outbound,
-          row.replies,
-          row.interested,
-          formatPercent(row.replyRate),
-          formatPercent(row.interestRate),
-        ]),
-        [70, 70, 70, 80, 80, 90]
-      );
-
-      drawHeading(doc, "Recent interested replies");
-      drawTable(
-        doc,
-        ["Business", "City", "Trade", "Reply", "Received"],
-        report.recentInterestedReplies.map((reply) => [
-          reply.businessName,
-          reply.city || "-",
-          reply.trade || "-",
-          reply.snippet,
-          formatDate(reply.receivedAt),
-        ]),
-        [110, 65, 65, 180, 100]
-      );
-    });
-
-    return new Response(new Uint8Array(pdf), {
+    return new Response(body, {
       headers: {
         "Content-Type": "application/pdf",
         "Content-Disposition": `attachment; filename="callboost-report-${range}.pdf"`,
