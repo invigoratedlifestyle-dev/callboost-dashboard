@@ -3,6 +3,7 @@ import {
   getCityTargetForState,
   getStateTarget,
 } from "../../../lib/leadTargeting/cities";
+import { generateLeadsForTown } from "../../../lib/leadGeneration";
 import { getTradeTarget } from "../../../lib/leadTargeting/trades";
 
 type GenerateBatchRequest = {
@@ -178,7 +179,6 @@ export async function POST(req: Request) {
     }
 
     const results: TownBatchResult[] = [];
-    const origin = new URL(req.url).origin;
 
     for (const town of towns) {
       const cityTarget = getCityTargetForState(town, stateTarget.key);
@@ -206,45 +206,12 @@ export async function POST(req: Request) {
           limit,
         });
 
-        const res = await fetch(`${origin}/api/leads/generate`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            stateKey: stateTarget.key,
-            cityKey: cityTarget.key,
-            tradeKey: tradeTarget.key,
-            limit,
-          }),
+        const data = await generateLeadsForTown({
+          stateKey: stateTarget.key,
+          cityKey: cityTarget.key,
+          tradeKey: tradeTarget.key,
+          limit,
         });
-        const data = await res.json().catch(() => ({}));
-
-        if (!res.ok) {
-          const errorMessage =
-            data.message || data.error || "Lead generation failed";
-
-          results.push({
-            town: cityTarget.city,
-            created: 0,
-            skipped: 0,
-            rejected: 0,
-            totalFound: 0,
-            success: false,
-            status: "failed",
-            message: getTownMessage({
-              trade: tradeTarget.key,
-              created: 0,
-              skipped: 0,
-              rejected: 0,
-              totalFound: 0,
-              status: "failed",
-              error: errorMessage,
-            }),
-            errors: [errorMessage],
-          });
-          continue;
-        }
 
         const created = getNumber(data.created ?? data.saved);
         const rejected = getNumber(data.rejected ?? data.skippedWrongTrade);
@@ -288,6 +255,12 @@ export async function POST(req: Request) {
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : "Lead generation failed";
+
+        console.error("[lead-generation-batch] town failed", {
+          town: cityTarget.city,
+          trade: tradeTarget.key,
+          error: errorMessage,
+        });
 
         results.push({
           town: cityTarget.city,
