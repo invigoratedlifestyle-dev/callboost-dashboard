@@ -78,6 +78,7 @@ type LeadWithGeneratedContent = Lead & {
   };
   yellow_pages?: {
     url?: string;
+    manual_listing_url?: string;
     website?: string;
     email?: string;
     phone?: string;
@@ -515,6 +516,9 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const [savingContact, setSavingContact] = useState(false);
   const [contactError, setContactError] = useState("");
   const [rerunningYellowPages, setRerunningYellowPages] = useState(false);
+  const [savingYellowPagesUrl, setSavingYellowPagesUrl] = useState(false);
+  const [scrapingYellowPagesUrl, setScrapingYellowPagesUrl] = useState(false);
+  const [yellowPagesListingUrl, setYellowPagesListingUrl] = useState("");
   const [yellowPagesNotice, setYellowPagesNotice] = useState("");
   const [yellowPagesError, setYellowPagesError] = useState("");
   const [heroImageFile, setHeroImageFile] = useState<File | null>(null);
@@ -652,6 +656,11 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       );
       setCallbackForwardToEmail(data.lead?.callbackForwardToEmail || "");
       setCallbackForwardToPhone(data.lead?.callbackForwardToPhone || "");
+      setYellowPagesListingUrl(
+        loadedLead.yellow_pages?.manual_listing_url ||
+          loadedLead.yellow_pages?.url ||
+          ""
+      );
 
       const messagesRes = await fetch(`/api/leads/${slug}/messages`, {
         cache: "no-store",
@@ -738,6 +747,9 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     setSiteHeroImageUrl(nextLead.heroImageUrl || "");
     setSiteBrandingUrl(nextLead.siteBrandingUrl || "");
     setSiteIconUrl(nextLead.siteIconUrl || "");
+    setYellowPagesListingUrl(
+      nextLead.yellow_pages?.manual_listing_url || nextLead.yellow_pages?.url || ""
+    );
     const siteDesign = getLeadSiteDesign(nextLead);
     setButtonColor(siteDesign.buttonColor);
     setButtonTextColor(siteDesign.buttonTextColor);
@@ -855,7 +867,9 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       setYellowPagesNotice(
         updatedFields.length
           ? `Yellow Pages updated ${updatedFields.join(", ")}.`
-          : "Yellow Pages check completed. No empty top-level fields were updated."
+          : data.hasYellowPages
+            ? "Yellow Pages check completed. No empty top-level fields were updated."
+            : "Yellow Pages search unavailable from server. Paste listing URL to enrich manually."
       );
     } catch (error) {
       setYellowPagesError(
@@ -865,6 +879,105 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       );
     } finally {
       setRerunningYellowPages(false);
+    }
+  };
+  const handleSaveYellowPagesUrl = async () => {
+    if (!lead) return;
+
+    const listingUrl = yellowPagesListingUrl.trim();
+
+    if (!listingUrl) {
+      setYellowPagesError("Paste a Yellow Pages listing URL first.");
+      setYellowPagesNotice("");
+      return;
+    }
+
+    setSavingYellowPagesUrl(true);
+    setYellowPagesNotice("");
+    setYellowPagesError("");
+
+    try {
+      const res = await fetch(`/api/leads/${lead.slug || lead.id}/yellow-pages`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          listingUrl,
+          saveOnly: true,
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to save Yellow Pages URL");
+      }
+
+      if (data.lead) {
+        handleLeadUpdated(data.lead);
+      }
+
+      setYellowPagesNotice("Yellow Pages listing URL saved.");
+    } catch (error) {
+      setYellowPagesError(
+        error instanceof Error ? error.message : "Failed to save Yellow Pages URL"
+      );
+    } finally {
+      setSavingYellowPagesUrl(false);
+    }
+  };
+  const handleScrapeYellowPagesUrl = async () => {
+    if (!lead) return;
+
+    const listingUrl = yellowPagesListingUrl.trim();
+
+    if (!listingUrl) {
+      setYellowPagesError("Paste a Yellow Pages listing URL first.");
+      setYellowPagesNotice("");
+      return;
+    }
+
+    setScrapingYellowPagesUrl(true);
+    setYellowPagesNotice("");
+    setYellowPagesError("");
+
+    try {
+      const res = await fetch(`/api/leads/${lead.slug || lead.id}/yellow-pages`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          listingUrl,
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to scrape Yellow Pages listing");
+      }
+
+      if (data.lead) {
+        handleLeadUpdated(data.lead);
+      }
+
+      const updatedFields = Array.isArray(data.updatedFields)
+        ? data.updatedFields
+        : [];
+
+      setYellowPagesNotice(
+        updatedFields.length
+          ? `Yellow Pages listing updated ${updatedFields.join(", ")}.`
+          : "Yellow Pages listing scraped. No empty top-level fields were updated."
+      );
+    } catch (error) {
+      setYellowPagesError(
+        error instanceof Error
+          ? error.message
+          : "Failed to scrape Yellow Pages listing"
+      );
+    } finally {
+      setScrapingYellowPagesUrl(false);
     }
   };
   const handleStartContactEdit = () => {
@@ -1967,6 +2080,43 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 {yellowPagesError}
               </p>
             ) : null}
+
+            <div className="mb-5 rounded-xl border border-white/10 bg-slate-950/40 p-3">
+              <label
+                htmlFor="yellow-pages-listing-url"
+                className="mb-2 block text-xs font-bold uppercase tracking-[0.14em] text-slate-400"
+              >
+                Yellow Pages listing URL
+              </label>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <input
+                  id="yellow-pages-listing-url"
+                  value={yellowPagesListingUrl}
+                  onChange={(event) => setYellowPagesListingUrl(event.target.value)}
+                  className="min-w-0 flex-1 rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none placeholder:text-slate-600"
+                  placeholder="https://www.yellowpages.com.au/..."
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleSaveYellowPagesUrl}
+                    disabled={savingYellowPagesUrl || scrapingYellowPagesUrl}
+                    className="rounded-lg bg-slate-700 px-3 py-2 text-xs font-bold text-white hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {savingYellowPagesUrl ? "Saving..." : "Save URL"}
+                  </button>
+                  <button
+                    onClick={handleScrapeYellowPagesUrl}
+                    disabled={savingYellowPagesUrl || scrapingYellowPagesUrl}
+                    className="rounded-lg border border-yellow-400/20 bg-yellow-500/10 px-3 py-2 text-xs font-bold text-yellow-200 hover:bg-yellow-500/15 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {scrapingYellowPagesUrl ? "Scraping..." : "Scrape Listing"}
+                  </button>
+                </div>
+              </div>
+              <p className="mt-2 text-xs text-slate-500">
+                Use this when server-side Yellow Pages search is blocked.
+              </p>
+            </div>
 
             <div className="space-y-3 text-slate-300">
               <div>

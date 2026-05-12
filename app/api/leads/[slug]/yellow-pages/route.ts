@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { enrichLeadFromYellowPages } from "../../../../lib/enrichment/yellowPages";
+import {
+  enrichLeadFromYellowPages,
+  scrapeYellowPagesListing,
+} from "../../../../lib/enrichment/yellowPages";
 import {
   getLeadById,
   getLeadBySlug,
@@ -31,11 +34,60 @@ function getChangedTopLevelFields(
   );
 }
 
+function applyYellowPagesDetails(
+  lead: Record<string, unknown>,
+  yellowPages: Record<string, unknown>
+) {
+  const enrichmentSources = getRecord(lead.enrichment_sources);
+  const nextLead: Record<string, unknown> = {
+    ...lead,
+    yellow_pages: yellowPages,
+  };
+  const updatedFields: string[] = [];
+  const skippedFields: string[] = [];
+
+  if (!getString(nextLead.website) && getString(yellowPages.website)) {
+    nextLead.website = getString(yellowPages.website);
+    enrichmentSources.website = "yellow_pages";
+    updatedFields.push("website");
+  } else if (getString(yellowPages.website)) {
+    skippedFields.push("website");
+  }
+
+  if (!getString(nextLead.email) && getString(yellowPages.email)) {
+    nextLead.email = getString(yellowPages.email);
+    enrichmentSources.email = "yellow_pages";
+    updatedFields.push("email");
+  } else if (getString(yellowPages.email)) {
+    skippedFields.push("email");
+  }
+
+  if (
+    !getString(nextLead.phone) &&
+    (getString(yellowPages.mobile) || getString(yellowPages.phone))
+  ) {
+    nextLead.phone = getString(yellowPages.mobile) || getString(yellowPages.phone);
+    enrichmentSources.phone = "yellow_pages";
+    updatedFields.push("phone");
+  } else if (getString(yellowPages.mobile) || getString(yellowPages.phone)) {
+    skippedFields.push("phone");
+  }
+
+  if (Object.keys(enrichmentSources).length > 0) {
+    nextLead.enrichment_sources = enrichmentSources;
+  }
+
+  return { nextLead, updatedFields, skippedFields };
+}
+
 export async function POST(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ slug: string }> }
 ) {
   const { slug: leadIdOrSlug } = await params;
+  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+  const listingUrl = getString(body.listingUrl);
+  const saveOnly = body.saveOnly === true;
 
   console.log("[YELLOW_PAGES_MANUAL_START]", {
     id: leadIdOrSlug,
@@ -67,6 +119,72 @@ export async function POST(
         phone: Boolean(getString(existingLead.phone)),
       },
     });
+
+    if (listingUrl) {
+      console.log("[YELLOW_PAGES_MANUAL_URL_RECEIVED]", {
+        slug,
+        listingUrl,
+        saveOnly,
+      });
+
+      const existingYellowPages = getRecord(existingLead.yellow_pages);
+
+      if (saveOnly) {
+        const nextLead = {
+          ...existingLead,
+          yellow_pages: {
+            ...existingYellowPages,
+            manual_listing_url: listingUrl,
+          },
+        };
+        const updatedLead = await updateLeadBySlug(slug, nextLead);
+
+        return NextResponse.json({
+          success: true,
+          lead: updatedLead,
+          updatedFields: [],
+          savedOnly: true,
+        });
+      }
+
+      const scrapedYellowPages = await scrapeYellowPagesListing(listingUrl);
+      const yellowPages = {
+        ...existingYellowPages,
+        ...scrapedYellowPages,
+        manual_listing_url: listingUrl,
+      };
+
+      console.log("[YELLOW_PAGES_MANUAL_URL_SCRAPE_RESULT]", {
+        slug,
+        listingUrl,
+        foundFields: {
+          website: Boolean(getString(yellowPages.website)),
+          email: Boolean(getString(yellowPages.email)),
+          phone: Boolean(getString(yellowPages.phone)),
+          mobile: Boolean(getString(yellowPages.mobile)),
+        },
+      });
+
+      const { nextLead, updatedFields, skippedFields } = applyYellowPagesDetails(
+        existingLead,
+        yellowPages
+      );
+
+      console.log("[YELLOW_PAGES_MANUAL_URL_UPDATED_FIELDS]", {
+        slug,
+        updatedFields,
+        skippedFields,
+        enrichmentSources: getRecord(nextLead.enrichment_sources),
+      });
+
+      const updatedLead = await updateLeadBySlug(slug, nextLead);
+
+      return NextResponse.json({
+        success: true,
+        lead: updatedLead,
+        updatedFields,
+      });
+    }
 
     const enrichedLead = await enrichLeadFromYellowPages(existingLead);
     const updatedFields = getChangedTopLevelFields(existingLead, enrichedLead);
@@ -102,6 +220,8 @@ export async function POST(
       success: true,
       lead: updatedLead,
       updatedFields,
+      hasYellowPages: Object.keys(yellowPages).length > 0,
+      reason: getString(getRecord(enrichedLead.yellow_pages_search).reason),
     });
   } catch (error) {
     console.error("[YELLOW_PAGES_MANUAL_ERROR]", {
