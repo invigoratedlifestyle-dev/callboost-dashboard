@@ -892,32 +892,12 @@ function getProfileTradeLabel(trade: string, profile: TradeProfile) {
   return getTradeLabel(trade);
 }
 
-function getConciseHeadingLabel(trade: string, profile: TradeProfile) {
-  if (isPlumberTrade(trade) && hasRoofSheetmetalModifier(profile)) {
-    return "Plumbing & Sheetmetal Services";
-  }
-
-  if (isPlumbingGasFittingTrade(trade) || hasModifier(profile, "gas_fitting")) {
-    return "Plumbing & Gas Fitting";
-  }
-
-  if (isPlumberTrade(trade)) return "Plumbing Services";
-
-  return `${getTradeLabel(trade)} Services`;
+function buildServicesHeading() {
+  return "Our Services";
 }
 
-function buildServicesHeading(city: string, trade: string, profile: TradeProfile) {
-  const label = getConciseHeadingLabel(trade, profile);
-
-  return city ? `Our ${city} ${label}` : `Our ${label}`;
-}
-
-function buildQuickQuoteHeading(trade: string) {
-  if (isPlumberTrade(trade) || isPlumbingGasFittingTrade(trade)) {
-    return "Need a fast plumbing quote?";
-  }
-
-  return "Need a quick quote for one of our services?";
+function buildQuickQuoteHeading() {
+  return "Need a fast quote?";
 }
 
 function getDefaultServices(trade: string) {
@@ -1654,8 +1634,8 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
   const heroHeadline = buildHeroHeadline(trade, city, tradeProfile);
   const heroSubheading = buildHeroSubheading(trade, city, topServices, tradeProfile);
   const servicePhrase = getServicePhrase(trade, tradeProfile);
-  const servicesHeading = buildServicesHeading(city, trade, tradeProfile);
-  const quickQuoteHeading = buildQuickQuoteHeading(trade);
+  const servicesHeading = buildServicesHeading();
+  const quickQuoteHeading = buildQuickQuoteHeading();
   const modifierSummary = tradeProfile.service_modifiers
     .map(getServiceModifierLabel)
     .join(", ");
