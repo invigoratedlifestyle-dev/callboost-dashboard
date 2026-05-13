@@ -12,6 +12,13 @@ export type WebsiteOpportunitySignal = {
   detail?: string;
 };
 
+export type WebsiteReachabilityStatus =
+  | "reachable"
+  | "reachable_restricted"
+  | "slow_or_unreliable"
+  | "unreachable"
+  | "unknown";
+
 export type WebsiteOpportunityResult = {
   level: WebsiteOpportunityLevel;
   highSignals: WebsiteOpportunitySignal[];
@@ -51,6 +58,8 @@ type BuildWebsiteOpportunityArgs = {
   services?: string[] | null;
   websiteEvaluation?: WebsiteEvaluationLike | null;
   businessPresenceType?: string | null;
+  reachabilityStatus?: WebsiteReachabilityStatus | null;
+  reachabilityDetail?: string | null;
   badDomainDetected?: boolean;
   homepageScrapeFailed?: boolean;
 };
@@ -253,6 +262,7 @@ const signalIssueText: Record<string, string> = {
   parked_domain: "The website appears to be parked or unused.",
   invalid_domain: "The listed website does not appear to be a valid business domain.",
   unreachable_website: "The website could not be reliably reached.",
+  unreliable_or_slow_website: "The website appears slow or unreliable to load.",
   unusable_mobile_experience: "The website appears difficult to use on mobile.",
   old_footer_year:
     "The website footer suggests the site has not been updated recently.",
@@ -301,6 +311,48 @@ function buildIssuesFromSignals(signals: WebsiteOpportunitySignal[]) {
   );
 }
 
+function getReachabilityStatus(args: {
+  status?: WebsiteReachabilityStatus | null;
+  searchableText: string;
+}) {
+  if (args.status) return args.status;
+
+  if (
+    includesAny(args.searchableText, [
+      /dns failure/,
+      /does not resolve/,
+      /enotfound/,
+      /econnrefused/,
+      /ssl failure/,
+      /certificate error/,
+      /redirect loop/,
+      /\b404\b/,
+      /\b410\b/,
+    ])
+  ) {
+    return "unreachable";
+  }
+
+  if (
+    includesAny(args.searchableText, [
+      /unreachable/,
+      /intermittent/,
+      /timeout/,
+      /timed out/,
+      /err_connection_timed_out/,
+      /fetch failed/,
+      /failed to fetch/,
+      /failed to load/,
+      /could not be reached/,
+      /took too long to respond/,
+    ])
+  ) {
+    return "slow_or_unreliable";
+  }
+
+  return "unknown";
+}
+
 function hasReviewCount(value: unknown) {
   const parsed = typeof value === "number" ? value : Number(value);
 
@@ -319,6 +371,7 @@ function buildPositives(args: {
   homepageHtml: string;
   text: string;
   isReachable: boolean;
+  reachabilityStatus: WebsiteReachabilityStatus;
   phone?: string | null;
   email?: string | null;
   rating?: string | number | null;
@@ -351,6 +404,10 @@ function buildPositives(args: {
     positives.push("Website is reachable.");
   }
 
+  if (args.reachabilityStatus === "reachable_restricted") {
+    positives.push("Website appears to exist, but access may be restricted.");
+  }
+
   if (/<meta[^>]+name=["']viewport["']/i.test(args.homepageHtml)) {
     positives.push("Website has basic mobile support.");
   }
@@ -381,6 +438,10 @@ export function buildWebsiteOpportunityResult(
   const hasSocials = hasFacebook || hasInstagram;
   const hostname = getHostname(website);
   const isHostedBuilderWebsite = isHostedBuilderSubdomain(hostname);
+  const reachabilityStatus = getReachabilityStatus({
+    status: args.reachabilityStatus,
+    searchableText,
+  });
   const presenceType = args.businessPresenceType || getPresenceType(website);
   const hasWebsite =
     Boolean(website) &&
@@ -466,32 +527,23 @@ export function buildWebsiteOpportunityResult(
     });
   }
 
-  if (
-    evaluation?.isWorking === false ||
-    args.homepageScrapeFailed ||
-    includesAny(searchableText, [
-      /unreachable/,
-      /intermittent/,
-      /timeout/,
-      /timed out/,
-      /err_connection_timed_out/,
-      /dns failure/,
-      /enotfound/,
-      /econnrefused/,
-      /ssl failure/,
-      /certificate error/,
-      /redirect loop/,
-      /fetch failed/,
-      /failed to fetch/,
-      /failed to load/,
-      /could not be reached/,
-      /took too long to respond/,
-    ])
-  ) {
+  if (reachabilityStatus === "unreachable") {
     addSignal(highSignals, {
       id: "unreachable_website",
       severity: "high",
       label: "Unreachable website",
+      detail: getCleanString(args.reachabilityDetail) || undefined,
+    });
+  } else if (
+    reachabilityStatus === "slow_or_unreliable" ||
+    evaluation?.isWorking === false ||
+    args.homepageScrapeFailed
+  ) {
+    addSignal(mediumSignals, {
+      id: "unreliable_or_slow_website",
+      severity: "medium",
+      label: "Unreliable or slow website",
+      detail: getCleanString(args.reachabilityDetail) || undefined,
     });
   }
 
@@ -695,10 +747,12 @@ export function buildWebsiteOpportunityResult(
     (signal) => signal.id === "unreachable_website"
   );
   const isReachable =
-    Boolean(homepageHtml) &&
-    evaluation?.isWorking !== false &&
-    !args.homepageScrapeFailed &&
-    !hasUnreachableSignal;
+    (reachabilityStatus === "reachable" ||
+      (Boolean(homepageHtml) &&
+        evaluation?.isWorking !== false &&
+        !args.homepageScrapeFailed)) &&
+    !hasUnreachableSignal &&
+    reachabilityStatus !== "slow_or_unreliable";
 
   return {
     level,
@@ -723,6 +777,7 @@ export function buildWebsiteOpportunityResult(
       homepageHtml,
       text,
       isReachable,
+      reachabilityStatus,
       phone: args.phone,
       email: args.email,
       rating: args.rating,

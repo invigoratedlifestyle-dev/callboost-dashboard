@@ -17,6 +17,7 @@ import {
   buildWebsiteOpportunityResult,
   withEvaluatedAt,
 } from "./websiteOpportunity";
+import type { WebsiteReachabilityStatus } from "./websiteOpportunity";
 const ignoredSearchDomains = [
   "google.com",
   "yelp.com",
@@ -1150,11 +1151,68 @@ async function fetchHtml(url: string) {
     clearTimeout(timeout);
   }
 
+  if ([401, 403, 406, 429].includes(res.status)) {
+    return res.text();
+  }
+
   if (!res.ok) {
     throw new Error(`Failed to fetch ${url}: ${res.status}`);
   }
 
   return res.text();
+}
+
+function getErrorText(error: unknown) {
+  const parts: string[] = [];
+
+  if (error instanceof Error) {
+    parts.push(error.name, error.message);
+    const cause = (error as Error & { cause?: unknown }).cause;
+
+    if (cause instanceof Error) {
+      parts.push(cause.name, cause.message);
+    } else if (cause) {
+      parts.push(String(cause));
+    }
+  } else if (error) {
+    parts.push(String(error));
+  }
+
+  return parts.join(" ").toLowerCase();
+}
+
+function getReachabilityStatusFromFetchError(
+  error: unknown
+): WebsiteReachabilityStatus {
+  const text = getErrorText(error);
+
+  if (
+    /enotfound|dns|econnrefused|certificate|ssl|redirect loop|too many redirects|failed to fetch .*404|failed to fetch .*410|:\s*(404|410)\b/.test(
+      text
+    )
+  ) {
+    return "unreachable";
+  }
+
+  return "slow_or_unreliable";
+}
+
+async function fetchHtmlWithRetry(url: string) {
+  let lastError: unknown = null;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await fetchHtml(url);
+    } catch (error) {
+      lastError = error;
+
+      if (getReachabilityStatusFromFetchError(error) === "unreachable") {
+        break;
+      }
+    }
+  }
+
+  throw lastError;
 }
 
 async function findWebsiteFromGoogleSearch(businessName?: string, city?: string) {
@@ -1533,6 +1591,8 @@ function buildQualifiedLead(args: {
   googleReviewFields: Record<string, unknown>;
   businessInfoMatch: BusinessInfoMatch;
   businessPresence: BusinessPresenceMetadata;
+  reachabilityStatus?: WebsiteReachabilityStatus;
+  reachabilityDetail?: string;
 }) {
   const socials = args.socials || {
     facebook: getString(args.existingLead.facebook),
@@ -1561,6 +1621,8 @@ function buildQualifiedLead(args: {
         : [],
       websiteEvaluation: args.websiteEvaluation,
       businessPresenceType: args.businessPresence.primaryBusinessPresenceType,
+      reachabilityStatus: args.reachabilityStatus,
+      reachabilityDetail: args.reachabilityDetail,
       badDomainDetected: args.badDomainDetected,
       homepageScrapeFailed: args.homepageScrapeFailed,
     }),
@@ -1983,9 +2045,12 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
   let homeHtml = "";
 
   try {
-    homeHtml = await fetchHtml(normalizedWebsite);
+    homeHtml = await fetchHtmlWithRetry(normalizedWebsite);
   } catch (error) {
     console.error("Failed to fetch website:", error);
+    const reachabilityStatus = getReachabilityStatusFromFetchError(error);
+    const reachabilityDetail =
+      error instanceof Error ? error.message : "Website fetch failed";
 
     const googleReviewFields = await getGoogleReviewFields({
       existingLead,
@@ -2054,6 +2119,8 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
       googleReviewFields,
       badDomainDetected,
       homepageScrapeFailed: true,
+      reachabilityStatus,
+      reachabilityDetail,
       businessInfoMatch,
       businessPresence,
     });
@@ -2192,6 +2259,7 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
     socials,
     badDomainDetected,
     homepageScrapeFailed: false,
+    reachabilityStatus: "reachable",
     businessInfoMatch,
     businessPresence,
   });
