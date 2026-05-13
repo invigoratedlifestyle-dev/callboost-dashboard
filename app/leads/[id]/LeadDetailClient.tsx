@@ -21,7 +21,10 @@ import {
   getLeadStatusBadgeClass,
   getLeadStatusLabel,
 } from "../../lib/leadWorkflow";
-import { buildWebsiteOpportunityResult } from "../../lib/websiteOpportunity";
+import {
+  buildWebsiteOpportunityResult,
+  getWebsiteOpportunityVisibleIssues,
+} from "../../lib/websiteOpportunity";
 import type {
   StoredWebsiteOpportunityResult,
   WebsiteOpportunityLevel,
@@ -1973,6 +1976,9 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
             lead.business_presence?.sourceType,
         })
       : null);
+  const websiteOpportunityIssues = websiteOpportunityV2
+    ? getWebsiteOpportunityVisibleIssues(websiteOpportunityV2)
+    : [];
   const reviewSource = getReviewSource(lead);
   const reviewCount = lead.reviews?.length || 0;
   const leadAddress = (lead.address || lead.formattedAddress || "").trim();
@@ -4080,14 +4086,20 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                       <h3 className="mb-2 font-bold text-white">
                         Opportunity issues
                       </h3>
-                      {websiteOpportunityV2.issues?.length ? (
+                      {websiteOpportunityIssues.length ? (
                         <ul className="list-disc space-y-1 pl-5 text-slate-300">
-                          {websiteOpportunityV2.issues.map((issue) => (
+                          {websiteOpportunityIssues.map((issue) => (
                             <li key={issue}>{issue}</li>
                           ))}
                         </ul>
+                      ) : websiteOpportunityV2.level === "unranked" ? (
+                        <p className="text-slate-400">
+                          Manual review required before opportunity issues are shown.
+                        </p>
                       ) : (
-                        <p className="text-slate-400">No v2 issues listed.</p>
+                        <p className="text-slate-400">
+                          No qualifying opportunity issues found.
+                        </p>
                       )}
                     </div>
 

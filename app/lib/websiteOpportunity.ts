@@ -315,6 +315,27 @@ function buildIssuesFromSignals(signals: WebsiteOpportunitySignal[]) {
   );
 }
 
+export function getWebsiteOpportunityVisibleIssues(opportunity: {
+  level: WebsiteOpportunityLevel;
+  highSignals?: WebsiteOpportunitySignal[] | null;
+  mediumSignals?: WebsiteOpportunitySignal[] | null;
+  lowSignals?: WebsiteOpportunitySignal[] | null;
+}) {
+  if (opportunity.level === "high") {
+    return buildIssuesFromSignals(opportunity.highSignals || []);
+  }
+
+  if (opportunity.level === "medium") {
+    return buildIssuesFromSignals(opportunity.mediumSignals || []);
+  }
+
+  if (opportunity.level === "low") {
+    return buildIssuesFromSignals(opportunity.lowSignals || []);
+  }
+
+  return [];
+}
+
 function getReachabilityStatus(args: {
   status?: WebsiteReachabilityStatus | null;
   searchableText: string;
@@ -760,7 +781,6 @@ export function buildWebsiteOpportunityResult(
   } else if (lowSignals.length >= 3) {
     level = "low";
   }
-  const allSignals = [...highSignals, ...mediumSignals, ...lowSignals];
   const hasUnreachableSignal = highSignals.some(
     (signal) => signal.id === "unreachable_website"
   );
@@ -788,7 +808,12 @@ export function buildWebsiteOpportunityResult(
       noWebsite,
       hasSocials,
     }),
-    issues: buildIssuesFromSignals(allSignals),
+    issues: getWebsiteOpportunityVisibleIssues({
+      level,
+      highSignals,
+      mediumSignals,
+      lowSignals,
+    }),
     positives: buildPositives({
       website,
       hasWebsite,
@@ -902,7 +927,7 @@ export function buildOutreachOpportunityContext(
     reason: websiteOpportunityV2?.reason || getLegacyReason(args),
     signalLabels: dedupeStrings(signals.map((signal) => signal.label)),
     issues: websiteOpportunityV2
-      ? dedupeStrings(websiteOpportunityV2.issues || [])
+      ? getWebsiteOpportunityVisibleIssues(websiteOpportunityV2)
       : dedupeStrings(legacyIssueValues),
     positives: websiteOpportunityV2
       ? dedupeStrings(websiteOpportunityV2.positives || [])
