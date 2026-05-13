@@ -8,7 +8,6 @@ import type {
   Lead,
   LeadMessage,
   LeadStage,
-  WebsiteEvaluation,
 } from "../../lib/leads";
 import type { BusinessInfoMatch } from "../../lib/businessInfoMatch";
 import {
@@ -209,15 +208,6 @@ const stageLabels: Record<LeadStage, string> = {
   archived: "Archived",
 };
 
-const qualityLabels: Record<WebsiteEvaluation["quality"], string> = {
-  none: "No website",
-  bad: "Bad website",
-  weak: "Weak website",
-  average: "Average website",
-  good: "Good website",
-  unknown: "Unknown",
-};
-
 function getLeadStage(lead: Pick<LeadWithGeneratedContent, "stage">) {
   return lead.stage || "lead";
 }
@@ -240,33 +230,6 @@ function formatTimestamp(value?: string | null) {
   }
 
   return date.toLocaleString();
-}
-
-function getQualityLabel(evaluation?: WebsiteEvaluation) {
-  if (!evaluation) return "Unknown";
-  if (evaluation.hasWebsite && evaluation.isWorking === false) {
-    return "Broken website";
-  }
-
-  return qualityLabels[evaluation.quality] || "Unknown";
-}
-
-function getQualityBadgeClass(evaluation?: WebsiteEvaluation) {
-  if (!evaluation) return "bg-white/10 text-slate-400";
-  if (!evaluation.hasWebsite) return "bg-red-500/15 text-red-300";
-  if (evaluation.isWorking === false) return "bg-red-500/15 text-red-300";
-  if (evaluation.quality === "bad") return "bg-red-500/15 text-red-300";
-  if (evaluation.quality === "weak") return "bg-yellow-500/15 text-yellow-300";
-  if (evaluation.quality === "average") return "bg-blue-500/15 text-blue-300";
-  if (evaluation.quality === "good") return "bg-green-500/15 text-green-300";
-  return "bg-white/10 text-slate-400";
-}
-
-function getRecommendationBadgeClass(recommendation?: string) {
-  if (recommendation === "target") return "bg-red-500/15 text-red-300";
-  if (recommendation === "maybe") return "bg-yellow-500/15 text-yellow-300";
-  if (recommendation === "skip") return "bg-green-500/15 text-green-300";
-  return "bg-white/10 text-slate-400";
 }
 
 function getOpportunityLevelLabel(level?: WebsiteOpportunityLevel) {
@@ -1776,6 +1739,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       previewUrl: getPreviewUrl(lead),
       websiteEvaluation: lead.websiteEvaluation,
       websiteOpportunity: lead.websiteOpportunity,
+      websiteOpportunityV2: lead.website_opportunity_v2,
     });
     const composerFollowUpBody =
       destination.channel === "email"
@@ -4032,29 +3996,65 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                   </div>
 
                   <p className="text-slate-300">{websiteOpportunityV2.reason}</p>
+
+                  <p className="text-slate-300">
+                    {websiteOpportunityV2.summary || "No opportunity summary yet."}
+                  </p>
+
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <div>
+                      <h3 className="mb-2 font-bold text-white">
+                        Opportunity issues
+                      </h3>
+                      {websiteOpportunityV2.issues?.length ? (
+                        <ul className="list-disc space-y-1 pl-5 text-slate-300">
+                          {websiteOpportunityV2.issues.map((issue) => (
+                            <li key={issue}>{issue}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-slate-400">No v2 issues listed.</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <h3 className="mb-2 font-bold text-white">
+                        Opportunity positives
+                      </h3>
+                      {websiteOpportunityV2.positives?.length ? (
+                        <ul className="list-disc space-y-1 pl-5 text-slate-300">
+                          {websiteOpportunityV2.positives.map((positive) => (
+                            <li key={positive}>{positive}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-slate-400">No v2 positives listed.</p>
+                      )}
+                    </div>
+                  </div>
                 </div>
               ) : null}
 
-              {websiteEvaluation ? (
-                <>
-                  <div className="flex flex-wrap items-center gap-3">
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs font-bold ${getQualityBadgeClass(
-                        websiteEvaluation
-                      )}`}
-                    >
-                      {getQualityLabel(websiteEvaluation)}
-                    </span>
-                    <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-200">
-                      {websiteEvaluation.score}/100
-                    </span>
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs font-bold ${getRecommendationBadgeClass(
-                        websiteEvaluation.recommendation
-                      )}`}
-                    >
-                      {websiteEvaluation.recommendation}
-                    </span>
+              {!websiteOpportunityV2 && websiteEvaluation ? (
+                <div className="space-y-4 border-t border-white/10 pt-5">
+                  <div>
+                    <h3 className="mb-2 font-bold text-white">
+                      Website analysis details
+                    </h3>
+                    <div className="grid gap-2 text-sm text-slate-300 sm:grid-cols-2">
+                      <p>
+                        Score:{" "}
+                        <span className="font-semibold text-slate-100">
+                          {websiteEvaluation.score}/100
+                        </span>
+                      </p>
+                      <p>
+                        Confidence:{" "}
+                        <span className="font-semibold text-slate-100">
+                          {websiteEvaluation.recommendation}
+                        </span>
+                      </p>
+                    </div>
                   </div>
 
                   <p className="text-slate-300">
@@ -4063,7 +4063,9 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
 
                   <div className="grid gap-5 md:grid-cols-2">
                     <div>
-                      <h3 className="mb-2 font-bold text-white">Issues</h3>
+                      <h3 className="mb-2 font-bold text-white">
+                        Website analysis issues
+                      </h3>
                       {websiteEvaluation.issues?.length ? (
                         <ul className="list-disc space-y-1 pl-5 text-slate-300">
                           {websiteEvaluation.issues.map((issue) => (
@@ -4076,7 +4078,9 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                     </div>
 
                     <div>
-                      <h3 className="mb-2 font-bold text-white">Positives</h3>
+                      <h3 className="mb-2 font-bold text-white">
+                        Website analysis positives
+                      </h3>
                       {websiteEvaluation.positives?.length ? (
                         <ul className="list-disc space-y-1 pl-5 text-slate-300">
                           {websiteEvaluation.positives.map((positive) => (
@@ -4095,12 +4099,12 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                       ? formatTimestamp(websiteEvaluation.evaluatedAt)
                       : "Not yet"}
                   </p>
-                </>
-              ) : (
+                </div>
+              ) : !websiteOpportunityV2 ? (
                 <p className="text-slate-400">
                   Legacy website evaluation details are not available.
                 </p>
-              )}
+              ) : null}
             </div>
           ) : (
             <p className="text-slate-400">

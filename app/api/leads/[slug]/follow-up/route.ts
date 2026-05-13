@@ -18,6 +18,7 @@ import {
   rowToLead,
   updateLeadStatus,
 } from "../../../../lib/supabase/leads";
+import type { StoredWebsiteOpportunityResult } from "../../../../lib/websiteOpportunity";
 
 type FollowUpStage = 1 | 2 | 3;
 
@@ -97,6 +98,7 @@ export async function POST(
     const leadName = getString(lead.name) || getString(lead.businessName);
     const websiteEvaluation = getRecord(lead.websiteEvaluation);
     const websiteOpportunity = getRecord(lead.websiteOpportunity);
+    const websiteOpportunityV2 = getRecord(lead.website_opportunity_v2);
     const destination = getFollowUpDestination({
       latestOutboundChannel: getLatestOutboundMessageChannel(messages),
       phone: lead.phone,
@@ -140,6 +142,8 @@ export async function POST(
             summary: getString(websiteOpportunity.summary),
           }
         : null,
+      websiteOpportunityV2:
+        websiteOpportunityV2 as StoredWebsiteOpportunityResult | null,
     });
     const messageBody =
       channel === "sms"

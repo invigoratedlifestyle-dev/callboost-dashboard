@@ -4,6 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Lead, LeadStage, WebsiteEvaluation } from "./lib/leads";
+import type {
+  StoredWebsiteOpportunityResult,
+  WebsiteOpportunityLevel,
+} from "./lib/websiteOpportunity";
 import {
   getLastActivityLabel,
   getLeadStatusBadgeClass,
@@ -35,6 +39,7 @@ type DashboardLead = Lead & {
   websiteStatus?: WebsiteStatus;
   websiteStatusReasons?: string[];
   websiteEvaluation?: WebsiteEvaluation;
+  website_opportunity_v2?: StoredWebsiteOpportunityResult;
   payment_status?: string | null;
   client_started_at?: string | null;
 };
@@ -121,18 +126,50 @@ function getOpportunityScore(lead: DashboardLead) {
       : null;
 }
 
-function getOpportunityLabel(score: number | null) {
+function getOpportunityLevel(lead: DashboardLead): WebsiteOpportunityLevel | null {
+  return lead.website_opportunity_v2?.level || null;
+}
+
+function getOpportunityLabel(
+  level: WebsiteOpportunityLevel | null,
+  score: number | null
+) {
+  if (level === "high") return "High";
+  if (level === "medium") return "Medium";
+  if (level === "low") return "Low";
+  if (level === "unranked") return "Unranked";
+  if (level === "none") return "None";
   if (score === null) return "No score";
   if (score >= 70) return "High";
   if (score >= 40) return "Medium";
   return "Low";
 }
 
-function getOpportunityBadgeClass(score: number | null) {
+function getOpportunityBadgeClass(
+  level: WebsiteOpportunityLevel | null,
+  score: number | null
+) {
+  if (level === "high") return "bg-red-500/15 text-red-300";
+  if (level === "medium") return "bg-yellow-500/15 text-yellow-300";
+  if (level === "low") return "bg-blue-500/15 text-blue-300";
+  if (level === "unranked") return "bg-purple-500/15 text-purple-300";
+  if (level === "none") return "bg-green-500/15 text-green-300";
   if (score === null) return "bg-white/10 text-slate-400";
   if (score >= 70) return "bg-red-500/15 text-red-300";
   if (score >= 40) return "bg-yellow-500/15 text-yellow-300";
   return "bg-slate-500/15 text-slate-300";
+}
+
+function getOpportunitySortWeight(lead: DashboardLead) {
+  const level = getOpportunityLevel(lead);
+
+  if (level === "high") return 500;
+  if (level === "medium") return 400;
+  if (level === "low") return 300;
+  if (level === "none") return 200;
+  if (level === "unranked") return 100;
+
+  return getOpportunityScore(lead) || 0;
 }
 
 function formatTradeLabel(value: unknown) {
@@ -668,7 +705,7 @@ export default function DashboardPage() {
         return getClientStartedTime(b) - getClientStartedTime(a);
       }
 
-      return (getOpportunityScore(b) || 0) - (getOpportunityScore(a) || 0);
+      return getOpportunitySortWeight(b) - getOpportunitySortWeight(a);
     });
   }, [activeFilter, leads]);
 
@@ -1254,7 +1291,11 @@ export default function DashboardPage() {
                     }`;
                     const leadRoute = lead.slug || lead.id;
                     const opportunityScore = getOpportunityScore(lead);
-                    const opportunityLabel = getOpportunityLabel(opportunityScore);
+                    const opportunityLevel = getOpportunityLevel(lead);
+                    const opportunityLabel = getOpportunityLabel(
+                      opportunityLevel,
+                      opportunityScore
+                    );
                     const selected = isLeadSelected(lead);
                     const paymentFailed =
                       getPaymentStatus(lead) === "payment_failed";
@@ -1308,6 +1349,7 @@ export default function DashboardPage() {
                         <td className="px-5 py-4">
                           <span
                             className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-bold ${getOpportunityBadgeClass(
+                              opportunityLevel,
                               opportunityScore
                             )}`}
                           >

@@ -2,6 +2,7 @@ import type { Lead } from "./leads";
 import { appendEmailUnsubscribeFooter } from "./emailUnsubscribe";
 import { appendOptOut, estimateSmsSegments, sanitizeForGsm } from "./smsOptOut";
 import { CALLBOOST_PRICE_SUMMARY } from "./pricing";
+import { buildOutreachOpportunityContext } from "./websiteOpportunity";
 
 type OutreachLead = Pick<
   Lead,
@@ -12,6 +13,7 @@ type OutreachLead = Pick<
   | "slug"
   | "trade"
   | "websiteEvaluation"
+  | "website_opportunity_v2"
 > & {
   solution?: string;
   subheadline?: string;
@@ -61,9 +63,19 @@ function getWebsiteNoun(args: InterestedReplyPersonalization) {
 }
 
 function hasBrokenWebsiteOpportunity(lead: OutreachLead) {
+  const context = buildOutreachOpportunityContext({
+    websiteOpportunityV2: lead.website_opportunity_v2,
+    websiteOpportunity: lead.websiteOpportunity,
+    websiteEvaluation: lead.websiteEvaluation,
+  });
   const evaluation = lead.websiteEvaluation;
 
   return (
+    [...context.signalLabels, ...context.issues].some((signal) =>
+      /unreachable|intermittent|invalid domain|parked|could not be reliably reached/i.test(
+        signal
+      )
+    ) ||
     evaluation?.isWorking === false ||
     evaluation?.issues?.some((issue) =>
       /broken|unreachable|failed to load|could not be loaded/i.test(issue)
@@ -84,6 +96,11 @@ function isNoWebsitePlaceholder(value?: string | null) {
 }
 
 function hasNoWebsiteOpportunity(lead: OutreachLead) {
+  const context = buildOutreachOpportunityContext({
+    websiteOpportunityV2: lead.website_opportunity_v2,
+    websiteOpportunity: lead.websiteOpportunity,
+    websiteEvaluation: lead.websiteEvaluation,
+  });
   const evaluation = lead.websiteEvaluation;
   const opportunityIssues = Array.isArray(lead.websiteOpportunity?.issues)
     ? lead.websiteOpportunity?.issues || []
@@ -96,7 +113,12 @@ function hasNoWebsiteOpportunity(lead: OutreachLead) {
     ...opportunityIssues,
   ];
 
-  return evaluation?.quality === "none" ||
+  return [...context.signalLabels, ...context.issues].some((signal) =>
+    /no website|no standalone|no real business website|directory|social media|facebook-only|instagram-only/i.test(
+      signal
+    )
+  ) ||
+    evaluation?.quality === "none" ||
     evaluation?.hasWebsite === false ||
     issueSignals.some((issue) => isNoWebsitePlaceholder(issue));
 }
@@ -122,10 +144,25 @@ function buildInitialOpportunityOutreachLines(
     );
   }
 
+  const context = buildOutreachOpportunityContext({
+    websiteOpportunityV2: lead.website_opportunity_v2,
+    websiteOpportunity: lead.websiteOpportunity,
+    websiteEvaluation: lead.websiteEvaluation,
+  });
+  const mainReason =
+    context.level !== "none" && (context.summary || context.reason)
+      ? context.summary || context.reason
+      : "I noticed your current site could be a bit easier for customers to navigate and contact you from mobile.";
+  const supportingIssue =
+    context.issues.find((issue) => issue.trim()) ||
+    context.signalLabels.find((signal) => signal.trim());
+
   lines.push(
-    "I noticed your current site could be a bit easier for customers to navigate and contact you from mobile.",
+    mainReason,
     "",
-    "Mainly around improving the first impression and making it quicker for people to call or enquire.",
+    supportingIssue
+      ? `The main thing I noticed was: ${supportingIssue}`
+      : "Mainly around improving the first impression and making it quicker for people to call or enquire.",
     "",
     "Happy to set this up properly for you if you like 👍",
     "",
@@ -138,9 +175,23 @@ function buildInitialOpportunityOutreachLines(
 }
 
 export function getWebsiteOpportunityIssue(lead: OutreachLead) {
+  const context = buildOutreachOpportunityContext({
+    websiteOpportunityV2: lead.website_opportunity_v2,
+    websiteOpportunity: lead.websiteOpportunity,
+    websiteEvaluation: lead.websiteEvaluation,
+  });
+
   if (hasBrokenWebsiteOpportunity(lead)) {
     return "I couldn't get your site to load on mobile";
   }
+
+  const firstSignal =
+    context.issues.find((issue) => issue.trim()) ||
+    context.signalLabels.find((signal) => signal.trim());
+
+  if (firstSignal) return firstSignal;
+
+  if (context.reason && context.level !== "none") return context.reason;
 
   const explicitIssue = lead.websiteOpportunity?.issue?.trim();
 
@@ -172,6 +223,16 @@ export function buildOpportunitySms(
   previewUrl: string
 ) {
   const leadName = getLeadName(lead);
+  const context = buildOutreachOpportunityContext({
+    websiteOpportunityV2: lead.website_opportunity_v2,
+    websiteOpportunity: lead.websiteOpportunity,
+    websiteEvaluation: lead.websiteEvaluation,
+  });
+  const signalSummary = context.issues[0]
+    ? `I noticed ${context.issues[0].toLowerCase()}, so this could help make enquiries easier.`
+    : context.signalLabels[0]
+      ? `I noticed ${context.signalLabels[0].toLowerCase()}, so this could help make enquiries easier.`
+    : "I noticed a few areas that could make it easier for customers to call/contact you from mobile.";
 
   if (hasNoWebsiteOpportunity(lead)) {
     return buildShortOpportunitySms([
@@ -189,7 +250,7 @@ export function buildOpportunitySms(
     `Hey ${leadName} - I made a quick mobile-friendly website preview for you:`,
     previewUrl,
     "",
-    "I noticed a few areas that could make it easier for customers to call/contact you from mobile.",
+    signalSummary,
     "",
     "- Jamie, CallBoost Tasmania",
   ]);

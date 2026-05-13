@@ -7,6 +7,8 @@ import {
   CALLBOOST_MONTHLY_RECURRING_LABEL,
   CALLBOOST_SETUP_FEE_LABEL,
 } from "./pricing";
+import { buildOutreachOpportunityContext } from "./websiteOpportunity";
+import type { StoredWebsiteOpportunityResult } from "./websiteOpportunity";
 
 export type FollowUpStage = 1 | 2 | 3;
 export type FollowUpChannel = "sms" | "email";
@@ -40,6 +42,9 @@ type FollowUpWebsiteOpportunity = {
 type FollowUpWebsiteEvaluation = {
   issues?: string[] | null;
   summary?: string | null;
+  positives?: string[] | null;
+  score?: number | null;
+  recommendation?: string | null;
 };
 
 export type FollowUpDueStatus = {
@@ -146,10 +151,17 @@ function humanizeWebsiteOpportunityIssue(issue: string) {
 }
 
 function getWebsiteOpportunityIssues(args: {
+  websiteOpportunityV2?: StoredWebsiteOpportunityResult | null;
   websiteOpportunity?: FollowUpWebsiteOpportunity | null;
   websiteEvaluation?: FollowUpWebsiteEvaluation | null;
 }) {
+  const context = buildOutreachOpportunityContext({
+    websiteOpportunityV2: args.websiteOpportunityV2,
+    websiteOpportunity: args.websiteOpportunity,
+    websiteEvaluation: args.websiteEvaluation,
+  });
   const rawIssues = [
+    ...(args.websiteOpportunityV2 ? context.issues : context.signalLabels),
     ...(Array.isArray(args.websiteOpportunity?.issues)
       ? args.websiteOpportunity?.issues || []
       : []),
@@ -177,16 +189,28 @@ function getWebsiteOpportunityIssues(args: {
 }
 
 function buildWebsiteOpportunitySection(args: {
+  websiteOpportunityV2?: StoredWebsiteOpportunityResult | null;
   websiteOpportunity?: FollowUpWebsiteOpportunity | null;
   websiteEvaluation?: FollowUpWebsiteEvaluation | null;
 }) {
+  const context = buildOutreachOpportunityContext({
+    websiteOpportunityV2: args.websiteOpportunityV2,
+    websiteOpportunity: args.websiteOpportunity,
+    websiteEvaluation: args.websiteEvaluation,
+  });
   const issues = getWebsiteOpportunityIssues(args);
 
-  if (!issues.length) return "";
+  if (!issues.length && context.level === "none") return "";
+
+  const intro = context.summary || context.reason
+    ? `The current website opportunity rating is ${context.level}: ${
+        context.summary || context.reason
+      }`
+    : "I had another look through your current website and noticed a few areas where a refresh could help improve enquiries and mobile usability.";
 
   return [
-    "I had another look through your current website and noticed a few areas where a refresh could help improve enquiries and mobile usability, including:",
-    ...issues.map((issue) => `- ${issue}`),
+    intro,
+    ...(issues.length ? ["A few supporting points:", ...issues.map((issue) => `- ${issue}`)] : []),
   ].join("\n");
 }
 
@@ -236,6 +260,7 @@ function getSmsIssueTheme(issue: string) {
 }
 
 function getSmsIssueSummary(args: {
+  websiteOpportunityV2?: StoredWebsiteOpportunityResult | null;
   websiteOpportunity?: FollowUpWebsiteOpportunity | null;
   websiteEvaluation?: FollowUpWebsiteEvaluation | null;
 }) {
@@ -261,6 +286,7 @@ export function buildFollowUpBody(
     previewUrl?: string | null;
     websiteEvaluation?: FollowUpWebsiteEvaluation | null;
     websiteOpportunity?: FollowUpWebsiteOpportunity | null;
+    websiteOpportunityV2?: StoredWebsiteOpportunityResult | null;
   } = {}
 ) {
   const firstName = getLeadFirstName(name);

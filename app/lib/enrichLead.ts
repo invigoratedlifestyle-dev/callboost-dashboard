@@ -1549,6 +1549,16 @@ function buildQualifiedLead(args: {
       website: args.website,
       homepageHtml: args.homepageHtml,
       socials,
+      phone: args.phone,
+      email: args.email,
+      rating: getString(args.existingLead.rating),
+      reviewCount: getString(args.existingLead.reviewCount),
+      description: getString(args.existingLead.description),
+      services: Array.isArray(args.existingLead.services)
+        ? args.existingLead.services.filter(
+            (service): service is string => typeof service === "string"
+          )
+        : [],
       websiteEvaluation: args.websiteEvaluation,
       businessPresenceType: args.businessPresence.primaryBusinessPresenceType,
       badDomainDetected: args.badDomainDetected,

@@ -19,6 +19,9 @@ export type WebsiteOpportunityResult = {
   lowSignals: WebsiteOpportunitySignal[];
   requiresManualReview: boolean;
   reason: string;
+  issues: string[];
+  positives: string[];
+  summary: string;
 };
 
 export type StoredWebsiteOpportunityResult = WebsiteOpportunityResult & {
@@ -29,8 +32,8 @@ type WebsiteEvaluationLike = {
   hasWebsite?: boolean;
   isWorking?: boolean | null;
   quality?: string;
-  issues?: string[];
-  summary?: string;
+  issues?: string[] | null;
+  summary?: string | null;
 };
 
 type BuildWebsiteOpportunityArgs = {
@@ -40,10 +43,46 @@ type BuildWebsiteOpportunityArgs = {
     facebook?: string | null;
     instagram?: string | null;
   } | null;
+  phone?: string | null;
+  email?: string | null;
+  rating?: string | number | null;
+  reviewCount?: string | number | null;
+  description?: string | null;
+  services?: string[] | null;
   websiteEvaluation?: WebsiteEvaluationLike | null;
   businessPresenceType?: string | null;
   badDomainDetected?: boolean;
   homepageScrapeFailed?: boolean;
+};
+
+type LegacyWebsiteOpportunityLike = {
+  issue?: string | null;
+  issues?: string[] | null;
+  summary?: string | null;
+};
+
+type WebsiteOpportunityContextEvaluation = WebsiteEvaluationLike & {
+  score?: number | null;
+  recommendation?: string | null;
+  positives?: string[] | null;
+};
+
+type BuildOutreachOpportunityContextArgs = {
+  websiteOpportunityV2?: StoredWebsiteOpportunityResult | null;
+  websiteOpportunity?: LegacyWebsiteOpportunityLike | null;
+  websiteEvaluation?: WebsiteOpportunityContextEvaluation | null;
+  opportunityScore?: number | null;
+};
+
+export type OutreachOpportunityContext = {
+  level: WebsiteOpportunityLevel;
+  reason: string;
+  signalLabels: string[];
+  issues: string[];
+  positives: string[];
+  summary: string;
+  legacyScore?: number;
+  legacyConfidence?: string;
 };
 
 const currentYear = new Date().getFullYear();
@@ -166,6 +205,132 @@ function buildReason(args: {
   }
 
   return "Not enough signals were found to rank this as a website opportunity.";
+}
+
+const signalIssueText: Record<string, string> = {
+  no_website_found: "No standalone business website was found.",
+  no_real_business_website:
+    "The listed website is not a standalone business domain.",
+  non_tld_or_invalid_domain:
+    "The listed website is not a standalone business domain.",
+  directory_only_website:
+    "The business appears to rely on a directory listing rather than its own website.",
+  social_only_presence:
+    "The business appears to rely on social media rather than a dedicated website.",
+  parked_domain: "The website appears to be parked or unused.",
+  invalid_domain: "The listed website does not appear to be a valid business domain.",
+  unreachable_or_intermittent: "The website could not be reliably reached.",
+  unusable_mobile_experience: "The website appears difficult to use on mobile.",
+  old_footer_year:
+    "The website footer suggests the site has not been updated recently.",
+  clearly_outdated_layout: "The website layout appears dated.",
+  slow_load: "The website appears slow to load.",
+  ssl_security_warning: "The website may have a security or SSL issue.",
+  broken_navigation: "The website navigation appears broken or difficult to use.",
+  poor_mobile_cta_visibility:
+    "The website does not make it easy for mobile visitors to call or enquire.",
+  no_testimonials: "The website does not show testimonials or customer proof.",
+  weak_cta: "The website has weak or unclear calls to action.",
+  no_trust_badges: "The website lacks visible trust signals.",
+  no_gallery: "The website does not show much visual proof of completed work.",
+  no_review_embeds: "The website does not highlight customer reviews.",
+  generic_stock_content: "The website content appears generic.",
+  weak_branding: "The website branding appears weak or inconsistent.",
+  inconsistent_colours_fonts:
+    "The website has inconsistent colours, fonts, or layout.",
+  no_sticky_call_button:
+    "The website does not provide a persistent mobile call option.",
+  unclear_service_areas: "The website does not clearly explain service areas.",
+};
+
+function buildSummary(level: WebsiteOpportunityLevel) {
+  if (level === "high") {
+    return "Severe website opportunity based on high-confidence signal(s).";
+  }
+
+  if (level === "medium") {
+    return "Meaningful website opportunity based on multiple medium-strength signals.";
+  }
+
+  if (level === "low") {
+    return "Lower-priority website opportunity based on multiple weaker signals.";
+  }
+
+  if (level === "unranked") {
+    return "Insufficient online presence to safely rank; manual review required.";
+  }
+
+  return "Not enough qualifying signals found.";
+}
+
+function buildIssuesFromSignals(signals: WebsiteOpportunitySignal[]) {
+  return dedupeStrings(
+    signals.map((signal) => signalIssueText[signal.id] || signal.label)
+  );
+}
+
+function hasReviewCount(value: unknown) {
+  const parsed = typeof value === "number" ? value : Number(value);
+
+  return Number.isFinite(parsed) && parsed > 0;
+}
+
+function hasTextArray(value: unknown) {
+  return Array.isArray(value) && value.some((item) => getCleanString(item));
+}
+
+function buildPositives(args: {
+  website: string;
+  hasWebsite: boolean;
+  hasSocials: boolean;
+  homepageHtml: string;
+  text: string;
+  isReachable: boolean;
+  phone?: string | null;
+  email?: string | null;
+  rating?: string | number | null;
+  reviewCount?: string | number | null;
+  description?: string | null;
+  services?: string[] | null;
+}) {
+  const positives: string[] = [];
+
+  if (args.website && args.hasWebsite) {
+    positives.push("Has a standalone business website.");
+  }
+
+  if (getCleanString(args.phone) || /href=["']tel:/i.test(args.homepageHtml)) {
+    positives.push("Phone number is available.");
+  }
+
+  if (
+    getCleanString(args.email) ||
+    /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(args.homepageHtml)
+  ) {
+    positives.push("Email contact is available.");
+  }
+
+  if (args.hasSocials) {
+    positives.push("Social presence found.");
+  }
+
+  if (args.isReachable) {
+    positives.push("Website is reachable.");
+  }
+
+  if (/<meta[^>]+name=["']viewport["']/i.test(args.homepageHtml)) {
+    positives.push("Website has basic mobile support.");
+  }
+
+  if (hasReviewCount(args.reviewCount) || hasReviewCount(args.rating)) {
+    positives.push("Google reviews are available.");
+  }
+
+  if (getCleanString(args.description) || hasTextArray(args.services)) {
+    positives.push("Core business information is available.");
+  }
+
+  return dedupeStrings(positives);
 }
 
 export function buildWebsiteOpportunityResult(
@@ -476,6 +641,11 @@ export function buildWebsiteOpportunityResult(
   } else if (lowSignals.length >= 3) {
     level = "low";
   }
+  const allSignals = [...highSignals, ...mediumSignals, ...lowSignals];
+  const isReachable =
+    Boolean(homepageHtml) &&
+    evaluation?.isWorking !== false &&
+    !args.homepageScrapeFailed;
 
   return {
     level,
@@ -491,6 +661,22 @@ export function buildWebsiteOpportunityResult(
       noWebsite,
       hasSocials,
     }),
+    issues: buildIssuesFromSignals(allSignals),
+    positives: buildPositives({
+      website,
+      hasWebsite,
+      hasSocials,
+      homepageHtml,
+      text,
+      isReachable,
+      phone: args.phone,
+      email: args.email,
+      rating: args.rating,
+      reviewCount: args.reviewCount,
+      description: args.description,
+      services: args.services,
+    }),
+    summary: buildSummary(level),
   };
 }
 
@@ -501,5 +687,106 @@ export function withEvaluatedAt(
   return {
     ...result,
     evaluatedAt,
+  };
+}
+
+function dedupeStrings(values: unknown[]) {
+  const seen = new Set<string>();
+  const output: string[] = [];
+
+  values.forEach((value) => {
+    const cleaned = getCleanString(value);
+    const key = cleaned.toLowerCase();
+
+    if (!cleaned || seen.has(key)) return;
+
+    seen.add(key);
+    output.push(cleaned);
+  });
+
+  return output;
+}
+
+function getLegacyOpportunityLevel(args: BuildOutreachOpportunityContextArgs) {
+  const score =
+    typeof args.websiteEvaluation?.score === "number"
+      ? args.websiteEvaluation.score
+      : typeof args.opportunityScore === "number"
+        ? args.opportunityScore
+        : null;
+
+  if (args.websiteEvaluation?.quality === "none") return "high";
+  if (args.websiteEvaluation?.isWorking === false) return "high";
+  if (score === null) return "none";
+  if (score >= 70) return "high";
+  if (score >= 40) return "medium";
+
+  return "none";
+}
+
+function getLegacyReason(args: BuildOutreachOpportunityContextArgs) {
+  const summary = getCleanString(args.websiteOpportunity?.summary);
+
+  if (summary) return summary;
+
+  const evaluationSummary = getCleanString(args.websiteEvaluation?.summary);
+
+  if (evaluationSummary) return evaluationSummary;
+
+  const level = getLegacyOpportunityLevel(args);
+
+  return level === "none"
+    ? "No current website opportunity ranking is available."
+    : "Legacy website analysis indicates an opportunity for improvement.";
+}
+
+export function buildOutreachOpportunityContext(
+  args: BuildOutreachOpportunityContextArgs
+): OutreachOpportunityContext {
+  const websiteOpportunityV2 = args.websiteOpportunityV2 || null;
+  const signals = websiteOpportunityV2
+    ? [
+        ...websiteOpportunityV2.highSignals,
+        ...websiteOpportunityV2.mediumSignals,
+        ...websiteOpportunityV2.lowSignals,
+      ]
+    : [];
+  const legacyIssueValues = [
+    ...(Array.isArray(args.websiteOpportunity?.issues)
+      ? args.websiteOpportunity?.issues || []
+      : []),
+    args.websiteOpportunity?.issue,
+    ...(Array.isArray(args.websiteEvaluation?.issues)
+      ? args.websiteEvaluation?.issues || []
+      : []),
+  ];
+  const legacyScore =
+    typeof args.websiteEvaluation?.score === "number"
+      ? args.websiteEvaluation.score
+      : typeof args.opportunityScore === "number"
+        ? args.opportunityScore
+        : undefined;
+  const legacyConfidence = getCleanString(args.websiteEvaluation?.recommendation);
+
+  return {
+    level: websiteOpportunityV2?.level || getLegacyOpportunityLevel(args),
+    reason: websiteOpportunityV2?.reason || getLegacyReason(args),
+    signalLabels: dedupeStrings(signals.map((signal) => signal.label)),
+    issues: websiteOpportunityV2
+      ? dedupeStrings(websiteOpportunityV2.issues || [])
+      : dedupeStrings(legacyIssueValues),
+    positives: websiteOpportunityV2
+      ? dedupeStrings(websiteOpportunityV2.positives || [])
+      : dedupeStrings(
+          Array.isArray(args.websiteEvaluation?.positives)
+            ? args.websiteEvaluation?.positives || []
+            : []
+        ),
+    summary:
+      websiteOpportunityV2?.summary ||
+      getCleanString(args.websiteEvaluation?.summary) ||
+      "",
+    ...(legacyScore !== undefined ? { legacyScore } : {}),
+    ...(legacyConfidence ? { legacyConfidence } : {}),
   };
 }
