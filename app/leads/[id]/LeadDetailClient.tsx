@@ -366,6 +366,36 @@ function looksLikePaymentReadyReply(message?: LeadMessage | null) {
   );
 }
 
+function getLeadMessageMetadataString(
+  message: LeadMessage,
+  field: "bounceReason" | "bouncedEmail"
+) {
+  const metadata = message.metadata || {};
+  const value = metadata[field];
+
+  return typeof value === "string" ? value : "";
+}
+
+function getLeadMessageStatusLabel(status: LeadMessage["status"]) {
+  if (status === "sent") return "Sent";
+  if (status === "delivered") return "Delivered";
+  if (status === "bounced") return "Bounced";
+  if (status === "received") return "Received";
+  if (status === "failed") return "Failed";
+
+  return "Draft";
+}
+
+function getLeadMessageStatusBadgeClass(status: LeadMessage["status"]) {
+  if (status === "sent") return "bg-green-500/15 text-green-300";
+  if (status === "delivered") return "bg-emerald-500/15 text-emerald-300";
+  if (status === "bounced") return "bg-rose-500/15 text-rose-300";
+  if (status === "received") return "bg-cyan-500/15 text-cyan-300";
+  if (status === "failed") return "bg-red-500/15 text-red-300";
+
+  return "bg-white/10 text-slate-400";
+}
+
 function getTimeline(messages: LeadMessage[], callbacks: CallbackRequest[]) {
   return [
     ...messages.map((message) => ({
@@ -1995,6 +2025,19 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     Boolean(lead.solution);
 
   const timeline = getTimeline(messages, callbacks);
+  const bouncedEmailMessages = messages.filter(
+    (message) =>
+      message.channel === "email" &&
+      message.direction === "outbound" &&
+      (message.status === "bounced" ||
+        message.metadata?.deliveryStatus === "bounced")
+  );
+  const latestBouncedEmail = bouncedEmailMessages[0] || null;
+  const bounceReason = latestBouncedEmail
+    ? getLeadMessageMetadataString(latestBouncedEmail, "bounceReason") ||
+      latestBouncedEmail.error
+    : "";
+  const hasMobileFollowUp = Boolean(lead.phone);
   const latestInboundMessageTime = getLatestLeadMessageTime(messages, "inbound");
   const latestOutboundMessageTime = getLatestLeadMessageTime(
     messages,
@@ -3803,6 +3846,32 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
           )}
         </section>
 
+        {latestBouncedEmail ? (
+          <section className="mt-6 rounded-2xl border border-rose-400/30 bg-rose-500/10 p-5">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-rose-500/15 px-3 py-1 text-xs font-bold uppercase text-rose-300">
+                Email bounced
+              </span>
+              {hasMobileFollowUp ? (
+                <span className="rounded-full bg-blue-500/15 px-3 py-1 text-xs font-bold text-blue-300">
+                  Mobile follow-up available
+                </span>
+              ) : null}
+            </div>
+            <p className="mt-3 text-sm font-bold text-white">
+              {hasMobileFollowUp
+                ? "Email bounced. Mobile is available for SMS follow-up."
+                : "Email bounced. Use SMS/mobile follow-up if available."}
+            </p>
+            <p className="mt-2 text-sm text-rose-100/80">
+              {latestBouncedEmail.toAddress
+                ? `Bounced recipient: ${latestBouncedEmail.toAddress}`
+                : "The latest outbound email could not be delivered."}
+              {bounceReason ? ` Reason: ${bounceReason}` : ""}
+            </p>
+          </section>
+        ) : null}
+
         <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
           <h2 className="mb-4 text-xl font-bold">Message History</h2>
 
@@ -3820,23 +3889,11 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                           {item.message.channel}
                         </span>
                         <span
-                          className={`rounded-full px-3 py-1 text-xs font-bold ${
-                            item.message.status === "sent"
-                              ? "bg-green-500/15 text-green-300"
-                              : item.message.status === "received"
-                                ? "bg-cyan-500/15 text-cyan-300"
-                              : item.message.status === "failed"
-                                ? "bg-red-500/15 text-red-300"
-                                : "bg-white/10 text-slate-400"
-                          }`}
+                          className={`rounded-full px-3 py-1 text-xs font-bold ${getLeadMessageStatusBadgeClass(
+                            item.message.status
+                          )}`}
                         >
-                          {item.message.status === "sent"
-                            ? "Sent"
-                            : item.message.status === "received"
-                              ? "Received"
-                            : item.message.status === "failed"
-                              ? "Failed"
-                              : "Draft"}
+                          {getLeadMessageStatusLabel(item.message.status)}
                         </span>
                       </div>
 
@@ -3862,6 +3919,18 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                     {item.message.error ? (
                       <p className="mt-3 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">
                         {item.message.error}
+                      </p>
+                    ) : null}
+
+                    {item.message.status === "bounced" ? (
+                      <p className="mt-3 rounded-lg bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
+                        Email bounced
+                        {getLeadMessageMetadataString(item.message, "bounceReason")
+                          ? `: ${getLeadMessageMetadataString(
+                              item.message,
+                              "bounceReason"
+                            )}`
+                          : ""}
                       </p>
                     ) : null}
                   </div>

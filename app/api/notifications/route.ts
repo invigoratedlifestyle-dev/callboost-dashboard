@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { listNeedsFollowUp } from "../../lib/supabase/followUpQueue";
-import { listUnreadReplyNotifications } from "../../lib/supabase/leadMessages";
+import {
+  listBouncedEmailNotifications,
+  listUnreadReplyNotifications,
+} from "../../lib/supabase/leadMessages";
 import { getSupabaseAdmin } from "../../lib/supabase/server";
 
 type PaidLeadNotificationRow = {
@@ -50,8 +53,9 @@ async function listPaidLeadNotifications(limit = 20) {
 
 export async function GET() {
   try {
-    const [replies, followUps, payments] = await Promise.all([
+    const [replies, bouncedEmails, followUps, payments] = await Promise.all([
       listUnreadReplyNotifications(20),
+      listBouncedEmailNotifications(20),
       listNeedsFollowUp(),
       listPaidLeadNotifications(20),
     ]);
@@ -81,8 +85,26 @@ export async function GET() {
       createdAt: followUp.dueAt,
       label: "Follow-up due",
     }));
+    const bouncedEmailNotifications = bouncedEmails.map((bounce) => ({
+      type: "email_bounce" as const,
+      id: `email-bounce-${bounce.id || bounce.provider_message_id}`,
+      leadSlug: bounce.lead_slug,
+      businessName: bounce.business_name,
+      bouncedEmail: bounce.bounced_email,
+      mobileAvailable: bounce.mobile_available,
+      providerMessageId: bounce.provider_message_id,
+      body: `Email bounced for ${bounce.business_name}. ${
+        bounce.mobile_available
+          ? "Mobile follow-up available."
+          : "Check contact details before following up."
+      }`,
+      reason: bounce.bounce_reason,
+      createdAt: bounce.created_at,
+      label: "Email bounced",
+    }));
     const notifications = [
       ...replyNotifications,
+      ...bouncedEmailNotifications,
       ...payments,
       ...followUpNotifications,
     ].sort(

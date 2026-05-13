@@ -64,10 +64,11 @@ export type LeadMessage = {
   fromAddress: string;
   subject: string;
   body: string;
-  status: "draft" | "sent" | "failed" | "received";
+  status: "draft" | "sent" | "delivered" | "bounced" | "failed" | "received";
   provider: string;
   providerMessageId: string;
   error: string;
+  metadata?: Record<string, unknown>;
   createdAt: string;
   readAt: string;
 };

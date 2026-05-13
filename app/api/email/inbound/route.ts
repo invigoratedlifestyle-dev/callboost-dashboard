@@ -3,6 +3,7 @@ import { isEmailUnsubscribeIntent } from "../../../lib/emailUnsubscribe";
 import {
   insertLeadMessage,
   listRecentOutboundEmailMessages,
+  updateLeadMessageDeliveryStatusByProviderId,
 } from "../../../lib/supabase/leadMessages";
 import {
   getLeadRowBySlug,
@@ -20,9 +21,13 @@ type InboundEmailMatch = {
 
 type ResendInboundPayload = {
   type?: string;
+  id?: string;
+  created_at?: string;
+  createdAt?: string;
   data?: {
     from?: string;
     to?: string | string[];
+    recipient?: string;
     subject?: string;
     text?: string;
     html?: string;
@@ -30,6 +35,11 @@ type ResendInboundPayload = {
     emailId?: string;
     id?: string;
     message_id?: string;
+    reason?: string;
+    bounce_reason?: string;
+    bounced_at?: string;
+    created_at?: string;
+    createdAt?: string;
     textBody?: string;
     htmlBody?: string;
     text_body?: string;
@@ -148,6 +158,70 @@ function normalizeEmail(value: unknown) {
   return extractEmail(value) || getString(value).toLowerCase();
 }
 
+function getResendProviderMessageId(data: ResendInboundPayload["data"]) {
+  return getString(data?.email_id || data?.emailId || data?.id || data?.message_id);
+}
+
+function getBounceReason(data: ResendInboundPayload["data"]) {
+  return (
+    getString(data?.reason) ||
+    getString(data?.bounce_reason) ||
+    "Email bounced"
+  );
+}
+
+async function handleResendDeliveryEvent(payload: ResendInboundPayload) {
+  const data = payload.data || {};
+  const providerMessageId = getResendProviderMessageId(data);
+
+  if (!providerMessageId) {
+    console.log("Resend delivery event ignored: missing email id", {
+      type: payload.type,
+    });
+    return;
+  }
+
+  if (payload.type === "email.delivered") {
+    await updateLeadMessageDeliveryStatusByProviderId({
+      provider: "resend",
+      providerMessageId,
+      status: "delivered",
+      metadata: {
+        deliveryStatus: "delivered",
+        deliveredAt: getString(data.created_at || data.createdAt || payload.created_at || payload.createdAt) || new Date().toISOString(),
+        resendEventId: getString(payload.id),
+        resendEventType: payload.type,
+      },
+    });
+    return;
+  }
+
+  const isBounce = payload.type === "email.bounced";
+  const reason = isBounce ? getBounceReason(data) : "Email delivery failed";
+
+  await updateLeadMessageDeliveryStatusByProviderId({
+    provider: "resend",
+    providerMessageId,
+    status: isBounce ? "bounced" : "failed",
+    error: reason,
+    metadata: {
+      deliveryStatus: isBounce ? "bounced" : "failed",
+      bounceReason: reason,
+      bouncedEmail: normalizeEmail(data.to || data.recipient),
+      bouncedAt:
+        getString(data.bounced_at || data.created_at || data.createdAt || payload.created_at || payload.createdAt) ||
+        new Date().toISOString(),
+      resendEventId: getString(payload.id),
+      resendEventType: payload.type,
+      resendPayloadSummary: {
+        emailId: providerMessageId,
+        recipient: normalizeEmail(data.to || data.recipient),
+        subject: getString(data.subject),
+      },
+    },
+  });
+}
+
 async function findLeadByOutboundEmail(
   fromEmail: string
 ): Promise<InboundEmailMatch | null> {
@@ -193,6 +267,15 @@ async function findLeadByEmail(
 export async function POST(req: Request) {
   try {
     const payload = (await req.json().catch(() => ({}))) as ResendInboundPayload;
+
+    if (
+      payload.type === "email.bounced" ||
+      payload.type === "email.delivered" ||
+      payload.type === "email.failed"
+    ) {
+      await handleResendDeliveryEvent(payload);
+      return new Response("ok", { status: 200 });
+    }
 
     if (payload.type !== "email.received") {
       return new Response("ok", { status: 200 });

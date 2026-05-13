@@ -3,7 +3,13 @@ import { getLeadStage } from "../leadLifecycle";
 
 export type LeadMessageChannel = "sms" | "email";
 export type LeadMessageDirection = "inbound" | "outbound";
-export type LeadMessageStatus = "draft" | "sent" | "failed" | "received";
+export type LeadMessageStatus =
+  | "draft"
+  | "sent"
+  | "delivered"
+  | "bounced"
+  | "failed"
+  | "received";
 
 export type LeadMessageRow = {
   id?: string;
@@ -55,6 +61,18 @@ export type UnreadReplyNotification = {
   created_at: string;
 };
 
+export type BouncedEmailNotification = {
+  id: string;
+  lead_id: string | number | null;
+  lead_slug: string;
+  business_name: string;
+  bounced_email: string;
+  mobile_available: boolean;
+  provider_message_id: string;
+  bounce_reason: string;
+  created_at: string;
+};
+
 function getString(value: unknown) {
   return typeof value === "string" ? value : "";
 }
@@ -64,7 +82,13 @@ function getChannel(value: unknown): LeadMessageChannel {
 }
 
 function getStatus(value: unknown): LeadMessageStatus {
-  if (value === "draft" || value === "failed" || value === "received") {
+  if (
+    value === "draft" ||
+    value === "delivered" ||
+    value === "bounced" ||
+    value === "failed" ||
+    value === "received"
+  ) {
     return value;
   }
 
@@ -129,6 +153,51 @@ export async function insertLeadMessage(args: {
       error: args.error || null,
       metadata: args.metadata || {},
     })
+    .select("*")
+    .single();
+
+  if (error) throw error;
+
+  return rowToLeadMessage(data as LeadMessageRow);
+}
+
+export async function updateLeadMessageDeliveryStatusByProviderId(args: {
+  provider: string;
+  providerMessageId: string;
+  status: Extract<LeadMessageStatus, "sent" | "delivered" | "bounced" | "failed">;
+  error?: string | null;
+  metadata?: Record<string, unknown> | null;
+}) {
+  const supabase = getSupabaseAdmin();
+  const { data: existingRows, error: existingError } = await supabase
+    .from("lead_messages")
+    .select("*")
+    .eq("provider", args.provider)
+    .eq("provider_message_id", args.providerMessageId)
+    .eq("channel", "email")
+    .eq("direction", "outbound")
+    .limit(1);
+
+  if (existingError) throw existingError;
+
+  const existing = (existingRows?.[0] || null) as LeadMessageRow | null;
+
+  if (!existing?.id) return null;
+
+  const nextMetadata = {
+    ...(existing.metadata && typeof existing.metadata === "object"
+      ? existing.metadata
+      : {}),
+    ...(args.metadata || {}),
+  };
+  const { data, error } = await supabase
+    .from("lead_messages")
+    .update({
+      status: args.status,
+      error: args.error || existing.error || null,
+      metadata: nextMetadata,
+    })
+    .eq("id", existing.id)
     .select("*")
     .single();
 
@@ -221,6 +290,7 @@ type LeadLookupRow = {
   id?: string | number | null;
   slug?: string | null;
   name?: string | null;
+  phone?: string | null;
   stage?: string | null;
   status?: string | null;
   data?: Record<string, unknown> | null;
@@ -263,7 +333,7 @@ export async function listUnreadReplyNotifications(limit = 20) {
   if (leadIds.length) {
     const { data, error: leadsError } = await supabase
       .from("leads")
-      .select("id, slug, name, stage, data")
+      .select("id, slug, name, phone, stage, data")
       .in("id", leadIds);
 
     if (leadsError) throw leadsError;
@@ -273,7 +343,7 @@ export async function listUnreadReplyNotifications(limit = 20) {
   if (slugs.length) {
     const { data, error: leadsError } = await supabase
       .from("leads")
-      .select("id, slug, name, stage, data")
+      .select("id, slug, name, phone, stage, data")
       .in("slug", slugs);
 
     if (leadsError) throw leadsError;
@@ -306,6 +376,96 @@ export async function listUnreadReplyNotifications(limit = 20) {
       channel: getChannel(message.channel),
       body: getString(message.body),
       subject: getString(message.subject),
+      created_at: getString(message.created_at),
+    };
+  });
+}
+
+export async function listBouncedEmailNotifications(limit = 20) {
+  const supabase = getSupabaseAdmin();
+  const { data: messages, error } = await supabase
+    .from("lead_messages")
+    .select("*")
+    .eq("channel", "email")
+    .eq("direction", "outbound")
+    .eq("status", "bounced")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+
+  const messageRows = (messages || []) as LeadMessageRow[];
+  const leadIds = Array.from(
+    new Set(
+      messageRows
+        .map((message) => message.lead_id)
+        .filter((leadId): leadId is string | number => Boolean(leadId))
+        .map((leadId) => String(leadId))
+    )
+  );
+  const slugs = Array.from(
+    new Set(messageRows.map((message) => getString(message.slug)).filter(Boolean))
+  );
+  const leadRows: LeadLookupRow[] = [];
+
+  if (leadIds.length) {
+    const { data, error: leadsError } = await supabase
+      .from("leads")
+      .select("id, slug, name, phone, stage, data")
+      .in("id", leadIds);
+
+    if (leadsError) throw leadsError;
+    leadRows.push(...((data || []) as LeadLookupRow[]));
+  }
+
+  if (slugs.length) {
+    const { data, error: leadsError } = await supabase
+      .from("leads")
+      .select("id, slug, name, phone, stage, data")
+      .in("slug", slugs);
+
+    if (leadsError) throw leadsError;
+    leadRows.push(...((data || []) as LeadLookupRow[]));
+  }
+
+  const leadsById = new Map(
+    leadRows
+      .filter((lead) => lead.id !== null && lead.id !== undefined)
+      .map((lead) => [String(lead.id), lead])
+  );
+  const leadsBySlug = new Map(
+    leadRows.filter((lead) => lead.slug).map((lead) => [getString(lead.slug), lead])
+  );
+
+  return messageRows.map((message): BouncedEmailNotification => {
+    const leadById =
+      message.lead_id !== null && message.lead_id !== undefined
+        ? leadsById.get(String(message.lead_id))
+        : null;
+    const lead = leadById || leadsBySlug.get(getString(message.slug)) || null;
+    const leadSlug = getString(lead?.slug) || getString(message.slug);
+    const leadData = lead?.data && typeof lead.data === "object" ? lead.data : {};
+    const businessName =
+      getLeadName(lead) ||
+      getString(leadData.businessName) ||
+      getString(leadData.name) ||
+      leadSlug ||
+      "Unknown business";
+    const mobile =
+      getString(lead?.phone) ||
+      getString(leadData.phone) ||
+      getString(leadData.mobile);
+
+    return {
+      id: getString(message.id) || getString(message.provider_message_id),
+      lead_id: message.lead_id || lead?.id || null,
+      lead_slug: leadSlug,
+      business_name: businessName,
+      bounced_email: getString(message.to_address),
+      mobile_available: Boolean(mobile),
+      provider_message_id: getString(message.provider_message_id),
+      bounce_reason:
+        getString(message.metadata?.bounceReason) || getString(message.error),
       created_at: getString(message.created_at),
     };
   });

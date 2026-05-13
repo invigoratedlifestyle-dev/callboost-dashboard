@@ -68,6 +68,19 @@ type DashboardNotification =
       label: string;
     }
   | {
+      type: "email_bounce";
+      id: string;
+      leadSlug: string;
+      businessName: string;
+      bouncedEmail: string;
+      mobileAvailable: boolean;
+      providerMessageId: string;
+      body: string;
+      reason: string;
+      createdAt: string | null;
+      label: string;
+    }
+  | {
       type: "follow_up";
       id: string;
       leadSlug: string;
@@ -233,6 +246,12 @@ function getNotificationPreview(notification: DashboardNotification) {
 
   if (notification.type === "payment") {
     return notification.body;
+  }
+
+  if (notification.type === "email_bounce") {
+    return notification.reason
+      ? `${notification.body} ${notification.reason}`
+      : notification.body;
   }
 
   const text = notification.body || notification.subject || "New reply";
@@ -1023,14 +1042,18 @@ export default function DashboardPage() {
                                   ? "bg-cyan-500/15 text-cyan-300"
                                   : notification.type === "payment"
                                     ? "bg-emerald-500/15 text-emerald-300"
-                                  : "bg-blue-500/15 text-blue-300"
+                                  : notification.type === "email_bounce"
+                                    ? "bg-rose-500/15 text-rose-300"
+                                    : "bg-blue-500/15 text-blue-300"
                               }`}
                             >
                               {notification.type === "reply"
                                 ? "New reply"
                                 : notification.type === "payment"
                                   ? "Payment"
-                                  : "Follow-up due"}
+                                  : notification.type === "email_bounce"
+                                    ? "Email bounced"
+                                    : "Follow-up due"}
                             </span>
                             {notification.type === "reply" ? (
                               <span className="rounded-full bg-blue-500/15 px-2 py-0.5 text-[10px] font-bold uppercase text-blue-300">
