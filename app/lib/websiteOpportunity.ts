@@ -232,7 +232,6 @@ const signalIssueText: Record<string, string> = {
   no_testimonials: "The website does not show testimonials or customer proof.",
   weak_cta: "The website has weak or unclear calls to action.",
   no_trust_badges: "The website lacks visible trust signals.",
-  no_gallery: "The website does not show much visual proof of completed work.",
   no_review_embeds: "The website does not highlight customer reviews.",
   generic_stock_content: "The website content appears generic.",
   weak_branding: "The website branding appears weak or inconsistent.",
@@ -545,18 +544,6 @@ export function buildWebsiteOpportunityResult(
       id: "no_trust_badges",
       severity: "low",
       label: "No trust badges",
-    });
-  }
-
-  if (
-    (homepageHtml &&
-      !includesAny(text, [/gallery/, /portfolio/, /our work/, /before and after/])) ||
-    includesAny(searchableText, [/no gallery/])
-  ) {
-    addSignal(lowSignals, {
-      id: "no_gallery",
-      severity: "low",
-      label: "No gallery",
     });
   }
 
