@@ -2410,6 +2410,42 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 </p>
               ) : null}
             </div>
+
+            {lead.business_info_match ? (
+              <div className="mt-5 rounded-xl border border-white/10 bg-slate-950/60 p-4">
+                <h3 className="mb-3 font-bold text-white">
+                  Business Presence Confidence
+                </h3>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-bold ${getBusinessInfoMatchBadgeClass(
+                      lead.business_info_match
+                    )}`}
+                  >
+                    {getBusinessInfoMatchLabel(lead.business_info_match)}
+                  </span>
+                  <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-200">
+                    Score {lead.business_info_match.score}
+                  </span>
+                  {lead.business_info_match.candidate_source ? (
+                    <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-300">
+                      Source {lead.business_info_match.candidate_source}
+                    </span>
+                  ) : null}
+                </div>
+
+                {lead.business_info_match.reasons?.length ? (
+                  <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-300">
+                    {lead.business_info_match.reasons
+                      .slice(0, 4)
+                      .map((reason) => (
+                        <li key={reason}>{reason}</li>
+                      ))}
+                  </ul>
+                ) : null}
+              </div>
+            ) : null}
           </section>
 
           <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
@@ -3933,38 +3969,6 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
             <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">
               {opportunityError}
             </p>
-          ) : null}
-
-          {lead.business_info_match ? (
-            <div className="mb-4 rounded-xl border border-white/10 bg-slate-950/60 p-4">
-              <div className="flex flex-wrap items-center gap-3">
-                <span
-                  className={`rounded-full px-3 py-1 text-xs font-bold ${getBusinessInfoMatchBadgeClass(
-                    lead.business_info_match
-                  )}`}
-                >
-                  {getBusinessInfoMatchLabel(lead.business_info_match)}
-                </span>
-                <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-200">
-                  Score {lead.business_info_match.score}
-                </span>
-                {lead.business_info_match.candidate_source ? (
-                  <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-300">
-                    Source {lead.business_info_match.candidate_source}
-                  </span>
-                ) : null}
-              </div>
-
-              {lead.business_info_match.reasons?.length ? (
-                <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-300">
-                  {lead.business_info_match.reasons
-                    .slice(0, 4)
-                    .map((reason) => (
-                      <li key={reason}>{reason}</li>
-                    ))}
-                </ul>
-              ) : null}
-            </div>
           ) : null}
 
           {websiteEvaluation || websiteOpportunityV2 ? (
