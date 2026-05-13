@@ -12,8 +12,27 @@ export const leadStatuses = [
 ] as const;
 
 export type LeadStatus = (typeof leadStatuses)[number];
+export type LeadWorkflowStage = "lead" | "contacted" | "client" | "archived";
 
 const terminalStatuses = new Set<LeadStatus>(["replied", "paid", "closed"]);
+const stageStatusMap: Record<LeadWorkflowStage, LeadStatus[]> = {
+  lead: ["new", "in_progress", "ready_for_client"],
+  contacted: [
+    "waiting_client",
+    "follow_up_1",
+    "follow_up_2",
+    "final_follow_up",
+    "replied",
+  ],
+  client: ["paid"],
+  archived: ["closed"],
+};
+const defaultStatusByStage: Record<LeadWorkflowStage, LeadStatus> = {
+  lead: "new",
+  contacted: "waiting_client",
+  client: "paid",
+  archived: "closed",
+};
 
 export const leadStatusLabels: Record<LeadStatus, string> = {
   new: "New",
@@ -36,6 +55,50 @@ export function isLeadStatus(value: unknown): value is LeadStatus {
 
 export function normalizeLeadStatus(value: unknown): LeadStatus {
   return isLeadStatus(value) ? value : "new";
+}
+
+export function getAllowedStatusesForStage(stage: unknown) {
+  const normalizedStage = normalizeLeadStageForWorkflow(stage);
+
+  return stageStatusMap[normalizedStage];
+}
+
+export function normalizeLeadStageStatus(
+  stage: unknown,
+  status: unknown
+): LeadStatus {
+  const normalizedStage = normalizeLeadStageForWorkflow(stage);
+  const normalizedStatus = normalizeLeadStatus(status);
+  const allowedStatuses = stageStatusMap[normalizedStage];
+
+  return allowedStatuses.includes(normalizedStatus)
+    ? normalizedStatus
+    : defaultStatusByStage[normalizedStage];
+}
+
+export function enforceLeadStageStatus<T extends Record<string, unknown>>(
+  lead: T
+): T & { status: LeadStatus; workflowStatus: LeadStatus } {
+  const status = normalizeLeadStageStatus(lead.stage, lead.status);
+
+  return {
+    ...lead,
+    status,
+    workflowStatus: status,
+  };
+}
+
+function normalizeLeadStageForWorkflow(stage: unknown): LeadWorkflowStage {
+  if (
+    stage === "lead" ||
+    stage === "contacted" ||
+    stage === "client" ||
+    stage === "archived"
+  ) {
+    return stage;
+  }
+
+  return "lead";
 }
 
 export function getLeadStatusLabel(value: unknown) {
