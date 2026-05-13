@@ -1,5 +1,7 @@
 import type { TradeProfile } from "./leadTargeting/tradeModifiers";
 
+import type { StoredWebsiteOpportunityResult } from "./websiteOpportunity";
+
 export type LeadStage =
   | "lead"
   | "contacted"
@@ -106,6 +108,7 @@ export type Lead = {
   enrichedAt?: string;
   generatedSiteUrl?: string;
   websiteEvaluation?: WebsiteEvaluation;
+  website_opportunity_v2?: StoredWebsiteOpportunityResult;
   callbackForwardingEnabled?: boolean;
   callbackForwardToEmail?: string | null;
   callbackForwardToPhone?: string | null;
