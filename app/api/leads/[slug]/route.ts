@@ -124,6 +124,26 @@ export async function PATCH(
         nextLead.website = body.website;
       }
 
+      if (hasOwn(body, "contactPage") && typeof body.contactPage === "string") {
+        nextLead.contactPage = body.contactPage;
+      }
+
+      if (
+        hasOwn(body, "yellowPagesUrl") &&
+        typeof body.yellowPagesUrl === "string"
+      ) {
+        const existingYellowPages =
+          nextLead.yellow_pages && typeof nextLead.yellow_pages === "object"
+            ? (nextLead.yellow_pages as Record<string, unknown>)
+            : {};
+
+        nextLead.yellow_pages_url = body.yellowPagesUrl;
+        nextLead.yellow_pages = {
+          ...existingYellowPages,
+          manual_listing_url: body.yellowPagesUrl,
+        };
+      }
+
       if (hasOwn(body, "displayName") && typeof body.displayName === "string") {
         nextLead.displayName = body.displayName;
       }

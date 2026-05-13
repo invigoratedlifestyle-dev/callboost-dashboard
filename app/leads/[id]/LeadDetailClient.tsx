@@ -126,6 +126,9 @@ type LeadWithGeneratedContent = Lead & {
   business_presence?: {
     primaryBusinessPresenceType?: string;
     sourceType?: string;
+    primaryBusinessPresenceUrl?: string;
+    sourceUrl?: string;
+    originalWebsiteUrl?: string;
   };
   website_opportunity_v2?: StoredWebsiteOpportunityResult;
 };
@@ -481,6 +484,28 @@ function formatTemplateTradeLabel(value: string) {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function getYellowPagesUrl(lead?: LeadWithGeneratedContent | null) {
+  if (!lead) return "";
+
+  if (
+    lead.yellow_pages &&
+    Object.prototype.hasOwnProperty.call(
+      lead.yellow_pages,
+      "manual_listing_url"
+    ) &&
+    typeof lead.yellow_pages.manual_listing_url === "string"
+  ) {
+    return lead.yellow_pages.manual_listing_url;
+  }
+
+  return (
+    lead.yellow_pages?.listing_url ||
+    lead.yellow_pages?.url ||
+    lead.yellow_pages_url ||
+    ""
+  );
+}
+
 function getSelectedServiceModifiers(lead?: LeadWithGeneratedContent | null) {
   const modifiers = lead?.trade_profile?.service_modifiers || [];
 
@@ -623,6 +648,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     phone: "",
     email: "",
     website: "",
+    yellowPagesUrl: "",
+    contactPage: "",
     displayName: "",
     facebook: "",
     instagram: "",
@@ -683,6 +710,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
         phone: loadedLead.phone || "",
         email: loadedLead.email || "",
         website: loadedLead.website || "",
+        yellowPagesUrl: getYellowPagesUrl(loadedLead),
+        contactPage: loadedLead.contactPage || "",
         displayName:
           loadedLead.displayName ||
           loadedLead.businessName ||
@@ -971,6 +1000,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       phone: lead.phone || "",
       email: lead.email || "",
       website: lead.website || "",
+      yellowPagesUrl: getYellowPagesUrl(lead),
+      contactPage: lead.contactPage || "",
       displayName: lead.displayName || lead.businessName || lead.name || "",
       facebook: lead.facebook || "",
       instagram: lead.instagram || "",
@@ -987,6 +1018,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
         phone: lead.phone || "",
         email: lead.email || "",
         website: lead.website || "",
+        yellowPagesUrl: getYellowPagesUrl(lead),
+        contactPage: lead.contactPage || "",
         displayName: lead.displayName || lead.businessName || lead.name || "",
         facebook: lead.facebook || "",
         instagram: lead.instagram || "",
@@ -1421,6 +1454,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     const nextPhone = normalizePhone(contactDraft.phone);
     const nextEmail = normalizeEmail(contactDraft.email);
     const nextWebsite = normalizeWebsite(contactDraft.website);
+    const nextYellowPagesUrl = normalizeWebsite(contactDraft.yellowPagesUrl);
+    const nextContactPage = normalizeWebsite(contactDraft.contactPage);
     const nextDisplayName = contactDraft.displayName.trim();
     const nextFacebook = normalizeWebsite(contactDraft.facebook);
     const nextInstagram = normalizeWebsite(contactDraft.instagram);
@@ -1446,6 +1481,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
           phone: nextPhone,
           email: nextEmail,
           website: nextWebsite,
+          yellowPagesUrl: nextYellowPagesUrl,
+          contactPage: nextContactPage,
           displayName: nextDisplayName,
           facebook: nextFacebook,
           instagram: nextInstagram,
@@ -1467,6 +1504,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
         phone: updatedLead.phone || "",
         email: updatedLead.email || "",
         website: updatedLead.website || "",
+        yellowPagesUrl: getYellowPagesUrl(updatedLead),
+        contactPage: updatedLead.contactPage || "",
         displayName:
           updatedLead.displayName ||
           updatedLead.businessName ||
@@ -1923,6 +1962,12 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
             instagram: lead.instagram,
           },
           websiteEvaluation,
+          yellowPagesUrl: getYellowPagesUrl(lead),
+          otherPresenceUrls: [
+            lead.business_presence?.primaryBusinessPresenceUrl || "",
+            lead.business_presence?.sourceUrl || "",
+            lead.business_presence?.originalWebsiteUrl || "",
+          ],
           businessPresenceType:
             lead.business_presence?.primaryBusinessPresenceType ||
             lead.business_presence?.sourceType,
@@ -1932,14 +1977,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const reviewCount = lead.reviews?.length || 0;
   const leadAddress = (lead.address || lead.formattedAddress || "").trim();
   const googleMapsUrl = leadAddress ? buildGoogleMapsUrl(leadAddress) : "";
-  const yellowPages = lead.yellow_pages;
-  const yellowPagesUrl =
-    yellowPages?.listing_url ||
-    yellowPages?.url ||
-    yellowPages?.manual_listing_url ||
-    lead.yellow_pages_search?.searchUrl ||
-    lead.yellow_pages_url ||
-    "";
+  const yellowPagesUrl = getYellowPagesUrl(lead);
   const tradeProfile = lead.trade_profile;
   const serviceModifierLabels =
     tradeProfile?.service_modifiers?.map(getServiceModifierLabel).filter(Boolean) ||
@@ -2268,9 +2306,21 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 )}
               </div>
 
-              {yellowPagesUrl ? (
-                <p>
-                  <strong className="text-white">Yellow Pages:</strong>{" "}
+              <div>
+                <strong className="text-white">Yellow Pages:</strong>{" "}
+                {isEditingContact ? (
+                  <input
+                    value={contactDraft.yellowPagesUrl}
+                    onChange={(event) =>
+                      setContactDraft((current) => ({
+                        ...current,
+                        yellowPagesUrl: event.target.value,
+                      }))
+                    }
+                    className="mt-2 w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none"
+                    placeholder="https://www.yellowpages.com.au/..."
+                  />
+                ) : yellowPagesUrl ? (
                   <a
                     href={yellowPagesUrl}
                     target="_blank"
@@ -2279,12 +2329,26 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                   >
                     Open in Yellow Pages
                   </a>
-                </p>
-              ) : null}
+                ) : (
+                  <span className="text-slate-500">Not found yet</span>
+                )}
+              </div>
 
-              <p>
+              <div>
                 <strong className="text-white">Contact Page:</strong>{" "}
-                {lead.contactPage ? (
+                {isEditingContact ? (
+                  <input
+                    value={contactDraft.contactPage}
+                    onChange={(event) =>
+                      setContactDraft((current) => ({
+                        ...current,
+                        contactPage: event.target.value,
+                      }))
+                    }
+                    className="mt-2 w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-white outline-none"
+                    placeholder="https://example.com/contact"
+                  />
+                ) : lead.contactPage ? (
                   <a
                     href={lead.contactPage}
                     target="_blank"
@@ -2295,7 +2359,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 ) : (
                   <span className="text-slate-500">Not found yet</span>
                 )}
-              </p>
+              </div>
 
               <div>
                 <strong className="text-white">Facebook:</strong>{" "}
@@ -3996,6 +4060,11 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                     {websiteOpportunityV2.requiresManualReview ? (
                       <span className="rounded-full bg-purple-500/15 px-3 py-1 text-xs font-bold text-purple-300">
                         Manual review required
+                      </span>
+                    ) : null}
+                    {websiteOpportunityV2.requiresSocialsReview ? (
+                      <span className="rounded-full bg-sky-500/15 px-3 py-1 text-xs font-bold text-sky-300">
+                        Socials review required
                       </span>
                     ) : null}
                   </div>

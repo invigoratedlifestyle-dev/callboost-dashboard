@@ -25,6 +25,8 @@ export type WebsiteOpportunityResult = {
   mediumSignals: WebsiteOpportunitySignal[];
   lowSignals: WebsiteOpportunitySignal[];
   requiresManualReview: boolean;
+  requiresSocialsReview?: boolean;
+  reviewFlags?: string[];
   reason: string;
   issues: string[];
   positives: string[];
@@ -50,6 +52,8 @@ type BuildWebsiteOpportunityArgs = {
     facebook?: string | null;
     instagram?: string | null;
   } | null;
+  yellowPagesUrl?: string | null;
+  otherPresenceUrls?: string[] | null;
   phone?: string | null;
   email?: string | null;
   rating?: string | number | null;
@@ -223,7 +227,7 @@ function buildReason(args: {
   hasSocials: boolean;
 }) {
   if (args.level === "unranked") {
-    return "No website or social presence was found, so this lead needs manual review before ranking.";
+    return "Insufficient online presence and business contact data was found, so this lead needs manual review before ranking.";
   }
 
   if (args.level === "high") {
@@ -436,6 +440,18 @@ export function buildWebsiteOpportunityResult(
   const hasFacebook = Boolean(getCleanString(args.socials?.facebook));
   const hasInstagram = Boolean(getCleanString(args.socials?.instagram));
   const hasSocials = hasFacebook || hasInstagram;
+  const yellowPagesUrl = getCleanString(args.yellowPagesUrl);
+  const hasOtherPresence = Boolean(
+    yellowPagesUrl ||
+      (Array.isArray(args.otherPresenceUrls) &&
+        args.otherPresenceUrls.some((url) => getCleanString(url)))
+  );
+  const hasContactOrBusinessInfo = Boolean(
+    getCleanString(args.phone) ||
+      getCleanString(args.email) ||
+      getCleanString(args.description) ||
+      hasTextArray(args.services)
+  );
   const hostname = getHostname(website);
   const isHostedBuilderWebsite = isHostedBuilderSubdomain(hostname);
   const reachabilityStatus = getReachabilityStatus({
@@ -731,8 +747,10 @@ export function buildWebsiteOpportunityResult(
   const noWebsite = !hasWebsite;
   let level: WebsiteOpportunityLevel = "none";
   let requiresManualReview = false;
+  const requiresSocialsReview = !hasSocials;
+  const reviewFlags = requiresSocialsReview ? ["socials_review_required"] : [];
 
-  if (!website && !hasSocials) {
+  if (!website && !hasSocials && !hasOtherPresence && !hasContactOrBusinessInfo) {
     level = "unranked";
     requiresManualReview = true;
   } else if (highSignals.length >= 1) {
@@ -760,6 +778,8 @@ export function buildWebsiteOpportunityResult(
     mediumSignals,
     lowSignals,
     requiresManualReview,
+    requiresSocialsReview,
+    reviewFlags,
     reason: buildReason({
       level,
       highCount: highSignals.length,

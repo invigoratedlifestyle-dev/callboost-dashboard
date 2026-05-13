@@ -203,6 +203,33 @@ function getExistingPrimaryPresenceUrl(lead: Record<string, unknown>) {
   );
 }
 
+function getYellowPagesPresenceUrl(lead: Record<string, unknown>) {
+  const yellowPages = getRecord(lead.yellow_pages);
+
+  if (
+    Object.prototype.hasOwnProperty.call(yellowPages, "manual_listing_url") &&
+    typeof yellowPages.manual_listing_url === "string"
+  ) {
+    return yellowPages.manual_listing_url;
+  }
+
+  return (
+    getString(yellowPages.listing_url) ||
+    getString(yellowPages.url) ||
+    getString(lead.yellow_pages_url)
+  );
+}
+
+function getBusinessPresenceUrls(
+  businessPresence: Partial<BusinessPresenceMetadata> | Record<string, unknown>
+) {
+  return [
+    getString(businessPresence.primaryBusinessPresenceUrl),
+    getString(businessPresence.sourceUrl),
+    getString(businessPresence.originalWebsiteUrl),
+  ].filter(Boolean);
+}
+
 function isBadDomain(url: string) {
   try {
     const parsedUrl = new URL(normalizeUrl(url));
@@ -1318,6 +1345,8 @@ export async function rerunWebsiteOpportunity(
       reviewCount: getString(existingLead.reviewCount),
       description: getString(existingLead.description),
       services: getStringArray(existingLead.services),
+      yellowPagesUrl: getYellowPagesPresenceUrl(existingLead),
+      otherPresenceUrls: getBusinessPresenceUrls(businessPresence),
       websiteEvaluation: getWebsiteEvaluationForOpportunity(
         existingLead.websiteEvaluation
       ),
@@ -1744,6 +1773,8 @@ function buildQualifiedLead(args: {
           )
         : [],
       websiteEvaluation: args.websiteEvaluation,
+      yellowPagesUrl: getYellowPagesPresenceUrl(args.existingLead),
+      otherPresenceUrls: getBusinessPresenceUrls(args.businessPresence),
       businessPresenceType: args.businessPresence.primaryBusinessPresenceType,
       reachabilityStatus: args.reachabilityStatus,
       reachabilityDetail: args.reachabilityDetail,
