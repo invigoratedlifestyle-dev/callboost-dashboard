@@ -16,9 +16,7 @@ import { isValidTradeLead } from "../../lib/tradeValidation";
 import {
   buildTradeProfile,
   getServiceModifierLabel,
-  serviceModifiers,
   withTradeProfile,
-  type ServiceModifier,
 } from "../../lib/leadTargeting/tradeModifiers";
 
 const client = new OpenAI({
@@ -124,6 +122,14 @@ function hasGooglePlaceCategorySignals(lead: Record<string, unknown>) {
   );
 }
 
+function getRequestLeadDisplayFields(lead: Record<string, unknown>) {
+  return {
+    siteBrandingUrl: getStringField(lead, "siteBrandingUrl"),
+    heroImageUrl: getStringField(lead, "heroImageUrl"),
+    siteIconUrl: getStringField(lead, "siteIconUrl"),
+  };
+}
+
 export async function POST(req: Request) {
   try {
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
@@ -187,35 +193,29 @@ export async function POST(req: Request) {
       );
     }
 
-    const requestedServiceModifiers = Array.isArray(body.serviceModifiers)
-      ? body.serviceModifiers.filter((modifier): modifier is ServiceModifier =>
-          typeof modifier === "string" &&
-          serviceModifiers.includes(modifier as ServiceModifier)
-        )
-      : null;
+    const requestDisplayFields = getRequestLeadDisplayFields(requestLead);
     const detectedTradeProfile = buildTradeProfile({
       ...existingLead,
-      ...requestLead,
       templateTrade,
       templateType,
     });
-    const initialTradeProfile = requestedServiceModifiers
-      ? {
-          ...detectedTradeProfile,
-          template_profile: templateTrade,
-          secondary_trades: Array.from(
-            new Set([
-              ...detectedTradeProfile.secondary_trades,
-              ...requestedServiceModifiers,
-            ])
-          ),
-          service_modifiers: requestedServiceModifiers,
-          manual_service_modifiers: true,
-        }
-      : detectedTradeProfile;
+    const initialTradeProfile = {
+      ...detectedTradeProfile,
+      template_profile:
+        detectedTradeProfile.template_profile || templateTrade,
+    };
     const modifierLabels = initialTradeProfile.service_modifiers.map(
       getServiceModifierLabel
     );
+
+    console.log("[GENERATE_SITE_MODIFIERS]", {
+      slug,
+      primaryTrade: initialTradeProfile.primary_trade,
+      templateProfile: initialTradeProfile.template_profile,
+      serviceModifiers: modifierLabels,
+      manualServiceModifiers:
+        initialTradeProfile.manual_service_modifiers === true,
+    });
 
     const prompt = `
 Generate local business website content.
@@ -229,6 +229,7 @@ Service modifiers: ${modifierLabels.join(", ") || "none"}
 If the selected template trade is plumbing-gas-fitting / Plumbing and Gas Fitting, tailor the copy to licensed plumbing and gas fitting work. Mention safe, reliable gas work, emergency plumbing, hot water, gas appliance connections, residential work and light commercial support where suitable. Do not invent licence numbers or certifications.
 
 Use the primary trade for the core website structure and template choice. Use service modifiers only when they are supported by the business name, scraped data or existing lead data. Do not invent unsupported services. Keep the copy practical, local-business focused and specific to the modifier mix.
+When service modifiers are provided, naturally include them where relevant in the generated business description, service list, body copy, FAQ ideas, trust messaging and call-to-action copy. Do not omit saved manual modifiers.
 
 Business:
 ${JSON.stringify(existingLead, null, 2)}
@@ -270,13 +271,13 @@ Return ONLY valid JSON:
       ...existingLead,
       siteBrandingUrl:
         getStringField(existingLead, "siteBrandingUrl") ||
-        getStringField(requestLead, "siteBrandingUrl"),
+        requestDisplayFields.siteBrandingUrl,
       heroImageUrl:
         getStringField(existingLead, "heroImageUrl") ||
-        getStringField(requestLead, "heroImageUrl"),
+        requestDisplayFields.heroImageUrl,
       siteIconUrl:
         getStringField(existingLead, "siteIconUrl") ||
-        getStringField(requestLead, "siteIconUrl"),
+        requestDisplayFields.siteIconUrl,
       templateTrade,
       templateType,
       trade_profile: initialTradeProfile,

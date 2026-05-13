@@ -2724,7 +2724,6 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                       lead={lead}
                       templateTrade={templateTrade}
                       templateType={templateType}
-                      serviceModifiers={selectedServiceModifiers}
                       onGenerated={handleLeadUpdated}
                     />
                   </div>

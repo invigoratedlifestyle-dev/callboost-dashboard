@@ -7,7 +7,6 @@ type Props = {
   lead: Lead;
   templateTrade?: string;
   templateType?: string;
-  serviceModifiers?: string[];
   onGenerated?: (updatedLead: Lead) => void;
 };
 
@@ -15,7 +14,6 @@ export default function GenerateSiteButton({
   lead,
   templateTrade,
   templateType,
-  serviceModifiers,
   onGenerated,
 }: Props) {
   const [loading, setLoading] = useState(false);
@@ -38,7 +36,6 @@ export default function GenerateSiteButton({
           lead,
           templateTrade: nextTemplateTrade,
           templateType: nextTemplateType,
-          serviceModifiers: serviceModifiers || [],
         }),
       });
 
