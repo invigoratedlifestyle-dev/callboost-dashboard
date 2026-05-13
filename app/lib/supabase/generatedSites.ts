@@ -704,14 +704,19 @@ function hasModifier(profile: TradeProfile, modifier: ServiceModifier) {
   return profile.service_modifiers.includes(modifier);
 }
 
+function hasRoofSheetmetalModifier(profile: TradeProfile) {
+  return (
+    hasModifier(profile, "sheetmetal") ||
+    hasModifier(profile, "roof_plumbing") ||
+    hasModifier(profile, "guttering") ||
+    hasModifier(profile, "flashing")
+  );
+}
+
 function getModifierServices(profile: TradeProfile) {
   const services: string[] = [];
 
-  if (
-    hasModifier(profile, "sheetmetal") ||
-    hasModifier(profile, "roof_plumbing") ||
-    hasModifier(profile, "guttering")
-  ) {
+  if (hasRoofSheetmetalModifier(profile)) {
     services.push(
       "General Plumbing",
       "Roof Plumbing",
@@ -758,13 +763,8 @@ function getModifierServices(profile: TradeProfile) {
 }
 
 function getServicePhrase(trade: string, profile: TradeProfile) {
-  if (
-    isPlumberTrade(trade) &&
-    (hasModifier(profile, "sheetmetal") ||
-      hasModifier(profile, "roof_plumbing") ||
-      hasModifier(profile, "guttering"))
-  ) {
-    return "plumbing, roofing, guttering and sheetmetal services";
+  if (isPlumberTrade(trade) && hasRoofSheetmetalModifier(profile)) {
+    return "plumbing, roof plumbing, guttering and sheetmetal services";
   }
 
   if (isPlumbingGasFittingTrade(trade) || hasModifier(profile, "gas_fitting")) {
@@ -783,13 +783,8 @@ function getServicePhrase(trade: string, profile: TradeProfile) {
 }
 
 function getProfileTradeLabel(trade: string, profile: TradeProfile) {
-  if (
-    isPlumberTrade(trade) &&
-    (hasModifier(profile, "sheetmetal") ||
-      hasModifier(profile, "roof_plumbing") ||
-      hasModifier(profile, "guttering"))
-  ) {
-    return "Plumbing, Roofing & Sheetmetal";
+  if (isPlumberTrade(trade) && hasRoofSheetmetalModifier(profile)) {
+    return "Plumbing & Sheetmetal";
   }
 
   if (isPlumbingGasFittingTrade(trade) || hasModifier(profile, "gas_fitting")) {
@@ -805,6 +800,34 @@ function getProfileTradeLabel(trade: string, profile: TradeProfile) {
   }
 
   return getTradeLabel(trade);
+}
+
+function getConciseHeadingLabel(trade: string, profile: TradeProfile) {
+  if (isPlumberTrade(trade) && hasRoofSheetmetalModifier(profile)) {
+    return "Plumbing & Sheetmetal Services";
+  }
+
+  if (isPlumbingGasFittingTrade(trade) || hasModifier(profile, "gas_fitting")) {
+    return "Plumbing & Gas Fitting";
+  }
+
+  if (isPlumberTrade(trade)) return "Plumbing Services";
+
+  return `${getTradeLabel(trade)} Services`;
+}
+
+function buildServicesHeading(city: string, trade: string, profile: TradeProfile) {
+  const label = getConciseHeadingLabel(trade, profile);
+
+  return city ? `Our ${city} ${label}` : `Our ${label}`;
+}
+
+function buildQuickQuoteHeading(trade: string) {
+  if (isPlumberTrade(trade) || isPlumbingGasFittingTrade(trade)) {
+    return "Need a fast plumbing quote?";
+  }
+
+  return "Need a quick quote for one of our services?";
 }
 
 function getDefaultServices(trade: string) {
@@ -1237,9 +1260,7 @@ function buildFaqs(args: {
 
   if (
     isPlumberTrade(trade) &&
-    (hasModifier(profile, "sheetmetal") ||
-      hasModifier(profile, "roof_plumbing") ||
-      hasModifier(profile, "guttering"))
+    hasRoofSheetmetalModifier(profile)
   ) {
     return [
       [
@@ -1348,13 +1369,8 @@ function buildFaqs(args: {
 }
 
 function buildHeroHeadline(trade: string, city: string, profile: TradeProfile) {
-  if (
-    isPlumberTrade(trade) &&
-    (hasModifier(profile, "sheetmetal") ||
-      hasModifier(profile, "roof_plumbing") ||
-      hasModifier(profile, "guttering"))
-  ) {
-    return `Local Plumbing, Roofing & Sheetmetal in ${city}`;
+  if (isPlumberTrade(trade) && hasRoofSheetmetalModifier(profile)) {
+    return `Local Plumbing & Sheetmetal Services in ${city}`;
   }
 
   if (isPlumbingGasFittingTrade(trade)) {
@@ -1374,11 +1390,13 @@ function buildHeroSubheading(
 ) {
   if (
     isPlumberTrade(trade) &&
-    (hasModifier(profile, "sheetmetal") ||
-      hasModifier(profile, "roof_plumbing") ||
-      hasModifier(profile, "guttering"))
+    hasRoofSheetmetalModifier(profile)
   ) {
-    return `Local plumbing, roofing, guttering and sheetmetal services in ${city} and surrounding areas. Call for help with ${topServices}.`;
+    const gasNote = hasModifier(profile, "gas_fitting")
+      ? " Gas fitting enquiries can also be discussed."
+      : "";
+
+    return `Local plumbing support with roof plumbing, guttering and sheetmetal work across ${city} and surrounding areas. Call for help with ${topServices}.${gasNote}`;
   }
 
   if (isPlumbingGasFittingTrade(trade)) {
@@ -1493,6 +1511,8 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
   const heroHeadline = buildHeroHeadline(trade, city, tradeProfile);
   const heroSubheading = buildHeroSubheading(trade, city, topServices, tradeProfile);
   const servicePhrase = getServicePhrase(trade, tradeProfile);
+  const servicesHeading = buildServicesHeading(city, trade, tradeProfile);
+  const quickQuoteHeading = buildQuickQuoteHeading(trade);
   const modifierSummary = tradeProfile.service_modifiers
     .map(getServiceModifierLabel)
     .join(", ");
@@ -1765,7 +1785,7 @@ ${iconLinkHtml}
         <div class="quote-card">
           <div>
             <div class="section-kicker">Quick quote</div>
-            <h2>Need ${escapeHtml(servicePhrase)}?</h2>
+            <h2>${escapeHtml(quickQuoteHeading)}</h2>
             <p class="muted">Send the basics through and ${escapeHtml(businessName)} can call back with the next step.</p>
           </div>
           <form class="mini-form" data-slug="${escapeAttribute(businessSlug)}">
@@ -1786,7 +1806,7 @@ ${iconLinkHtml}
       <div class="container">
         <div class="section-header">
           <div class="section-kicker">Services</div>
-          <h2>Our ${escapeHtml(city)} ${escapeHtml(tradeLabel)} Services</h2>
+          <h2>${escapeHtml(servicesHeading)}</h2>
           <p class="muted">Practical ${escapeHtml(servicePhrase)} for homes, rentals, shops and commercial properties across ${escapeHtml(city)}.</p>
         </div>
         <div class="services-grid">${servicesHtml}</div>
@@ -1823,7 +1843,7 @@ ${iconLinkHtml}
       <div class="container">
         <div class="section-header">
           <div class="section-kicker">FAQ</div>
-          <h2>Common ${escapeHtml(servicePhrase)} questions</h2>
+          <h2>Common service questions</h2>
           <p class="muted">Straight answers before you pick up the phone.</p>
         </div>
         <div class="faq-grid">${faqHtml}</div>
