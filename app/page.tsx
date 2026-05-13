@@ -773,7 +773,7 @@ export default function DashboardPage() {
   }
 
   async function runSelectedBulkAction(
-    action: "enrich" | "contacted" | "archived"
+    action: "enrich" | "website_evaluation" | "contacted" | "archived"
   ) {
     const slugs = selectedLeads
       .map((lead) => lead.slug || "")
@@ -790,8 +790,14 @@ export default function DashboardPage() {
 
     try {
       const isStageAction = action === "contacted" || action === "archived";
+      const endpoint =
+        action === "website_evaluation"
+          ? "/api/leads/website-evaluation"
+          : isStageAction
+            ? "/api/leads/bulk-stage"
+            : "/api/leads/enrich-selected";
       const res = await fetch(
-        isStageAction ? "/api/leads/bulk-stage" : "/api/leads/enrich-selected",
+        endpoint,
         {
           method: "POST",
           headers: {
@@ -1198,6 +1204,16 @@ export default function DashboardPage() {
                 {bulkActionRunning === "enrich"
                   ? "Enriching..."
                   : "Enrich Selected"}
+              </button>
+
+              <button
+                onClick={() => runSelectedBulkAction("website_evaluation")}
+                disabled={Boolean(bulkActionRunning)}
+                className="rounded-lg bg-purple-600 px-3 py-2 text-xs font-bold text-white hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {bulkActionRunning === "website_evaluation"
+                  ? "Evaluating..."
+                  : "Website Evaluation"}
               </button>
 
               <button

@@ -128,6 +128,11 @@ export type EnrichLeadResult = {
   lead: Record<string, unknown>;
 };
 
+export type WebsiteOpportunityRefreshResult = {
+  success: boolean;
+  lead: Record<string, unknown>;
+};
+
 const openai = process.env.OPENAI_API_KEY
   ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
   : null;
@@ -1213,6 +1218,93 @@ async function fetchHtmlWithRetry(url: string) {
   }
 
   throw lastError;
+}
+
+function getStringArray(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function getWebsiteEvaluationForOpportunity(value: unknown) {
+  const record = getRecord(value);
+
+  return {
+    hasWebsite:
+      typeof record.hasWebsite === "boolean" ? record.hasWebsite : undefined,
+    isWorking:
+      typeof record.isWorking === "boolean" || record.isWorking === null
+        ? record.isWorking
+        : undefined,
+    quality: getString(record.quality),
+    issues: getStringArray(record.issues),
+    summary: getString(record.summary),
+  };
+}
+
+export async function rerunWebsiteOpportunity(
+  slug: string,
+  providedWebsite?: string
+) {
+  const existingLead = await getLeadBySlug(slug);
+
+  if (!existingLead) {
+    throw new Error("Lead not found");
+  }
+
+  const website = normalizeUrl(providedWebsite || getString(existingLead.website));
+  const socials = {
+    facebook: getString(existingLead.facebook),
+    instagram: getString(existingLead.instagram),
+  };
+  let homepageHtml = "";
+  let reachabilityStatus: WebsiteReachabilityStatus | undefined = website
+    ? "unknown"
+    : undefined;
+  let reachabilityDetail = "";
+
+  if (website) {
+    try {
+      homepageHtml = await fetchHtmlWithRetry(website);
+      reachabilityStatus = "reachable";
+    } catch (error) {
+      reachabilityStatus = getReachabilityStatusFromFetchError(error);
+      reachabilityDetail =
+        error instanceof Error ? error.message : "Website fetch failed";
+    }
+  }
+
+  const businessPresence = getRecord(existingLead.business_presence);
+  const websiteOpportunityV2 = withEvaluatedAt(
+    buildWebsiteOpportunityResult({
+      website,
+      homepageHtml,
+      socials,
+      phone: getString(existingLead.phone),
+      email: getString(existingLead.email),
+      rating: getString(existingLead.rating),
+      reviewCount: getString(existingLead.reviewCount),
+      description: getString(existingLead.description),
+      services: getStringArray(existingLead.services),
+      websiteEvaluation: getWebsiteEvaluationForOpportunity(
+        existingLead.websiteEvaluation
+      ),
+      businessPresenceType: getString(businessPresence.primaryBusinessPresenceType),
+      reachabilityStatus,
+      reachabilityDetail,
+      badDomainDetected: website
+        ? isSocialOrDirectoryUrl(website) || isBadDomain(website)
+        : false,
+      homepageScrapeFailed: Boolean(website && !homepageHtml),
+    })
+  );
+  const savedLead = await updateLeadBySlug(slug, {
+    ...existingLead,
+    website: getString(existingLead.website) || website,
+    website_opportunity_v2: websiteOpportunityV2,
+  });
+
+  return { success: true, lead: savedLead } satisfies WebsiteOpportunityRefreshResult;
 }
 
 async function findWebsiteFromGoogleSearch(businessName?: string, city?: string) {
