@@ -86,6 +86,16 @@ export type OutreachOpportunityContext = {
 };
 
 const currentYear = new Date().getFullYear();
+const hostedBuilderDomains = [
+  "my.canva.site",
+  "wixsite.com",
+  "square.site",
+  "weebly.com",
+  "webflow.io",
+  "wordpress.com",
+  "blogspot.com",
+  "jimdosite.com",
+];
 
 function getCleanString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
@@ -136,6 +146,27 @@ function hasValidTld(url: string) {
   } catch {
     return false;
   }
+}
+
+function getHostname(url: string) {
+  if (!url) return "";
+
+  try {
+    const parsedUrl = new URL(/^https?:\/\//i.test(url) ? url : `https://${url}`);
+
+    return parsedUrl.hostname.replace(/^www\./i, "").toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function isHostedBuilderSubdomain(hostname: string) {
+  const normalizedHostname = hostname.replace(/^www\./i, "").toLowerCase();
+
+  return hostedBuilderDomains.some(
+    (domain) =>
+      normalizedHostname !== domain && normalizedHostname.endsWith(`.${domain}`)
+  );
 }
 
 function stripHtml(html: string) {
@@ -211,6 +242,8 @@ const signalIssueText: Record<string, string> = {
   no_website_found: "No standalone business website was found.",
   no_real_business_website:
     "The listed website is not a standalone business domain.",
+  hosted_builder_subdomain:
+    "The business uses a hosted builder subdomain rather than a standalone business domain.",
   non_tld_or_invalid_domain:
     "The listed website is not a standalone business domain.",
   directory_only_website:
@@ -281,6 +314,7 @@ function hasTextArray(value: unknown) {
 function buildPositives(args: {
   website: string;
   hasWebsite: boolean;
+  isHostedBuilderWebsite: boolean;
   hasSocials: boolean;
   homepageHtml: string;
   text: string;
@@ -294,7 +328,7 @@ function buildPositives(args: {
 }) {
   const positives: string[] = [];
 
-  if (args.website && args.hasWebsite) {
+  if (args.website && args.hasWebsite && !args.isHostedBuilderWebsite) {
     positives.push("Has a standalone business website.");
   }
 
@@ -345,10 +379,13 @@ export function buildWebsiteOpportunityResult(
   const hasFacebook = Boolean(getCleanString(args.socials?.facebook));
   const hasInstagram = Boolean(getCleanString(args.socials?.instagram));
   const hasSocials = hasFacebook || hasInstagram;
+  const hostname = getHostname(website);
+  const isHostedBuilderWebsite = isHostedBuilderSubdomain(hostname);
   const presenceType = args.businessPresenceType || getPresenceType(website);
   const hasWebsite =
     Boolean(website) &&
     presenceType === "website" &&
+    !isHostedBuilderWebsite &&
     evaluation?.hasWebsite !== false;
   const highSignals: WebsiteOpportunitySignal[] = [];
   const mediumSignals: WebsiteOpportunitySignal[] = [];
@@ -368,6 +405,14 @@ export function buildWebsiteOpportunityResult(
       severity: "high",
       label: "No real business website",
       detail: "The primary presence is not an owned business website.",
+    });
+  }
+
+  if (website && isHostedBuilderWebsite) {
+    addSignal(highSignals, {
+      id: "hosted_builder_subdomain",
+      severity: "high",
+      label: "Hosted builder subdomain",
     });
   }
 
@@ -618,7 +663,7 @@ export function buildWebsiteOpportunityResult(
   let level: WebsiteOpportunityLevel = "none";
   let requiresManualReview = false;
 
-  if (noWebsite && !hasSocials) {
+  if (!website && !hasSocials) {
     level = "unranked";
     requiresManualReview = true;
   } else if (highSignals.length >= 1) {
@@ -652,6 +697,7 @@ export function buildWebsiteOpportunityResult(
     positives: buildPositives({
       website,
       hasWebsite,
+      isHostedBuilderWebsite,
       hasSocials,
       homepageHtml,
       text,
