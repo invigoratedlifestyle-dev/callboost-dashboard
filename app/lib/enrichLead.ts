@@ -13,6 +13,10 @@ import { withLifecycleDefaults } from "./leadLifecycle";
 import { enrichLeadFromYellowPages } from "./enrichment/yellowPages";
 import { withTradeProfile } from "./leadTargeting/tradeModifiers";
 import { getLeadBySlug, updateLeadBySlug } from "./supabase/leads";
+import {
+  buildWebsiteOpportunityResult,
+  withEvaluatedAt,
+} from "./websiteOpportunity";
 const ignoredSearchDomains = [
   "google.com",
   "yelp.com",
@@ -1540,6 +1544,18 @@ function buildQualifiedLead(args: {
     businessName: getString(args.existingLead.businessName),
   });
   const leadScore = args.websiteEvaluation.score;
+  const websiteOpportunityV2 = withEvaluatedAt(
+    buildWebsiteOpportunityResult({
+      website: args.website,
+      homepageHtml: args.homepageHtml,
+      socials,
+      websiteEvaluation: args.websiteEvaluation,
+      businessPresenceType: args.businessPresence.primaryBusinessPresenceType,
+      badDomainDetected: args.badDomainDetected,
+      homepageScrapeFailed: args.homepageScrapeFailed,
+    }),
+    args.websiteEvaluation.evaluatedAt || undefined
+  );
   const priority = getPriority(leadScore);
   const highConfidenceBusinessInfo = args.businessInfoMatch.confidence === "high";
   const existingFacebook = getString(args.existingLead.facebook);
@@ -1586,6 +1602,7 @@ function buildQualifiedLead(args: {
     business_info_match: args.businessInfoMatch,
     business_presence: args.businessPresence,
     websiteEvaluation: args.websiteEvaluation,
+    website_opportunity_v2: websiteOpportunityV2,
     ...args.googleReviewFields,
     websiteStatus: classification.websiteStatus,
     websiteStatusReasons: classification.reasons,

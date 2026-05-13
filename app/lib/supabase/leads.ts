@@ -15,6 +15,8 @@ import {
   type LeadRecord,
 } from "../leadLifecycle";
 import {
+  enforceLeadStageStatus,
+  normalizeLeadStageStatus,
   normalizeLeadStatus,
   shouldPreserveLeadStatus,
   type LeadStatus,
@@ -108,7 +110,10 @@ export function rowToLead(row: LeadRow): LeadRecord {
       data.stage ||
       (isLifecycleStage(legacyDataStatus) ? legacyDataStatus : ""),
   });
-  const status = normalizeLeadStatus(row.status || data.workflowStatus || data.status);
+  const status = normalizeLeadStageStatus(
+    stage,
+    row.status || data.workflowStatus || data.status
+  );
   const rowWebsite = getString(row.website) || getString(data.website);
   const canonicalWebsite = getString(businessPresence.canonicalWebsiteUrl);
   const rowWebsitePresenceType = getBusinessPresenceType(rowWebsite);
@@ -213,10 +218,8 @@ export function rowToLead(row: LeadRow): LeadRecord {
 }
 
 export function leadToRow(lead: LeadRecord) {
-  const leadWithDefaults = withLifecycleDefaults(lead);
-  const status = normalizeLeadStatus(
-    leadWithDefaults.status || leadWithDefaults.workflowStatus
-  );
+  const leadWithDefaults = enforceLeadStageStatus(withLifecycleDefaults(lead));
+  const status = leadWithDefaults.status;
   const statusUpdatedAt =
     getString(leadWithDefaults.statusUpdatedAt) ||
     getString(leadWithDefaults.status_updated_at) ||
@@ -398,20 +401,32 @@ export async function updateLeadStatus(
   if (!existingLeadRow) return null;
 
   const existingLead = rowToLead(existingLeadRow);
+  const stage = getLeadStage(existingLead);
+  const currentStatus = normalizeLeadStageStatus(stage, existingLead.status);
+  const nextStatus = normalizeLeadStageStatus(stage, status);
 
   if (
     options.preserveTerminal !== false &&
-    shouldPreserveLeadStatus(existingLead.status)
+    shouldPreserveLeadStatus(currentStatus)
   ) {
-    return existingLead;
+    if (currentStatus === normalizeLeadStatus(existingLead.status)) {
+      return existingLead;
+    }
+
+    return updateLeadBySlug(slug, {
+      ...existingLead,
+      status: currentStatus,
+      workflowStatus: currentStatus,
+      statusUpdatedAt: new Date().toISOString(),
+    });
   }
 
   const now = new Date().toISOString();
 
   return updateLeadBySlug(slug, {
     ...existingLead,
-    status,
-    workflowStatus: status,
+    status: nextStatus,
+    workflowStatus: nextStatus,
     statusUpdatedAt: now,
     lastActivityAt: options.touchActivity === false
       ? getString(existingLead.lastActivityAt) ||
@@ -427,11 +442,12 @@ export async function touchLeadActivity(slug: string) {
   if (!existingLeadRow) return null;
 
   const existingLead = rowToLead(existingLeadRow);
+  const stage = getLeadStage(existingLead);
   const now = new Date().toISOString();
   const nextStatus =
-    normalizeLeadStatus(existingLead.status) === "new"
+    stage === "lead" && normalizeLeadStatus(existingLead.status) === "new"
       ? "in_progress"
-      : normalizeLeadStatus(existingLead.status);
+      : normalizeLeadStageStatus(stage, existingLead.status);
 
   return updateLeadBySlug(slug, {
     ...existingLead,
@@ -460,16 +476,20 @@ export async function updateLeadBrandingAssets(
   if (!existingLeadRow) return null;
 
   const now = new Date().toISOString();
-  const existingStatus = normalizeLeadStatus(rowToLead(existingLeadRow).status);
+  const existingLead = rowToLead(existingLeadRow);
+  const existingStatus = normalizeLeadStageStatus(
+    getLeadStage(existingLead),
+    existingLead.status
+  );
   const hasGeneratedSite =
-    Boolean(getString(rowToLead(existingLeadRow).generatedSiteUrl)) ||
-    Boolean(getString(rowToLead(existingLeadRow).generatedSitePublicUrl));
+    Boolean(getString(existingLead.generatedSiteUrl)) ||
+    Boolean(getString(existingLead.generatedSitePublicUrl));
   const nextStatus =
     assets.siteBrandingUrl && hasGeneratedSite && !shouldPreserveLeadStatus(existingStatus)
-      ? "ready_for_client"
+      ? normalizeLeadStageStatus(getLeadStage(existingLead), "ready_for_client")
       : existingStatus;
   const nextLead = withLifecycleDefaults({
-    ...rowToLead(existingLeadRow),
+    ...existingLead,
     ...(assets.siteBrandingUrl ? { siteBrandingUrl: assets.siteBrandingUrl } : {}),
     ...(assets.heroImageUrl ? { heroImageUrl: assets.heroImageUrl } : {}),
     ...(assets.siteIconUrl ? { siteIconUrl: assets.siteIconUrl } : {}),
@@ -478,8 +498,8 @@ export async function updateLeadBrandingAssets(
     statusUpdatedAt:
       nextStatus !== existingStatus
         ? now
-        : getString(rowToLead(existingLeadRow).statusUpdatedAt) ||
-          getString(rowToLead(existingLeadRow).status_updated_at) ||
+        : getString(existingLead.statusUpdatedAt) ||
+          getString(existingLead.status_updated_at) ||
           now,
     lastActivityAt: now,
     updatedAt: now,
@@ -533,11 +553,26 @@ export async function updateLeadStageBySlug(
 
   if (stage === "client") {
     updatedLead.clientAt = now;
+    updatedLead.status = "paid";
+    updatedLead.workflowStatus = "paid";
+    updatedLead.statusUpdatedAt = now;
   }
 
   if (stage === "archived") {
     updatedLead.archivedAt = now;
+    updatedLead.status = "closed";
+    updatedLead.workflowStatus = "closed";
+    updatedLead.statusUpdatedAt = now;
     updatedLead = removeGeneratedSiteReferencesFromLead(updatedLead);
+  }
+
+  if (stage !== "client" && stage !== "archived") {
+    const nextStatus = normalizeLeadStageStatus(stage, updatedLead.status);
+    if (nextStatus !== normalizeLeadStatus(updatedLead.status)) {
+      updatedLead.status = nextStatus;
+      updatedLead.workflowStatus = nextStatus;
+      updatedLead.statusUpdatedAt = now;
+    }
   }
 
   const savedLead = await updateLeadBySlug(slug, updatedLead);

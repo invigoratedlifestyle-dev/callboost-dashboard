@@ -23,6 +23,11 @@ import {
   getLeadStatusLabel,
 } from "../../lib/leadWorkflow";
 import {
+  buildWebsiteOpportunityResult,
+  type StoredWebsiteOpportunityResult,
+  type WebsiteOpportunityLevel,
+} from "../../lib/websiteOpportunity";
+import {
   getServiceModifierLabel,
   serviceModifiers,
   type ServiceModifier,
@@ -118,6 +123,11 @@ type LeadWithGeneratedContent = Lead & {
     phone?: string;
   };
   business_info_match?: BusinessInfoMatch;
+  business_presence?: {
+    primaryBusinessPresenceType?: string;
+    sourceType?: string;
+  };
+  website_opportunity_v2?: StoredWebsiteOpportunityResult;
 };
 
 type OutreachChannel = "sms" | "email";
@@ -256,6 +266,26 @@ function getRecommendationBadgeClass(recommendation?: string) {
   if (recommendation === "target") return "bg-red-500/15 text-red-300";
   if (recommendation === "maybe") return "bg-yellow-500/15 text-yellow-300";
   if (recommendation === "skip") return "bg-green-500/15 text-green-300";
+  return "bg-white/10 text-slate-400";
+}
+
+function getOpportunityLevelLabel(level?: WebsiteOpportunityLevel) {
+  if (level === "high") return "High opportunity";
+  if (level === "medium") return "Medium opportunity";
+  if (level === "low") return "Low opportunity";
+  if (level === "unranked") return "Unranked";
+  if (level === "none") return "No opportunity";
+
+  return "Unknown";
+}
+
+function getOpportunityLevelBadgeClass(level?: WebsiteOpportunityLevel) {
+  if (level === "high") return "bg-red-500/15 text-red-300";
+  if (level === "medium") return "bg-yellow-500/15 text-yellow-300";
+  if (level === "low") return "bg-blue-500/15 text-blue-300";
+  if (level === "unranked") return "bg-purple-500/15 text-purple-300";
+  if (level === "none") return "bg-green-500/15 text-green-300";
+
   return "bg-white/10 text-slate-400";
 }
 
@@ -1917,6 +1947,22 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const leadLastActivityAt = lead.lastActivityAt || lead.last_activity_at || "";
   const generatedSiteUrl = isLeadArchived ? "" : lead.generatedSiteUrl || "";
   const websiteEvaluation = lead.websiteEvaluation;
+  const websiteOpportunityV2 =
+    lead.website_opportunity_v2 ||
+    (websiteEvaluation
+      ? buildWebsiteOpportunityResult({
+          website: lead.website,
+          homepageHtml: "",
+          socials: {
+            facebook: lead.facebook,
+            instagram: lead.instagram,
+          },
+          websiteEvaluation,
+          businessPresenceType:
+            lead.business_presence?.primaryBusinessPresenceType ||
+            lead.business_presence?.sourceType,
+        })
+      : null);
   const reviewSource = getReviewSource(lead);
   const reviewCount = lead.reviews?.length || 0;
   const leadAddress = (lead.address || lead.formattedAddress || "").trim();
@@ -3957,66 +4003,104 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
             </div>
           ) : null}
 
-          {websiteEvaluation ? (
+          {websiteEvaluation || websiteOpportunityV2 ? (
             <div className="space-y-5">
-              <div className="flex flex-wrap items-center gap-3">
-                <span
-                  className={`rounded-full px-3 py-1 text-xs font-bold ${getQualityBadgeClass(
-                    websiteEvaluation
-                  )}`}
-                >
-                  {getQualityLabel(websiteEvaluation)}
-                </span>
-                <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-200">
-                  {websiteEvaluation.score}/100
-                </span>
-                <span
-                  className={`rounded-full px-3 py-1 text-xs font-bold ${getRecommendationBadgeClass(
-                    websiteEvaluation.recommendation
-                  )}`}
-                >
-                  {websiteEvaluation.recommendation}
-                </span>
-              </div>
+              {websiteOpportunityV2 ? (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-bold ${getOpportunityLevelBadgeClass(
+                        websiteOpportunityV2.level
+                      )}`}
+                    >
+                      {getOpportunityLevelLabel(websiteOpportunityV2.level)}
+                    </span>
+                    <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-200">
+                      High {websiteOpportunityV2.highSignals.length}
+                    </span>
+                    <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-200">
+                      Medium {websiteOpportunityV2.mediumSignals.length}
+                    </span>
+                    <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-200">
+                      Low {websiteOpportunityV2.lowSignals.length}
+                    </span>
+                    {websiteOpportunityV2.requiresManualReview ? (
+                      <span className="rounded-full bg-purple-500/15 px-3 py-1 text-xs font-bold text-purple-300">
+                        Manual review required
+                      </span>
+                    ) : null}
+                  </div>
 
-              <p className="text-slate-300">
-                {websiteEvaluation.summary || "No evaluation summary yet."}
-              </p>
-
-              <div className="grid gap-5 md:grid-cols-2">
-                <div>
-                  <h3 className="mb-2 font-bold text-white">Issues</h3>
-                  {websiteEvaluation.issues?.length ? (
-                    <ul className="list-disc space-y-1 pl-5 text-slate-300">
-                      {websiteEvaluation.issues.map((issue) => (
-                        <li key={issue}>{issue}</li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-slate-400">No issues listed.</p>
-                  )}
+                  <p className="text-slate-300">{websiteOpportunityV2.reason}</p>
                 </div>
+              ) : null}
 
-                <div>
-                  <h3 className="mb-2 font-bold text-white">Positives</h3>
-                  {websiteEvaluation.positives?.length ? (
-                    <ul className="list-disc space-y-1 pl-5 text-slate-300">
-                      {websiteEvaluation.positives.map((positive) => (
-                        <li key={positive}>{positive}</li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-slate-400">No positives listed.</p>
-                  )}
-                </div>
-              </div>
+              {websiteEvaluation ? (
+                <>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-bold ${getQualityBadgeClass(
+                        websiteEvaluation
+                      )}`}
+                    >
+                      {getQualityLabel(websiteEvaluation)}
+                    </span>
+                    <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-200">
+                      {websiteEvaluation.score}/100
+                    </span>
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-bold ${getRecommendationBadgeClass(
+                        websiteEvaluation.recommendation
+                      )}`}
+                    >
+                      {websiteEvaluation.recommendation}
+                    </span>
+                  </div>
 
-              <p className="text-sm text-slate-500">
-                Evaluated:{" "}
-                {websiteEvaluation.evaluatedAt
-                  ? formatTimestamp(websiteEvaluation.evaluatedAt)
-                  : "Not yet"}
-              </p>
+                  <p className="text-slate-300">
+                    {websiteEvaluation.summary || "No evaluation summary yet."}
+                  </p>
+
+                  <div className="grid gap-5 md:grid-cols-2">
+                    <div>
+                      <h3 className="mb-2 font-bold text-white">Issues</h3>
+                      {websiteEvaluation.issues?.length ? (
+                        <ul className="list-disc space-y-1 pl-5 text-slate-300">
+                          {websiteEvaluation.issues.map((issue) => (
+                            <li key={issue}>{issue}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-slate-400">No issues listed.</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <h3 className="mb-2 font-bold text-white">Positives</h3>
+                      {websiteEvaluation.positives?.length ? (
+                        <ul className="list-disc space-y-1 pl-5 text-slate-300">
+                          {websiteEvaluation.positives.map((positive) => (
+                            <li key={positive}>{positive}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-slate-400">No positives listed.</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <p className="text-sm text-slate-500">
+                    Evaluated:{" "}
+                    {websiteEvaluation.evaluatedAt
+                      ? formatTimestamp(websiteEvaluation.evaluatedAt)
+                      : "Not yet"}
+                  </p>
+                </>
+              ) : (
+                <p className="text-slate-400">
+                  Legacy website evaluation details are not available.
+                </p>
+              )}
             </div>
           ) : (
             <p className="text-slate-400">
