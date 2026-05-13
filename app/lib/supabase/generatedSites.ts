@@ -762,6 +762,96 @@ function getModifierServices(profile: TradeProfile) {
   return services;
 }
 
+const modifierServiceCards: Record<
+  ServiceModifier,
+  { title: string; description: string; patterns: RegExp[] }
+> = {
+  gas_fitting: {
+    title: "Gas Fitting",
+    description:
+      "Licensed gas fitting support for local homes and businesses, including safe installations, repairs and appliance connections.",
+    patterns: [/\bgas fitting\b/i],
+  },
+  sheetmetal: {
+    title: "Sheetmetal Services",
+    description:
+      "Custom sheetmetal work and related plumbing support for local residential and commercial jobs.",
+    patterns: [/\bsheetmetal\b/i, /\bsheet metal\b/i],
+  },
+  roof_plumbing: {
+    title: "Roof Plumbing",
+    description:
+      "Roof plumbing support including gutters, flashings, downpipes and rainwater drainage.",
+    patterns: [/\broof plumbing\b/i],
+  },
+  guttering: {
+    title: "Guttering & Downpipes",
+    description:
+      "Gutter and downpipe repairs, replacements and maintenance to help manage roof water safely.",
+    patterns: [/\bguttering\b/i, /\bgutters?\b/i, /\bdownpipes?\b/i],
+  },
+  flashing: {
+    title: "Flashings",
+    description:
+      "Flashing repairs and installation to help protect roof edges, joins and penetrations from water ingress.",
+    patterns: [/\bflashings?\b/i],
+  },
+  excavation: {
+    title: "Excavation Support",
+    description:
+      "Excavation support for plumbing-related works where access, trenching or site preparation is needed.",
+    patterns: [/\bexcavation\b/i, /\btrenching\b/i],
+  },
+  drainage: {
+    title: "Drainage Repairs",
+    description:
+      "Drainage support for blocked, damaged or poorly performing stormwater and waste lines.",
+    patterns: [/\bdrainage\b/i, /\bdrain\b/i],
+  },
+  bathrooms: {
+    title: "Bathroom Plumbing",
+    description:
+      "Bathroom plumbing support for fixtures, wet areas, upgrades and renovation work.",
+    patterns: [/\bbathroom\b/i],
+  },
+  renovations: {
+    title: "Renovation Plumbing",
+    description:
+      "Plumbing support for renovation projects, upgrades and practical changes around the property.",
+    patterns: [/\brenovation\b/i],
+  },
+  maintenance: {
+    title: "Maintenance Plumbing",
+    description:
+      "Routine repairs and maintenance to keep taps, fixtures, pipes and wet areas working properly.",
+    patterns: [/\bmaintenance\b/i, /\brepairs?\b/i],
+  },
+  emergency_plumbing: {
+    title: "Emergency Plumbing",
+    description:
+      "Prompt help for urgent plumbing issues, leaks, overflows and jobs that cannot wait.",
+    patterns: [/\bemergency\b/i, /\burgent\b/i],
+  },
+  hot_water: {
+    title: "Hot Water Systems",
+    description:
+      "Hot water repairs, replacements and servicing for common local systems.",
+    patterns: [/\bhot water\b/i],
+  },
+};
+
+function getRequiredModifierServiceCards(profile: TradeProfile) {
+  return profile.service_modifiers
+    .map((modifier) => modifierServiceCards[modifier])
+    .filter((card): card is { title: string; description: string; patterns: RegExp[] } =>
+      Boolean(card)
+    );
+}
+
+function hasServiceConcept(services: string[], patterns: RegExp[]) {
+  return services.some((service) => patterns.some((pattern) => pattern.test(service)));
+}
+
 function getServicePhrase(trade: string, profile: TradeProfile) {
   if (isPlumberTrade(trade) && hasRoofSheetmetalModifier(profile)) {
     return "plumbing, roof plumbing, guttering and sheetmetal services";
@@ -870,6 +960,13 @@ function getDefaultServices(trade: string) {
 
 function getServiceDescription(serviceName: string, trade: string) {
   const lower = serviceName.toLowerCase();
+  const modifierCard = Object.values(modifierServiceCards).find(
+    (card) => card.title.toLowerCase() === lower
+  );
+
+  if (modifierCard) {
+    return modifierCard.description;
+  }
 
   if (lower.includes("sheetmetal") || lower.includes("sheet metal")) {
     return "Practical sheetmetal work for local roofing, plumbing and building details.";
@@ -942,10 +1039,12 @@ function getServices(lead: LeadRecord, trade: string, profile: TradeProfile) {
   const leadServices = getStringArray(lead.services);
   const modifierServices = getModifierServices(profile);
   const defaults = getDefaultServices(trade);
+  const requiredModifierCards = getRequiredModifierServiceCards(profile);
   const seen = new Set<string>();
   const services: string[] = [];
+  const maxServices = Math.max(6, requiredModifierCards.length);
 
-  for (const service of [...modifierServices, ...leadServices, ...defaults]) {
+  for (const service of [...leadServices, ...modifierServices, ...defaults]) {
     const clean = service.length > 80 ? `${service.slice(0, 77)}...` : service;
     const key = clean.toLowerCase();
 
@@ -955,7 +1054,47 @@ function getServices(lead: LeadRecord, trade: string, profile: TradeProfile) {
     }
   }
 
-  return services.slice(0, 6);
+  for (const card of requiredModifierCards) {
+    if (!hasServiceConcept(services, card.patterns)) {
+      services.push(card.title);
+      seen.add(card.title.toLowerCase());
+    }
+  }
+
+  const requiredTitles = new Set(
+    requiredModifierCards
+      .filter((card) => hasServiceConcept(services, card.patterns))
+      .map((card) => {
+        const representedService = services.find((service) =>
+          card.patterns.some((pattern) => pattern.test(service))
+        );
+
+        return representedService?.toLowerCase() || card.title.toLowerCase();
+      })
+  );
+  const visibleServices = services.slice(0, maxServices);
+
+  for (const service of services.slice(maxServices)) {
+    if (visibleServices.length >= Math.max(maxServices, requiredTitles.size)) {
+      break;
+    }
+
+    if (requiredTitles.has(service.toLowerCase())) {
+      visibleServices.push(service);
+    }
+  }
+
+  for (const card of requiredModifierCards) {
+    if (!hasServiceConcept(visibleServices, card.patterns)) {
+      const existingIndex = services.findIndex((service) =>
+        card.patterns.some((pattern) => pattern.test(service))
+      );
+
+      visibleServices.push(existingIndex >= 0 ? services[existingIndex] : card.title);
+    }
+  }
+
+  return Array.from(new Set(visibleServices));
 }
 
 function getTopServices(services: string[], trade: string) {
@@ -1434,6 +1573,10 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
     cleanBusinessName(lead.displayName || lead.businessName || lead.name) ||
     titleCase(slugSource);
   const tradeProfile = buildTradeProfile(lead);
+  console.log("[GENERATED_SITE_RENDER_MODIFIERS]", {
+    slug: getText(lead.slug).trim() || getText(lead.id).trim(),
+    serviceModifiers: tradeProfile.service_modifiers.map(getServiceModifierLabel),
+  });
   const trade = tradeProfile.template_profile || getText(lead.trade).trim() || "plumber";
   const primaryTrade = tradeProfile.primary_trade || trade;
   const tradeLabel = getProfileTradeLabel(trade, tradeProfile);
