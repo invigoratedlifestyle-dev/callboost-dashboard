@@ -28,6 +28,7 @@ import type {
 } from "../../lib/websiteOpportunity";
 import {
   getServiceModifierLabel,
+  selectableServiceModifiers,
   serviceModifiers,
   type ServiceModifier,
 } from "../../lib/leadTargeting/tradeModifiers";
@@ -158,7 +159,7 @@ const templateTypeOptions = [
   "corporate",
 ];
 
-const serviceModifierOptions = serviceModifiers.map((modifier) => ({
+const serviceModifierOptions = selectableServiceModifiers.map((modifier) => ({
   value: modifier,
   label: getServiceModifierLabel(modifier),
 }));

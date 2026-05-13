@@ -15,6 +15,15 @@ export const serviceModifiers = [
 
 export type ServiceModifier = (typeof serviceModifiers)[number];
 
+export const selectableServiceModifiers = [
+  "gas_fitting",
+  "sheetmetal",
+  "roof_plumbing",
+  "guttering",
+  "flashing",
+  "excavation",
+] as const satisfies readonly ServiceModifier[];
+
 export type TradeProfile = {
   primary_trade: string;
   template_profile: string;
@@ -185,19 +194,6 @@ export function buildTradeProfile(lead: Record<string, unknown>): TradeProfile {
       addModifier(modifiers, secondaryTrades, "gas_fitting", "gas_fitting");
     }
 
-    if (hasAny(sourceText, [/\bdrains?\b/, /\bdrainage\b/, /\bblocked drains?\b/])) {
-      addModifier(modifiers, secondaryTrades, "drainage", "drainage");
-    }
-
-    if (hasAny(sourceText, [/\bbathrooms?\b/, /\bensuite\b/])) {
-      addModifier(modifiers, secondaryTrades, "bathrooms", "bathrooms");
-      addModifier(modifiers, secondaryTrades, "renovations", "renovations");
-    }
-
-    if (hasAny(sourceText, [/\brenovations?\b/, /\brenos?\b/, /\bremodel\b/])) {
-      addModifier(modifiers, secondaryTrades, "renovations", "renovations");
-    }
-
     if (
       hasAny(sourceText, [
         /\broof plumbing\b/,
@@ -212,18 +208,6 @@ export function buildTradeProfile(lead: Record<string, unknown>): TradeProfile {
       if (sourceText.includes("flashing")) {
         addModifier(modifiers, secondaryTrades, "flashing", "flashing");
       }
-    }
-
-    if (hasAny(sourceText, [/\bmaintenance\b/, /\brepairs?\b/, /\bservicing\b/])) {
-      addModifier(modifiers, secondaryTrades, "maintenance", "maintenance");
-    }
-
-    if (hasAny(sourceText, [/\bemergency\b/, /\bafter hours\b/, /\b24\s*7\b/])) {
-      addModifier(modifiers, secondaryTrades, "emergency_plumbing", "emergency_plumbing");
-    }
-
-    if (hasAny(sourceText, [/\bhot water\b/, /\bhws\b/])) {
-      addModifier(modifiers, secondaryTrades, "hot_water", "hot_water");
     }
 
     if (hasAny(sourceText, [/\bexcavat/, /\bearthworks?\b/, /\btrenching\b/])) {
