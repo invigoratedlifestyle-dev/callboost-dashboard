@@ -22,10 +22,10 @@ import {
   getLeadStatusBadgeClass,
   getLeadStatusLabel,
 } from "../../lib/leadWorkflow";
-import {
-  buildWebsiteOpportunityResult,
-  type StoredWebsiteOpportunityResult,
-  type WebsiteOpportunityLevel,
+import { buildWebsiteOpportunityResult } from "../../lib/websiteOpportunity";
+import type {
+  StoredWebsiteOpportunityResult,
+  WebsiteOpportunityLevel,
 } from "../../lib/websiteOpportunity";
 import {
   getServiceModifierLabel,

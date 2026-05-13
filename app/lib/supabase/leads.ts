@@ -1,26 +1,28 @@
 import { getSupabaseAdmin } from "./server";
 import {
-  type GeneratedSiteCleanupWarning,
   purgeGeneratedSiteForLeadBestEffort,
   purgeGeneratedSiteForLead,
   removeGeneratedSiteReferencesFromLead,
 } from "./generatedSites";
+import type { GeneratedSiteCleanupWarning } from "./generatedSites";
 import {
   getLeadStage,
   isLifecycleStage,
   normalizeLeadIdentity,
   withLifecycleDefaults,
-  type LifecycleStage,
-  type LifecycleStatus,
-  type LeadRecord,
+} from "../leadLifecycle";
+import type {
+  LifecycleStage,
+  LifecycleStatus,
+  LeadRecord,
 } from "../leadLifecycle";
 import {
   enforceLeadStageStatus,
   normalizeLeadStageStatus,
   normalizeLeadStatus,
   shouldPreserveLeadStatus,
-  type LeadStatus,
 } from "../leadWorkflow";
+import type { LeadStatus } from "../leadWorkflow";
 
 export type LeadRow = {
   id?: string | number;
