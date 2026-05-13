@@ -252,7 +252,7 @@ const signalIssueText: Record<string, string> = {
     "The business appears to rely on social media rather than a dedicated website.",
   parked_domain: "The website appears to be parked or unused.",
   invalid_domain: "The listed website does not appear to be a valid business domain.",
-  unreachable_or_intermittent: "The website could not be reliably reached.",
+  unreachable_website: "The website could not be reliably reached.",
   unusable_mobile_experience: "The website appears difficult to use on mobile.",
   old_footer_year:
     "The website footer suggests the site has not been updated recently.",
@@ -469,12 +469,29 @@ export function buildWebsiteOpportunityResult(
   if (
     evaluation?.isWorking === false ||
     args.homepageScrapeFailed ||
-    includesAny(searchableText, [/unreachable/, /intermittent/, /failed to load/])
+    includesAny(searchableText, [
+      /unreachable/,
+      /intermittent/,
+      /timeout/,
+      /timed out/,
+      /err_connection_timed_out/,
+      /dns failure/,
+      /enotfound/,
+      /econnrefused/,
+      /ssl failure/,
+      /certificate error/,
+      /redirect loop/,
+      /fetch failed/,
+      /failed to fetch/,
+      /failed to load/,
+      /could not be reached/,
+      /took too long to respond/,
+    ])
   ) {
-    addSignal(mediumSignals, {
-      id: "unreachable_or_intermittent",
-      severity: "medium",
-      label: "Unreachable / intermittent website",
+    addSignal(highSignals, {
+      id: "unreachable_website",
+      severity: "high",
+      label: "Unreachable website",
     });
   }
 
@@ -674,10 +691,14 @@ export function buildWebsiteOpportunityResult(
     level = "low";
   }
   const allSignals = [...highSignals, ...mediumSignals, ...lowSignals];
+  const hasUnreachableSignal = highSignals.some(
+    (signal) => signal.id === "unreachable_website"
+  );
   const isReachable =
     Boolean(homepageHtml) &&
     evaluation?.isWorking !== false &&
-    !args.homepageScrapeFailed;
+    !args.homepageScrapeFailed &&
+    !hasUnreachableSignal;
 
   return {
     level,
