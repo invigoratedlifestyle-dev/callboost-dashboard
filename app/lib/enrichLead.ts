@@ -1192,7 +1192,7 @@ function getReachabilityStatusFromFetchError(
   const text = getErrorText(error);
 
   if (
-    /enotfound|dns|econnrefused|certificate|ssl|redirect loop|too many redirects|failed to fetch .*404|failed to fetch .*410|:\s*(404|410)\b/.test(
+    /repeated get failures|confirmed timeout|enotfound|dns|econnrefused|certificate|ssl|redirect loop|too many redirects|failed to fetch .*404|failed to fetch .*410|:\s*(404|410)\b/.test(
       text
     )
   ) {
@@ -1204,17 +1204,47 @@ function getReachabilityStatusFromFetchError(
 
 async function fetchHtmlWithRetry(url: string) {
   let lastError: unknown = null;
+  let firstErrorDetail = "";
+  let failedAttempts = 0;
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      return await fetchHtml(url);
+      const html = await fetchHtml(url);
+
+      return {
+        html,
+        reachabilityStatus:
+          failedAttempts > 0 ? "slow_or_unreliable" : "reachable",
+        reachabilityDetail: firstErrorDetail,
+      } satisfies {
+        html: string;
+        reachabilityStatus: WebsiteReachabilityStatus;
+        reachabilityDetail: string;
+      };
     } catch (error) {
       lastError = error;
+      failedAttempts += 1;
+
+      if (!firstErrorDetail) {
+        firstErrorDetail =
+          error instanceof Error ? error.message : "Website fetch failed";
+      }
 
       if (getReachabilityStatusFromFetchError(error) === "unreachable") {
         break;
       }
     }
+  }
+
+  if (
+    failedAttempts >= 2 &&
+    getReachabilityStatusFromFetchError(lastError) === "slow_or_unreliable"
+  ) {
+    throw new Error(
+      `Repeated GET failures after retry: ${
+        getErrorText(lastError) || "website fetch failed"
+      }`
+    );
   }
 
   throw lastError;
@@ -1265,8 +1295,10 @@ export async function rerunWebsiteOpportunity(
 
   if (website) {
     try {
-      homepageHtml = await fetchHtmlWithRetry(website);
-      reachabilityStatus = "reachable";
+      const fetchResult = await fetchHtmlWithRetry(website);
+      homepageHtml = fetchResult.html;
+      reachabilityStatus = fetchResult.reachabilityStatus;
+      reachabilityDetail = fetchResult.reachabilityDetail;
     } catch (error) {
       reachabilityStatus = getReachabilityStatusFromFetchError(error);
       reachabilityDetail =
@@ -2135,13 +2167,18 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
   }
 
   let homeHtml = "";
+  let reachabilityStatus: WebsiteReachabilityStatus = "unknown";
+  let reachabilityDetail = "";
 
   try {
-    homeHtml = await fetchHtmlWithRetry(normalizedWebsite);
+    const fetchResult = await fetchHtmlWithRetry(normalizedWebsite);
+    homeHtml = fetchResult.html;
+    reachabilityStatus = fetchResult.reachabilityStatus;
+    reachabilityDetail = fetchResult.reachabilityDetail;
   } catch (error) {
     console.error("Failed to fetch website:", error);
-    const reachabilityStatus = getReachabilityStatusFromFetchError(error);
-    const reachabilityDetail =
+    reachabilityStatus = getReachabilityStatusFromFetchError(error);
+    reachabilityDetail =
       error instanceof Error ? error.message : "Website fetch failed";
 
     const googleReviewFields = await getGoogleReviewFields({
@@ -2351,7 +2388,8 @@ export async function enrichLead(slug: string, providedWebsite?: string) {
     socials,
     badDomainDetected,
     homepageScrapeFailed: false,
-    reachabilityStatus: "reachable",
+    reachabilityStatus,
+    reachabilityDetail,
     businessInfoMatch,
     businessPresence,
   });
