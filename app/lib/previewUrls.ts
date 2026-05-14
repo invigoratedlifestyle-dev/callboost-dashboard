@@ -37,3 +37,15 @@ export function getPreviewUrl(
 
   return baseUrl && leadKey ? `${baseUrl}/sites/${leadKey}` : "";
 }
+
+export function getBrandedPreviewUrl(
+  lead: PreviewUrlLead,
+  explicitBaseUrl?: string | null
+) {
+  const leadKey = clean(lead.slug) || clean(lead.id);
+  const baseUrl = getBaseUrl(explicitBaseUrl);
+
+  return baseUrl && leadKey
+    ? `${baseUrl}/preview/${encodeURIComponent(leadKey)}`
+    : "";
+}

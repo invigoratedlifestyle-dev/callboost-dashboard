@@ -32,19 +32,21 @@ export function getAppBaseUrl(requestUrl?: string) {
   return "";
 }
 
-export function buildTrackingUrl(baseUrl: string, token: string) {
-  return `${baseUrl.replace(/\/+$/, "")}/r/${encodeURIComponent(token)}`;
-}
+export function buildTrackedPreviewUrl(args: {
+  slug: string;
+  publicTrackingToken?: string | null;
+  appUrl: string;
+  includeToken?: boolean;
+}) {
+  const cleanBaseUrl = args.appUrl.replace(/\/+$/, "");
+  const cleanSlug = args.slug.trim();
 
-export function buildPreviewTrackingUrl(
-  baseUrl: string,
-  slug: string,
-  publicTrackingToken?: string | null
-) {
-  const cleanBaseUrl = baseUrl.replace(/\/+$/, "");
-  const previewUrl = `${cleanBaseUrl}/preview/${encodeURIComponent(slug)}`;
+  if (!cleanBaseUrl || !cleanSlug) return "";
 
-  return publicTrackingToken
+  const publicTrackingToken = (args.publicTrackingToken || "").trim();
+  const previewUrl = `${cleanBaseUrl}/preview/${encodeURIComponent(cleanSlug)}`;
+
+  return args.includeToken !== false && publicTrackingToken
     ? `${previewUrl}?t=${encodeURIComponent(publicTrackingToken)}`
     : previewUrl;
 }
@@ -61,6 +63,19 @@ function escapeHtml(value: string) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+export function buildTrackedPreviewAnchor(args: {
+  slug: string;
+  publicTrackingToken?: string | null;
+  appUrl: string;
+  includeToken?: boolean;
+  label?: string;
+}) {
+  const href = buildTrackedPreviewUrl(args);
+  const label = args.label || "View your website preview";
+
+  return href ? `<a href="${escapeHtml(href)}">${escapeHtml(label)}</a>` : "";
 }
 
 export function textToTrackedHtml(
@@ -98,11 +113,24 @@ export function textToTrackedHtml(
 export function replacePreviewUrlWithTrackingUrl(args: {
   body: string;
   previewUrl?: string | null;
+  previewUrls?: Array<string | null | undefined>;
   trackingUrl: string;
 }) {
-  const previewUrl = (args.previewUrl || "").trim();
+  const previewUrls = [
+    args.previewUrl,
+    ...(args.previewUrls || []),
+  ]
+    .map((url) => (url || "").trim())
+    .filter((url, index, urls): url is string => Boolean(url) && urls.indexOf(url) === index);
 
-  if (!previewUrl) return args.body;
+  if (!previewUrls.length) return args.body;
 
-  return args.body.split(previewUrl).join(args.trackingUrl);
+  const trackingPlaceholder = "__CALLBOOST_TRACKED_PREVIEW_URL__";
+  const protectedBody = args.body.split(args.trackingUrl).join(trackingPlaceholder);
+  const trackedBody = previewUrls.reduce(
+    (body, previewUrl) => body.split(previewUrl).join(args.trackingUrl),
+    protectedBody
+  );
+
+  return trackedBody.split(trackingPlaceholder).join(args.trackingUrl);
 }

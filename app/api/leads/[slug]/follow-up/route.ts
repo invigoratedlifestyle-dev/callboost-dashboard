@@ -10,7 +10,7 @@ import { appendEmailUnsubscribeFooter } from "../../../../lib/emailUnsubscribe";
 import { sendEmail, sendSms } from "../../../../lib/outboundMessages";
 import {
   buildOpenTrackingPixelUrl,
-  buildPreviewTrackingUrl,
+  buildTrackedPreviewUrl,
   createPublicTrackingToken,
   createTrackingToken,
   getAppBaseUrl,
@@ -133,12 +133,18 @@ export async function POST(
     const baseUrl = getAppBaseUrl(req.url);
     const trackingToken = createTrackingToken();
     const publicTrackingToken = createPublicTrackingToken();
-    const previewUrl = getPreviewUrl(lead, baseUrl);
-    const trackingUrl = buildPreviewTrackingUrl(
-      baseUrl,
+    const sitePreviewUrl = getPreviewUrl(lead, baseUrl);
+    const previewUrl = buildTrackedPreviewUrl({
+      appUrl: baseUrl,
       slug,
-      publicTrackingToken
-    );
+      includeToken: false,
+    });
+    const trackingUrl = buildTrackedPreviewUrl({
+      appUrl: baseUrl,
+      slug,
+      publicTrackingToken,
+      includeToken: true,
+    });
     const followUpBody = buildFollowUpBody(stage, leadName, {
       businessName: getString(lead.businessName),
       channel,
@@ -171,6 +177,7 @@ export async function POST(
     const trackedFollowUpBody = replacePreviewUrlWithTrackingUrl({
       body: followUpBody,
       previewUrl,
+      previewUrls: [sitePreviewUrl],
       trackingUrl,
     });
     const messageBody =

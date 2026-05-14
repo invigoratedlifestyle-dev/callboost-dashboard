@@ -4,7 +4,7 @@ import Twilio from "twilio";
 import { appendEmailUnsubscribeFooter } from "../../../../../lib/emailUnsubscribe";
 import {
   buildOpenTrackingPixelUrl,
-  buildPreviewTrackingUrl,
+  buildTrackedPreviewUrl,
   createPublicTrackingToken,
   createTrackingToken,
   getAppBaseUrl,
@@ -196,15 +196,22 @@ export async function POST(
     const baseUrl = getAppBaseUrl(req.url);
     const trackingToken = createTrackingToken();
     const publicTrackingToken = createPublicTrackingToken();
-    const previewUrl = getPreviewUrl(lead, baseUrl);
-    const trackingUrl = buildPreviewTrackingUrl(
-      baseUrl,
+    const sitePreviewUrl = getPreviewUrl(lead, baseUrl);
+    const previewUrl = buildTrackedPreviewUrl({
+      appUrl: baseUrl,
       slug,
-      publicTrackingToken
-    );
+      includeToken: false,
+    });
+    const trackingUrl = buildTrackedPreviewUrl({
+      appUrl: baseUrl,
+      slug,
+      publicTrackingToken,
+      includeToken: true,
+    });
     const trackedBody = replacePreviewUrlWithTrackingUrl({
       body: messageBody,
       previewUrl,
+      previewUrls: [sitePreviewUrl],
       trackingUrl,
     });
     const outboundBody =

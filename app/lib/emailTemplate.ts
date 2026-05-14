@@ -1,17 +1,9 @@
 import type { Lead } from "./leads";
 import { appendEmailUnsubscribeFooter } from "./emailUnsubscribe";
-
-function slugify(value: string) {
-  return value
-    .toLowerCase()
-    .trim()
-    .replace(/&/g, "and")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
+import { getBrandedPreviewUrl } from "./previewUrls";
 
 export function getLeadUrl(lead: Lead) {
-  return `https://www.callboost.co/${slugify(lead.city)}/${slugify(lead.trade)}/${lead.slug}/`;
+  return getBrandedPreviewUrl(lead, process.env.NEXT_PUBLIC_APP_URL) || "";
 }
 
 export function transformIssueToSentence(issue: string): string {

@@ -76,6 +76,7 @@ export type LeadMessage = {
   firstClickedAt?: string;
   clickCount?: number;
   trackingToken?: string;
+  publicTrackingToken?: string;
   previewUrl?: string;
   createdAt: string;
   readAt: string;

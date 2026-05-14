@@ -41,7 +41,7 @@ import {
   getFollowUpDestination,
   getLatestOutboundMessageChannel,
 } from "../../lib/followUps";
-import { getPreviewUrl } from "../../lib/previewUrls";
+import { getBrandedPreviewUrl } from "../../lib/previewUrls";
 import {
   buildInterestedReplyEmail,
   buildInterestedReplyEmailSubject,
@@ -340,12 +340,16 @@ function getBrandedPaymentUrl(lead: LeadWithGeneratedContent) {
   return appUrl && leadSlug ? `${appUrl}/pay/${encodeURIComponent(leadSlug)}` : "";
 }
 
+function getCustomerPreviewUrl(lead: LeadWithGeneratedContent) {
+  return getBrandedPreviewUrl(lead, getAppUrl());
+}
+
 function getInterestedReplyPersonalization(
   lead: LeadWithGeneratedContent
 ): InterestedReplyPersonalization {
   return {
     businessName: lead.businessName,
-    previewUrl: getPreviewUrl(lead),
+    previewUrl: getCustomerPreviewUrl(lead),
     trade: lead.trade,
   };
 }
@@ -764,12 +768,14 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       setServiceAreaCardColor(siteDesign.serviceAreaCardColor);
       setFooterBackgroundColor(siteDesign.footerBackgroundColor);
       setSmsTo(loadedLead.phone || "");
-      setSmsBody(buildOpportunitySms(loadedLead, getPreviewUrl(loadedLead)));
+      setSmsBody(buildOpportunitySms(loadedLead, getCustomerPreviewUrl(loadedLead)));
       setSmsBodyEdited(false);
       setEmailTo(loadedLead.email || "");
       setEmailSubject(buildOpportunityEmailSubject(loadedLead));
       setEmailSubjectEdited(false);
-      setEmailOfferBody(buildOpportunityEmail(loadedLead, getPreviewUrl(loadedLead)));
+      setEmailOfferBody(
+        buildOpportunityEmail(loadedLead, getCustomerPreviewUrl(loadedLead))
+      );
       setEmailBodyEdited(false);
       setCallbackForwardingEnabled(
         Boolean(data.lead?.callbackForwardingEnabled)
@@ -872,7 +878,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     setFooterBackgroundColor(siteDesign.footerBackgroundColor);
 
     if (!smsBodyEdited) {
-      setSmsBody(buildOpportunitySms(nextLead, getPreviewUrl(nextLead)));
+      setSmsBody(buildOpportunitySms(nextLead, getCustomerPreviewUrl(nextLead)));
     }
 
     if (!emailSubjectEdited) {
@@ -880,7 +886,9 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     }
 
     if (!emailBodyEdited) {
-      setEmailOfferBody(buildOpportunityEmail(nextLead, getPreviewUrl(nextLead)));
+      setEmailOfferBody(
+        buildOpportunityEmail(nextLead, getCustomerPreviewUrl(nextLead))
+      );
     }
   };
   const saveServiceModifiers = async (modifiers: ServiceModifier[]) => {
@@ -961,7 +969,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     if (!lead) return;
 
     if (channel === "sms" && !smsBodyEdited) {
-      setSmsBody(buildOpportunitySms(lead, getPreviewUrl(lead)));
+      setSmsBody(buildOpportunitySms(lead, getCustomerPreviewUrl(lead)));
     }
 
     if (channel === "email") {
@@ -970,7 +978,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       }
 
       if (!emailBodyEdited) {
-        setEmailOfferBody(buildOpportunityEmail(lead, getPreviewUrl(lead)));
+        setEmailOfferBody(buildOpportunityEmail(lead, getCustomerPreviewUrl(lead)));
       }
     }
   };
@@ -1809,7 +1817,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     const followUpBody = buildFollowUpBody(stage, leadName, {
       businessName: lead.businessName,
       channel: destination.channel,
-      previewUrl: getPreviewUrl(lead),
+      previewUrl: getCustomerPreviewUrl(lead),
       websiteEvaluation: lead.websiteEvaluation,
       websiteOpportunity: lead.websiteOpportunity,
       websiteOpportunityV2: lead.website_opportunity_v2,
