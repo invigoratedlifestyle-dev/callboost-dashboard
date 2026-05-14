@@ -58,6 +58,7 @@ export async function sendEmail(args: {
   to: string;
   subject: string;
   body: string;
+  html?: string;
 }) {
   const resend = getResendClient();
   const from = process.env.RESEND_FROM_EMAIL;
@@ -71,6 +72,7 @@ export async function sendEmail(args: {
     to: args.to,
     subject: args.subject,
     text: args.body,
+    ...(args.html ? { html: args.html } : {}),
   });
 
   if (error) {

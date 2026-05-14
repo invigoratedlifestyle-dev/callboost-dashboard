@@ -163,6 +163,26 @@ export default async function ReportsPage({ searchParams }: ReportsPageProps) {
             tone="red"
           />
           <KpiCard label="Clients won" value={report.kpis.clientsWon} tone="blue" />
+          <KpiCard
+            label="Open rate"
+            value={formatPercent(report.kpis.openRate)}
+            tone="blue"
+          />
+          <KpiCard
+            label="Preview click rate"
+            value={formatPercent(report.kpis.previewClickRate)}
+            tone="green"
+          />
+          <KpiCard
+            label="Total opens"
+            value={report.kpis.totalOpens}
+            tone="slate"
+          />
+          <KpiCard
+            label="Preview clicks"
+            value={report.kpis.totalPreviewClicks}
+            tone="slate"
+          />
         </div>
 
         <div className="grid gap-6 xl:grid-cols-2">

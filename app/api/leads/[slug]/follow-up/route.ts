@@ -7,6 +7,14 @@ import {
 } from "../../../../lib/followUps";
 import { appendEmailUnsubscribeFooter } from "../../../../lib/emailUnsubscribe";
 import { sendEmail, sendSms } from "../../../../lib/outboundMessages";
+import {
+  buildOpenTrackingPixelUrl,
+  buildTrackingUrl,
+  createTrackingToken,
+  getAppBaseUrl,
+  replacePreviewUrlWithTrackingUrl,
+  textToTrackedHtml,
+} from "../../../../lib/messageTracking";
 import { getPreviewUrl } from "../../../../lib/previewUrls";
 import { prepareOutboundSmsText } from "../../../../lib/smsOptOut";
 import {
@@ -117,10 +125,14 @@ export async function POST(
 
     const { channel, to } = destination;
     const subject = channel === "email" ? "Quick follow-up from CallBoost" : "";
+    const baseUrl = getAppBaseUrl(req.url);
+    const trackingToken = createTrackingToken();
+    const previewUrl = getPreviewUrl(lead, baseUrl);
+    const trackingUrl = buildTrackingUrl(baseUrl, trackingToken);
     const followUpBody = buildFollowUpBody(stage, leadName, {
       businessName: getString(lead.businessName),
       channel,
-      previewUrl: getPreviewUrl(lead, new URL(req.url).origin),
+      previewUrl,
       websiteEvaluation: websiteEvaluation
         ? {
             issues: Array.isArray(websiteEvaluation.issues)
@@ -145,10 +157,15 @@ export async function POST(
       websiteOpportunityV2:
         websiteOpportunityV2 as StoredWebsiteOpportunityResult | null,
     });
+    const trackedFollowUpBody = replacePreviewUrlWithTrackingUrl({
+      body: followUpBody,
+      previewUrl,
+      trackingUrl,
+    });
     const messageBody =
       channel === "sms"
-        ? prepareOutboundSmsText(followUpBody)
-        : appendEmailUnsubscribeFooter(followUpBody);
+        ? prepareOutboundSmsText(trackedFollowUpBody)
+        : appendEmailUnsubscribeFooter(trackedFollowUpBody);
     let fromAddress = "";
     let providerMessageId = "";
     const provider = channel === "sms" ? "twilio" : "resend";
@@ -165,6 +182,10 @@ export async function POST(
           to,
           subject,
           body: messageBody,
+          html: textToTrackedHtml(
+            messageBody,
+            buildOpenTrackingPixelUrl(baseUrl, trackingToken)
+          ),
         });
         fromAddress = result.from;
         providerMessageId = result.providerMessageId;
@@ -192,6 +213,8 @@ export async function POST(
         reason: "manual_follow_up",
         follow_up_stage: stage,
       },
+      trackingToken,
+      previewUrl,
     });
 
     if (status === "sent") {

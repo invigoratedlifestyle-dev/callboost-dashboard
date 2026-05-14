@@ -2,6 +2,15 @@ import { NextResponse } from "next/server";
 import { Resend } from "resend";
 import Twilio from "twilio";
 import { appendEmailUnsubscribeFooter } from "../../../../../lib/emailUnsubscribe";
+import {
+  buildOpenTrackingPixelUrl,
+  buildTrackingUrl,
+  createTrackingToken,
+  getAppBaseUrl,
+  replacePreviewUrlWithTrackingUrl,
+  textToTrackedHtml,
+} from "../../../../../lib/messageTracking";
+import { getPreviewUrl } from "../../../../../lib/previewUrls";
 import { prepareOutboundSmsText } from "../../../../../lib/smsOptOut";
 import { insertLeadMessage } from "../../../../../lib/supabase/leadMessages";
 import {
@@ -98,6 +107,7 @@ async function sendEmail(args: {
   to: string;
   subject: string;
   body: string;
+  html?: string;
 }) {
   const resend = getResendClient();
   const from = process.env.RESEND_FROM_EMAIL;
@@ -111,6 +121,7 @@ async function sendEmail(args: {
     to: args.to,
     subject: args.subject,
     text: args.body,
+    ...(args.html ? { html: args.html } : {}),
   });
 
   if (error) {
@@ -136,10 +147,6 @@ export async function POST(
     const subject = getString(body.subject);
     const messageBody = getString(body.body);
     const metadata = getSafeMessageMetadata(body.metadata);
-    const outboundBody =
-      channel === "sms"
-        ? prepareOutboundSmsText(messageBody)
-        : appendEmailUnsubscribeFooter(messageBody);
 
     if (!isChannel(channel)) {
       return NextResponse.json({ error: "Invalid channel" }, { status: 400 });
@@ -185,6 +192,19 @@ export async function POST(
     }
 
     const lead = rowToLead(leadRow);
+    const baseUrl = getAppBaseUrl(req.url);
+    const trackingToken = createTrackingToken();
+    const previewUrl = getPreviewUrl(lead, baseUrl);
+    const trackingUrl = buildTrackingUrl(baseUrl, trackingToken);
+    const trackedBody = replacePreviewUrlWithTrackingUrl({
+      body: messageBody,
+      previewUrl,
+      trackingUrl,
+    });
+    const outboundBody =
+      channel === "sms"
+        ? prepareOutboundSmsText(trackedBody)
+        : appendEmailUnsubscribeFooter(trackedBody);
     let fromAddress = "";
     let providerMessageId = "";
     const provider = channel === "sms" ? "twilio" : "resend";
@@ -201,6 +221,10 @@ export async function POST(
           to,
           subject,
           body: outboundBody,
+          html: textToTrackedHtml(
+            outboundBody,
+            buildOpenTrackingPixelUrl(baseUrl, trackingToken)
+          ),
         });
         fromAddress = result.from;
         providerMessageId = result.providerMessageId;
@@ -225,6 +249,8 @@ export async function POST(
       providerMessageId,
       error: errorMessage,
       metadata,
+      trackingToken,
+      previewUrl,
     });
 
     let updatedLead = lead;

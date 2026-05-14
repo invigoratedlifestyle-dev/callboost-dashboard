@@ -2038,6 +2038,28 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       latestBouncedEmail.error
     : "";
   const hasMobileFollowUp = Boolean(lead.phone);
+  const outboundMessages = messages.filter(
+    (message) => message.direction === "outbound"
+  );
+  const totalOpenCount = outboundMessages.reduce(
+    (sum, message) => sum + (message.openCount || 0),
+    0
+  );
+  const totalPreviewClickCount = outboundMessages.reduce(
+    (sum, message) => sum + (message.clickCount || 0),
+    0
+  );
+  const lastOpenedAt = outboundMessages
+    .map((message) => message.openedAt || "")
+    .filter(Boolean)
+    .sort()
+    .at(-1);
+  const lastClickedAt = outboundMessages
+    .map((message) => message.clickedAt || "")
+    .filter(Boolean)
+    .sort()
+    .at(-1);
+  const isEngagedHotLead = totalPreviewClickCount > 0 || totalOpenCount >= 3;
   const latestInboundMessageTime = getLatestLeadMessageTime(messages, "inbound");
   const latestOutboundMessageTime = getLatestLeadMessageTime(
     messages,
@@ -3870,6 +3892,59 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
             </p>
           </section>
         ) : null}
+
+        <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-xl font-bold">Engagement</h2>
+            {isEngagedHotLead ? (
+              <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-bold uppercase text-emerald-300">
+                Hot lead
+              </span>
+            ) : null}
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="rounded-xl border border-white/10 bg-slate-900 px-4 py-3">
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                Sent
+              </p>
+              <p className="mt-2 text-2xl font-black text-white">
+                {outboundMessages.length}
+              </p>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-slate-900 px-4 py-3">
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                Opens
+              </p>
+              <p className="mt-2 text-2xl font-black text-white">
+                {totalOpenCount}
+              </p>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-slate-900 px-4 py-3">
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                Last opened
+              </p>
+              <p className="mt-2 text-sm font-bold text-slate-200">
+                {lastOpenedAt ? formatTimestamp(lastOpenedAt) : "Not opened"}
+              </p>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-slate-900 px-4 py-3">
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                Preview clicks
+              </p>
+              <p className="mt-2 text-2xl font-black text-white">
+                {totalPreviewClickCount}
+              </p>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-slate-900 px-4 py-3">
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+                Last click
+              </p>
+              <p className="mt-2 text-sm font-bold text-slate-200">
+                {lastClickedAt ? formatTimestamp(lastClickedAt) : "No clicks"}
+              </p>
+            </div>
+          </div>
+        </section>
 
         <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
           <h2 className="mb-4 text-xl font-bold">Message History</h2>

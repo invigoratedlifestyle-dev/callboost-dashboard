@@ -26,6 +26,14 @@ export type LeadMessageRow = {
   provider_message_id?: string | null;
   error?: string | null;
   metadata?: Record<string, unknown> | null;
+  opened_at?: string | null;
+  first_opened_at?: string | null;
+  open_count?: number | null;
+  clicked_at?: string | null;
+  first_clicked_at?: string | null;
+  click_count?: number | null;
+  tracking_token?: string | null;
+  preview_url?: string | null;
   created_at?: string | null;
   read_at?: string | null;
 };
@@ -45,6 +53,14 @@ export type LeadMessage = {
   providerMessageId: string;
   error: string;
   metadata: Record<string, unknown>;
+  openedAt: string;
+  firstOpenedAt: string;
+  openCount: number;
+  clickedAt: string;
+  firstClickedAt: string;
+  clickCount: number;
+  trackingToken: string;
+  previewUrl: string;
   createdAt: string;
   readAt: string;
 };
@@ -75,6 +91,12 @@ export type BouncedEmailNotification = {
 
 function getString(value: unknown) {
   return typeof value === "string" ? value : "";
+}
+
+function getNumber(value: unknown) {
+  const number = Number(value);
+
+  return Number.isFinite(number) ? number : 0;
 }
 
 function getChannel(value: unknown): LeadMessageChannel {
@@ -115,6 +137,14 @@ export function rowToLeadMessage(row: LeadMessageRow): LeadMessage {
     providerMessageId: getString(row.provider_message_id),
     error: getString(row.error),
     metadata: row.metadata && typeof row.metadata === "object" ? row.metadata : {},
+    openedAt: getString(row.opened_at),
+    firstOpenedAt: getString(row.first_opened_at),
+    openCount: getNumber(row.open_count),
+    clickedAt: getString(row.clicked_at),
+    firstClickedAt: getString(row.first_clicked_at),
+    clickCount: getNumber(row.click_count),
+    trackingToken: getString(row.tracking_token),
+    previewUrl: getString(row.preview_url),
     createdAt: getString(row.created_at),
     readAt: getString(row.read_at),
   };
@@ -134,8 +164,13 @@ export async function insertLeadMessage(args: {
   providerMessageId?: string | null;
   error?: string | null;
   metadata?: Record<string, unknown> | null;
+  trackingToken?: string | null;
+  previewUrl?: string | null;
 }) {
   const supabase = getSupabaseAdmin();
+  const trackingToken =
+    args.trackingToken ||
+    (args.direction === "inbound" ? "" : crypto.randomUUID());
   const { data, error } = await supabase
     .from("lead_messages")
     .insert({
@@ -152,7 +187,69 @@ export async function insertLeadMessage(args: {
       provider_message_id: args.providerMessageId || null,
       error: args.error || null,
       metadata: args.metadata || {},
+      tracking_token: trackingToken || null,
+      preview_url: args.previewUrl || null,
     })
+    .select("*")
+    .single();
+
+  if (error) throw error;
+
+  return rowToLeadMessage(data as LeadMessageRow);
+}
+
+export async function findLeadMessageByTrackingToken(token: string) {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("lead_messages")
+    .select("*")
+    .eq("tracking_token", token)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  return data ? rowToLeadMessage(data as LeadMessageRow) : null;
+}
+
+export async function recordMessageOpen(token: string) {
+  const message = await findLeadMessageByTrackingToken(token);
+
+  if (!message?.id) return null;
+
+  const now = new Date().toISOString();
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("lead_messages")
+    .update({
+      opened_at: now,
+      first_opened_at: message.firstOpenedAt || now,
+      open_count: message.openCount + 1,
+    })
+    .eq("id", message.id)
+    .select("*")
+    .single();
+
+  if (error) throw error;
+
+  return rowToLeadMessage(data as LeadMessageRow);
+}
+
+export async function recordMessageClick(token: string) {
+  const message = await findLeadMessageByTrackingToken(token);
+
+  if (!message?.id) return null;
+
+  const now = new Date().toISOString();
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("lead_messages")
+    .update({
+      clicked_at: now,
+      first_clicked_at: message.firstClickedAt || now,
+      click_count: message.clickCount + 1,
+    })
+    .eq("id", message.id)
     .select("*")
     .single();
 

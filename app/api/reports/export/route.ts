@@ -219,6 +219,10 @@ async function createReportPdf(range: ReturnType<typeof normalizeReportRange>) {
     ["Contact-to-interest rate", formatPercent(report.kpis.contactToInterestRate)],
     ["STOP rate", formatPercent(report.kpis.stopRate)],
     ["Clients won", report.kpis.clientsWon],
+    ["Open rate", formatPercent(report.kpis.openRate)],
+    ["Preview click rate", formatPercent(report.kpis.previewClickRate)],
+    ["Total opens", report.kpis.totalOpens],
+    ["Total preview clicks", report.kpis.totalPreviewClicks],
   ].forEach(([label, value]) => drawKeyValue(ctx, String(label), value));
 
   drawHeading(ctx, "Daily activity");

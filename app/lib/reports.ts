@@ -11,6 +11,8 @@ export type ReportLeadMessage = {
   channel?: string | null;
   direction?: string | null;
   body?: string | null;
+  open_count?: number | null;
+  click_count?: number | null;
   created_at?: string | null;
 };
 
@@ -38,6 +40,10 @@ export type ReportKpis = {
   contactToInterestRate: number;
   stopRate: number;
   clientsWon: number;
+  openRate: number;
+  previewClickRate: number;
+  totalOpens: number;
+  totalPreviewClicks: number;
 };
 
 export type DailyActivityRow = {
@@ -157,6 +163,12 @@ function percent(numerator: number, denominator: number) {
   return denominator > 0 ? (numerator / denominator) * 100 : 0;
 }
 
+function getNumber(value: unknown) {
+  const number = Number(value);
+
+  return Number.isFinite(number) ? number : 0;
+}
+
 function getLeadKey(message: ReportLeadMessage) {
   const leadId = message.lead_id;
 
@@ -198,7 +210,7 @@ async function fetchLeadMessages(startDate: Date | null) {
   const supabase = getSupabaseAdmin();
   let query = supabase
     .from("lead_messages")
-    .select("id, lead_id, slug, channel, direction, body, created_at")
+    .select("id, lead_id, slug, channel, direction, body, open_count, click_count, created_at")
     .order("created_at", { ascending: false })
     .limit(10000);
 
@@ -287,6 +299,20 @@ export async function getCallBoostReport(range: ReportRange) {
   );
   const outboundEmails = outboundMessages.filter(
     (message) => message.channel === "email"
+  );
+  const openedMessages = outboundMessages.filter(
+    (message) => getNumber(message.open_count) > 0
+  );
+  const clickedMessages = outboundMessages.filter(
+    (message) => getNumber(message.click_count) > 0
+  );
+  const totalOpens = outboundMessages.reduce(
+    (sum, message) => sum + getNumber(message.open_count),
+    0
+  );
+  const totalPreviewClicks = outboundMessages.reduce(
+    (sum, message) => sum + getNumber(message.click_count),
+    0
   );
   const clientsWon = leads.filter((lead) => {
     return getLeadStage(lead as Record<string, unknown>) === "client";
@@ -387,6 +413,10 @@ export async function getCallBoostReport(range: ReportRange) {
     ),
     stopRate: percent(stopReplies.length, outboundSms.length),
     clientsWon,
+    openRate: percent(openedMessages.length, outboundMessages.length),
+    previewClickRate: percent(clickedMessages.length, outboundMessages.length),
+    totalOpens,
+    totalPreviewClicks,
   };
 
   return {

@@ -950,6 +950,7 @@ export default function DashboardPage() {
   const toolsMenuItems: NavigationMenuItem[] = [
     { type: "link", label: "Branding", href: "/branding" },
     { type: "link", label: "Assets", href: "/assets" },
+    { type: "link", label: "Analytics", href: "/tools/analytics" },
     { type: "link", label: "Reports", href: "/reports" },
   ];
   const accountMenuItems: NavigationMenuItem[] = [

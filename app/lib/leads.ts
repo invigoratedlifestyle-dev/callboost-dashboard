@@ -69,6 +69,14 @@ export type LeadMessage = {
   providerMessageId: string;
   error: string;
   metadata?: Record<string, unknown>;
+  openedAt?: string;
+  firstOpenedAt?: string;
+  openCount?: number;
+  clickedAt?: string;
+  firstClickedAt?: string;
+  clickCount?: number;
+  trackingToken?: string;
+  previewUrl?: string;
   createdAt: string;
   readAt: string;
 };
