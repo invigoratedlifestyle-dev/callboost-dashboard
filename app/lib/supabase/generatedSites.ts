@@ -1541,6 +1541,14 @@ function buildNeutralHeroBadge(trade: string, city: string) {
   return "Fast local response";
 }
 
+function normalizeGeneratedTemplateType(value: unknown) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 export async function buildGeneratedSiteHtml(lead: LeadRecord) {
   const slugSource =
     getText(lead.slug) ||
@@ -1631,6 +1639,9 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
   const mapEmbedUrl = getMapEmbedUrl(lead, businessName, city);
   const hoursLines = formatHours(lead.hours);
   const variant = isPlumberTrade(trade) ? "plumber-classic" : "tradie-classic";
+  const templateType = normalizeGeneratedTemplateType(lead.templateType);
+  const isHeroImageLedTemplate = templateType === "hero-image-led";
+  const templateClassName = isHeroImageLedTemplate ? "template-hero-image-led" : "";
   const heroHeadline = buildHeroHeadline(trade, city, tradeProfile);
   const heroSubheading = buildHeroSubheading(trade, city, topServices, tradeProfile);
   const servicePhrase = getServicePhrase(trade, tradeProfile);
@@ -1663,6 +1674,35 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
   const heroUrgencyHtml = isServiceTrade(trade)
     ? `<p class="hero-urgency">Available today for urgent ${escapeHtml(tradeHelpLabel)} issues</p>`
     : "";
+  const heroMicrocopy = [tradeLabel, city].filter(Boolean).join(" in ");
+  const visualHeroRatingHtml = hasStrongHeroRating
+    ? `<div class="hero-rating visual-rating">Rated ${escapeHtml(rating)}&#9733; from ${escapeHtml(reviewCount)} local reviews</div>`
+    : "";
+  const heroContentHtml = isHeroImageLedTemplate
+    ? `<div class="hero-content visual-hero-content">
+        ${visualHeroRatingHtml}
+        ${heroMicrocopy ? `<p class="visual-hero-microcopy">${escapeHtml(heroMicrocopy)}</p>` : ""}
+        <div class="cta-row visual-hero-cta">
+          ${callButtonHtml}
+        </div>
+      </div>`
+    : `<div class="hero-content">
+        ${ratingBadgeHtml}
+        <div class="hero-label">${escapeHtml(businessName)}</div>
+        <h1>${escapeHtml(heroHeadline)}</h1>
+        <p class="hero-subtitle">${escapeHtml(heroSubheading)}</p>
+        <div class="cta-row">
+          ${callButtonHtml}
+          <a class="button secondary" href="#quote">Request Quote</a>
+        </div>
+        <div class="hero-bullets">
+          <span>Local ${escapeHtml(city)} service</span>
+          <span>Fast response</span>
+          <span>Clear quotes</span>
+          <span>Direct contact</span>
+        </div>
+        ${heroUrgencyHtml}
+      </div>`;
   const contactPhoneHtml = hasPhone
     ? `<p><span>Phone</span><a href="tel:${escapeAttribute(phoneRaw)}">${escapeHtml(phoneDisplay)}</a></p>`
     : "";
@@ -1803,6 +1843,15 @@ ${iconLinkHtml}
     .button.secondary { background: var(--cta-color); color: var(--cta-text-color); border-color: transparent; }
     .hero .button.secondary { background: var(--cta-color); color: var(--cta-text-color); }
     .hero-urgency { margin-top: 18px; color: var(--hero-accent-color); font-size: 15px; font-weight: 900; }
+    .template-hero-image-led .site-header { position: absolute; left: 0; right: 0; background: linear-gradient(rgba(2, 6, 23, 0.55), rgba(2, 6, 23, 0)); border-bottom: 0; backdrop-filter: none; }
+    .template-hero-image-led .brand strong, .template-hero-image-led .brand span, .template-hero-image-led .nav-links { color: white; text-shadow: 0 2px 16px rgba(0, 0, 0, 0.36); }
+    .template-hero-image-led .brand-logo { filter: drop-shadow(0 8px 22px rgba(0, 0, 0, 0.36)); }
+    .template-hero-image-led .hero { min-height: clamp(620px, 86vh, 880px); align-items: flex-end; padding: 160px 0 64px; background: linear-gradient(180deg, rgba(2, 6, 23, 0.34) 0%, rgba(2, 6, 23, 0.08) 38%, rgba(2, 6, 23, 0.5) 100%), var(--hero-img); background-position: center; background-size: cover; }
+    .template-hero-image-led .visual-hero-content { max-width: 1120px; display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; text-align: left; }
+    .template-hero-image-led .visual-rating { margin: 0; align-self: flex-end; }
+    .template-hero-image-led .visual-hero-microcopy { max-width: 360px; color: rgba(255, 255, 255, 0.9); font-size: 15px; font-weight: 900; text-shadow: 0 2px 14px rgba(0, 0, 0, 0.42); }
+    .template-hero-image-led .visual-hero-cta { margin: 0; justify-content: flex-end; }
+    .template-hero-image-led .quote-strip { margin-top: 0; padding-top: 34px; }
     .quote-strip { position: relative; z-index: 5; margin-top: -54px; padding-bottom: 34px; }
     .quote-card { display: grid; grid-template-columns: 0.8fr 1.2fr; gap: 28px; align-items: center; padding: 28px; border: 1px solid #e6eaf0; border-radius: 18px; background: white; box-shadow: 0 24px 60px rgba(15, 23, 42, 0.16); }
     .quote-card h2 { font-size: clamp(28px, 3.5vw, 38px); }
@@ -1860,11 +1909,11 @@ ${iconLinkHtml}
     .footer-links a:hover { color: var(--footer-text-color); }
     .footer-bottom { display: flex; justify-content: space-between; gap: 18px; margin-top: 34px; padding-top: 22px; border-top: 1px solid rgba(255, 255, 255, 0.16); color: rgba(255, 255, 255, 0.9); font-size: 14px; }
     .mobile-call-bar { display: none; }
-    @media (max-width: 980px) { .nav { min-height: 110px; display: flex; justify-content: space-between; } .brand.has-logo { min-width: 0; max-width: min(620px, calc(100% - 190px)); } .brand-logo { max-width: min(620px, 100%); max-height: 82px; } .nav-links { display: none; } .quote-card, .areas-panel, .contact-layout { grid-template-columns: 1fr; } .services-grid, .trust-grid, .review-grid, .faq-grid, .footer-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-    @media (max-width: 700px) { body { padding-bottom: 82px; } .container { width: min(100% - 28px, 1120px); } .nav { min-height: 88px; gap: 12px; } .brand.has-logo { min-width: 0; max-width: 100%; } .brand strong { max-width: 230px; font-size: 16px; line-height: 1.2; } .brand span { font-size: 12px; } .brand-logo { width: auto; height: auto; max-width: min(340px, 100%); max-height: 58px; object-fit: contain; } .nav-call { display: none; } .hero { min-height: auto; padding: 58px 0 86px; } h1 { font-size: clamp(36px, 12vw, 48px); } .hero-subtitle { font-size: 18px; } .hero-bullets { display: grid; grid-template-columns: 1fr 1fr; } .hero-bullets span { border-radius: 12px; } .button, .cta-row, .cta-row a { width: 100%; } .quote-strip { margin-top: -44px; } .quote-card, .contact-panel, .callback-form, .areas-panel { padding: 22px; } .mini-form, .services-grid, .trust-grid, .review-grid, .faq-grid, .footer-grid { grid-template-columns: 1fr; } .section { padding: 58px 0; } .footer { padding-bottom: 32px; } .footer-bottom { display: grid; } .mobile-call-bar { display: block; position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 80; } .mobile-call-bar a { min-height: 58px; display: flex; align-items: center; justify-content: center; border-radius: 12px; background: var(--cta-color); color: var(--cta-text-color); box-shadow: 0 18px 38px rgba(2, 6, 23, 0.24); font-size: 17px; font-weight: 950; text-decoration: none; } }
+    @media (max-width: 980px) { .nav { min-height: 110px; display: flex; justify-content: space-between; } .brand.has-logo { min-width: 0; max-width: min(620px, calc(100% - 190px)); } .brand-logo { max-width: min(620px, 100%); max-height: 82px; } .nav-links { display: none; } .template-hero-image-led .visual-hero-content { align-items: flex-start; flex-direction: column; } .template-hero-image-led .visual-hero-cta { justify-content: flex-start; } .quote-card, .areas-panel, .contact-layout { grid-template-columns: 1fr; } .services-grid, .trust-grid, .review-grid, .faq-grid, .footer-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    @media (max-width: 700px) { body { padding-bottom: 82px; } .container { width: min(100% - 28px, 1120px); } .nav { min-height: 88px; gap: 12px; } .brand.has-logo { min-width: 0; max-width: 100%; } .brand strong { max-width: 230px; font-size: 16px; line-height: 1.2; } .brand span { font-size: 12px; } .brand-logo { width: auto; height: auto; max-width: min(340px, 100%); max-height: 58px; object-fit: contain; } .nav-call { display: none; } .hero { min-height: auto; padding: 58px 0 86px; } .template-hero-image-led .hero { min-height: clamp(520px, 74vh, 720px); padding: 118px 0 32px; background-position: center; } .template-hero-image-led .visual-rating, .template-hero-image-led .visual-hero-microcopy { display: none; } h1 { font-size: clamp(36px, 12vw, 48px); } .hero-subtitle { font-size: 18px; } .hero-bullets { display: grid; grid-template-columns: 1fr 1fr; } .hero-bullets span { border-radius: 12px; } .button, .cta-row, .cta-row a { width: 100%; } .quote-strip { margin-top: -44px; } .template-hero-image-led .quote-strip { margin-top: 0; padding-top: 24px; } .quote-card, .contact-panel, .callback-form, .areas-panel { padding: 22px; } .mini-form, .services-grid, .trust-grid, .review-grid, .faq-grid, .footer-grid { grid-template-columns: 1fr; } .section { padding: 58px 0; } .footer { padding-bottom: 32px; } .footer-bottom { display: grid; } .mobile-call-bar { display: block; position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 80; } .mobile-call-bar a { min-height: 58px; display: flex; align-items: center; justify-content: center; border-radius: 12px; background: var(--cta-color); color: var(--cta-text-color); box-shadow: 0 18px 38px rgba(2, 6, 23, 0.24); font-size: 17px; font-weight: 950; text-decoration: none; } }
   </style>
 </head>
-<body class="${escapeAttribute(variant)}">
+<body class="${escapeAttribute([variant, templateClassName].filter(Boolean).join(" "))}">
   <header class="site-header">
     <div class="container nav">
       <a class="${escapeAttribute(brandClassName)}" href="#">
@@ -1882,23 +1931,7 @@ ${iconLinkHtml}
 
   <section class="hero" style="--hero-img: url('${escapeAttribute(heroImage)}');">
     <div class="container">
-      <div class="hero-content">
-        ${ratingBadgeHtml}
-        <div class="hero-label">${escapeHtml(businessName)}</div>
-        <h1>${escapeHtml(heroHeadline)}</h1>
-        <p class="hero-subtitle">${escapeHtml(heroSubheading)}</p>
-        <div class="cta-row">
-          ${callButtonHtml}
-          <a class="button secondary" href="#quote">Request Quote</a>
-        </div>
-        <div class="hero-bullets">
-          <span>Local ${escapeHtml(city)} service</span>
-          <span>Fast response</span>
-          <span>Clear quotes</span>
-          <span>Direct contact</span>
-        </div>
-        ${heroUrgencyHtml}
-      </div>
+      ${heroContentHtml}
     </div>
   </section>
 

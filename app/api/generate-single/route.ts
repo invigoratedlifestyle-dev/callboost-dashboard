@@ -38,6 +38,7 @@ const templateTradeOptions = [
 const templateTypeOptions = [
   "modern",
   "premium",
+  "hero-image-led",
   "local",
   "emergency",
   "minimal",
@@ -221,6 +222,7 @@ export async function POST(req: Request) {
 Generate local business website content.
 
 Selected template trade: ${templateTrade}
+Selected template type: ${templateType}
 Primary trade: ${initialTradeProfile.primary_trade}
 Template profile: ${initialTradeProfile.template_profile}
 Secondary trades: ${initialTradeProfile.secondary_trades.join(", ") || "none"}
@@ -230,6 +232,7 @@ If the selected template trade is plumbing-gas-fitting / Plumbing and Gas Fittin
 
 Use the primary trade for the core website structure and template choice. Use service modifiers only when they are supported by the business name, scraped data or existing lead data. Do not invent unsupported services. Keep the copy practical, local-business focused and specific to the modifier mix.
 When service modifiers are provided, naturally include them where relevant in the generated business description, service list, body copy, FAQ ideas, trust messaging and call-to-action copy. Do not omit saved manual modifiers.
+If the selected template type is hero-image-led, write supporting body and service copy normally, but avoid relying on the generated hero headline/subheading as the main above-the-fold message. The hero artwork will carry the main visual message, so keep written content useful for sections below the hero.
 
 Business:
 ${JSON.stringify(existingLead, null, 2)}

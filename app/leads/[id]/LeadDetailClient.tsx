@@ -159,6 +159,7 @@ const templateTradeOptions = [
 const templateTypeOptions = [
   "modern",
   "premium",
+  "hero-image-led",
   "local",
   "emergency",
   "minimal",
@@ -513,6 +514,16 @@ function normalizeTemplateTrade(value?: string | null) {
 
 function formatTemplateTradeLabel(value: string) {
   if (value === "plumbing-gas-fitting") return "Plumbing and Gas Fitting";
+
+  return value
+    .replace(/[-_]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function formatTemplateTypeLabel(value: string) {
+  if (value === "hero-image-led") return "Hero Image Led";
 
   return value
     .replace(/[-_]+/g, " ")
@@ -2668,10 +2679,16 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                   >
                     {templateTypeOptions.map((option) => (
                       <option key={option} value={option}>
-                        {option}
+                        {formatTemplateTypeLabel(option)}
                       </option>
                     ))}
                   </select>
+                  {templateType === "hero-image-led" ? (
+                    <span className="text-xs font-medium text-slate-400">
+                      Uses the generated hero image as the main above-the-fold
+                      message with minimal overlay text.
+                    </span>
+                  ) : null}
                 </label>
 
               </div>

@@ -35,12 +35,27 @@ function buildPrompt(args: {
   const leadName = getLeadName(args.lead, args.leadSlug || "local business");
   const trade = String(args.lead?.trade || "local trade").trim();
   const city = String(args.lead?.city || "local area").trim();
+  const templateType = String(args.lead?.templateType || "")
+    .trim()
+    .toLowerCase();
+  const heroImageLedGuidance =
+    templateType === "hero-image-led"
+      ? [
+          "This lead uses the hero-image-led website template, so the hero artwork should carry the main above-the-fold message.",
+          "Create a premium local business campaign hero with branded vehicle, signage, uniform or relevant trade visuals where suitable.",
+          "If adding marketing text inside the image, keep it concise, legible and mobile-crop safe.",
+          "Leave safe space for top navigation and avoid important text near the top-right phone CTA area or extreme edges.",
+        ].join(" ")
+      : "";
 
   if (args.mode === "hero") {
     return [
       "Clean this local trade business hero image.",
-      "Remove visible text, watermarks, contact numbers, labels, banners and overlays where present.",
+      templateType === "hero-image-led"
+        ? "Preserve tasteful branded campaign-style text if it is intentional, readable and useful."
+        : "Remove visible text, watermarks, contact numbers, labels, banners and overlays where present.",
       "Keep the photo natural and realistic. Do not distort the main subject.",
+      heroImageLedGuidance,
       args.prompt,
     ]
       .filter(Boolean)
