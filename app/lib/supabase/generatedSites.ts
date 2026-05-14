@@ -1700,11 +1700,7 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
     ? `<p class="hero-urgency">Available today for urgent ${escapeHtml(tradeHelpLabel)} issues</p>`
     : "";
   const heroContentHtml = isHeroImageLedTemplate
-    ? `<div class="hero-content visual-hero-content">
-        <div class="cta-row visual-hero-cta">
-          ${callButtonHtml}
-        </div>
-      </div>`
+    ? ""
     : `<div class="hero-content">
         ${ratingBadgeHtml}
         <div class="hero-label">${escapeHtml(businessName)}</div>
