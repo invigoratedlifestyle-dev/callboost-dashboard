@@ -10,7 +10,8 @@ import { appendEmailUnsubscribeFooter } from "../../../../lib/emailUnsubscribe";
 import { sendEmail, sendSms } from "../../../../lib/outboundMessages";
 import {
   buildOpenTrackingPixelUrl,
-  buildTrackingUrl,
+  buildPreviewTrackingUrl,
+  createPublicTrackingToken,
   createTrackingToken,
   getAppBaseUrl,
   replacePreviewUrlWithTrackingUrl,
@@ -131,8 +132,13 @@ export async function POST(
     const subject = channel === "email" ? "Quick follow-up from CallBoost" : "";
     const baseUrl = getAppBaseUrl(req.url);
     const trackingToken = createTrackingToken();
+    const publicTrackingToken = createPublicTrackingToken();
     const previewUrl = getPreviewUrl(lead, baseUrl);
-    const trackingUrl = buildTrackingUrl(baseUrl, trackingToken);
+    const trackingUrl = buildPreviewTrackingUrl(
+      baseUrl,
+      slug,
+      publicTrackingToken
+    );
     const followUpBody = buildFollowUpBody(stage, leadName, {
       businessName: getString(lead.businessName),
       channel,
@@ -189,7 +195,11 @@ export async function POST(
           body: messageBody,
           html: textToTrackedHtml(
             messageBody,
-            buildOpenTrackingPixelUrl(baseUrl, trackingToken)
+            buildOpenTrackingPixelUrl(baseUrl, trackingToken),
+            {
+              previewTrackingUrl: trackingUrl,
+              previewLinkLabel: "View your website preview",
+            }
           ),
         });
         fromAddress = result.from;
@@ -219,6 +229,7 @@ export async function POST(
         follow_up_stage: stage,
       },
       trackingToken,
+      publicTrackingToken,
       previewUrl,
     });
 

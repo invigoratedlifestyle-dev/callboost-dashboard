@@ -4,7 +4,8 @@ import Twilio from "twilio";
 import { appendEmailUnsubscribeFooter } from "../../../../../lib/emailUnsubscribe";
 import {
   buildOpenTrackingPixelUrl,
-  buildTrackingUrl,
+  buildPreviewTrackingUrl,
+  createPublicTrackingToken,
   createTrackingToken,
   getAppBaseUrl,
   replacePreviewUrlWithTrackingUrl,
@@ -194,8 +195,13 @@ export async function POST(
     const lead = rowToLead(leadRow);
     const baseUrl = getAppBaseUrl(req.url);
     const trackingToken = createTrackingToken();
+    const publicTrackingToken = createPublicTrackingToken();
     const previewUrl = getPreviewUrl(lead, baseUrl);
-    const trackingUrl = buildTrackingUrl(baseUrl, trackingToken);
+    const trackingUrl = buildPreviewTrackingUrl(
+      baseUrl,
+      slug,
+      publicTrackingToken
+    );
     const trackedBody = replacePreviewUrlWithTrackingUrl({
       body: messageBody,
       previewUrl,
@@ -223,7 +229,11 @@ export async function POST(
           body: outboundBody,
           html: textToTrackedHtml(
             outboundBody,
-            buildOpenTrackingPixelUrl(baseUrl, trackingToken)
+            buildOpenTrackingPixelUrl(baseUrl, trackingToken),
+            {
+              previewTrackingUrl: trackingUrl,
+              previewLinkLabel: "View your website preview",
+            }
           ),
         });
         fromAddress = result.from;
@@ -250,6 +260,7 @@ export async function POST(
       error: errorMessage,
       metadata,
       trackingToken,
+      publicTrackingToken,
       previewUrl,
     });
 

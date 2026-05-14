@@ -33,6 +33,7 @@ export type LeadMessageRow = {
   first_clicked_at?: string | null;
   click_count?: number | null;
   tracking_token?: string | null;
+  public_tracking_token?: string | null;
   preview_url?: string | null;
   created_at?: string | null;
   read_at?: string | null;
@@ -60,6 +61,7 @@ export type LeadMessage = {
   firstClickedAt: string;
   clickCount: number;
   trackingToken: string;
+  publicTrackingToken: string;
   previewUrl: string;
   createdAt: string;
   readAt: string;
@@ -144,6 +146,7 @@ export function rowToLeadMessage(row: LeadMessageRow): LeadMessage {
     firstClickedAt: getString(row.first_clicked_at),
     clickCount: getNumber(row.click_count),
     trackingToken: getString(row.tracking_token),
+    publicTrackingToken: getString(row.public_tracking_token),
     previewUrl: getString(row.preview_url),
     createdAt: getString(row.created_at),
     readAt: getString(row.read_at),
@@ -165,12 +168,16 @@ export async function insertLeadMessage(args: {
   error?: string | null;
   metadata?: Record<string, unknown> | null;
   trackingToken?: string | null;
+  publicTrackingToken?: string | null;
   previewUrl?: string | null;
 }) {
   const supabase = getSupabaseAdmin();
   const trackingToken =
     args.trackingToken ||
     (args.direction === "inbound" ? "" : crypto.randomUUID());
+  const publicTrackingToken =
+    args.publicTrackingToken ||
+    (args.direction === "inbound" ? "" : crypto.randomUUID().replace(/-/g, "").slice(0, 12));
   const { data, error } = await supabase
     .from("lead_messages")
     .insert({
@@ -188,6 +195,7 @@ export async function insertLeadMessage(args: {
       error: args.error || null,
       metadata: args.metadata || {},
       tracking_token: trackingToken || null,
+      public_tracking_token: publicTrackingToken || null,
       preview_url: args.previewUrl || null,
     })
     .select("*")
@@ -204,6 +212,20 @@ export async function findLeadMessageByTrackingToken(token: string) {
     .from("lead_messages")
     .select("*")
     .eq("tracking_token", token)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  return data ? rowToLeadMessage(data as LeadMessageRow) : null;
+}
+
+export async function findLeadMessageByPublicTrackingToken(token: string) {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("lead_messages")
+    .select("*")
+    .eq("public_tracking_token", token)
     .limit(1)
     .maybeSingle();
 
@@ -238,6 +260,27 @@ export async function recordMessageOpen(token: string) {
 export async function recordMessageClick(token: string) {
   const message = await findLeadMessageByTrackingToken(token);
 
+  return recordMessageClickForMessage(message);
+}
+
+export async function recordMessageClickByPublicToken(
+  token: string,
+  expectedSlug?: string | null
+) {
+  const message = await findLeadMessageByPublicTrackingToken(token);
+
+  if (
+    expectedSlug &&
+    message?.slug &&
+    message.slug.toLowerCase() !== expectedSlug.toLowerCase()
+  ) {
+    return null;
+  }
+
+  return recordMessageClickForMessage(message);
+}
+
+async function recordMessageClickForMessage(message: LeadMessage | null) {
   if (!message?.id) return null;
 
   const now = new Date().toISOString();
