@@ -4,6 +4,8 @@ import {
   getCallBoostAnalytics,
 } from "../../lib/analytics";
 
+export const dynamic = "force-dynamic";
+
 function formatDate(value: string) {
   if (!value) return "No engagement yet";
 
