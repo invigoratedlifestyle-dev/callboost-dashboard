@@ -63,6 +63,7 @@ type LeadWithGeneratedContent = Lead & {
   address?: string;
   formattedAddress?: string;
   heroImageUrl?: string;
+  mobileHeroImageUrl?: string;
   siteBrandingUrl?: string;
   siteIconUrl?: string;
   design?: {
@@ -653,6 +654,19 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const [savingSiteHeroImage, setSavingSiteHeroImage] = useState(false);
   const [siteHeroImageNotice, setSiteHeroImageNotice] = useState("");
   const [siteHeroImageError, setSiteHeroImageError] = useState("");
+  const [mobileHeroImageFile, setMobileHeroImageFile] = useState<File | null>(
+    null
+  );
+  const [uploadingMobileHeroImage, setUploadingMobileHeroImage] =
+    useState(false);
+  const [mobileHeroImageUploadNotice, setMobileHeroImageUploadNotice] =
+    useState("");
+  const [mobileHeroImageUploadError, setMobileHeroImageUploadError] =
+    useState("");
+  const [mobileHeroImageUrl, setMobileHeroImageUrl] = useState("");
+  const [savingMobileHeroImage, setSavingMobileHeroImage] = useState(false);
+  const [mobileHeroImageNotice, setMobileHeroImageNotice] = useState("");
+  const [mobileHeroImageError, setMobileHeroImageError] = useState("");
   const [brandingImageFile, setBrandingImageFile] = useState<File | null>(null);
   const [uploadingBrandingImage, setUploadingBrandingImage] = useState(false);
   const [brandingImageUploadNotice, setBrandingImageUploadNotice] =
@@ -769,6 +783,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
         instagram: loadedLead.instagram || "",
       });
       setSiteHeroImageUrl(loadedLead.heroImageUrl || "");
+      setMobileHeroImageUrl(loadedLead.mobileHeroImageUrl || "");
       setSiteBrandingUrl(loadedLead.siteBrandingUrl || "");
       setSiteIconUrl(loadedLead.siteIconUrl || "");
       const siteDesign = getLeadSiteDesign(loadedLead);
@@ -878,6 +893,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     );
     setSelectedServiceModifiers(getSelectedServiceModifiers(nextLead));
     setSiteHeroImageUrl(nextLead.heroImageUrl || "");
+    setMobileHeroImageUrl(nextLead.mobileHeroImageUrl || "");
     setSiteBrandingUrl(nextLead.siteBrandingUrl || "");
     setSiteIconUrl(nextLead.siteIconUrl || "");
     const siteDesign = getLeadSiteDesign(nextLead);
@@ -1095,18 +1111,47 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     if (!isAllowedHeroImageFile(file)) {
       setHeroImageFile(null);
       event.target.value = "";
-      setHeroImageUploadError("Upload a JPG, PNG or WebP hero image.");
+      setHeroImageUploadError("Upload a JPG, PNG or WebP desktop hero image.");
       return;
     }
 
     if (file.size > HERO_IMAGE_MAX_BYTES) {
       setHeroImageFile(null);
       event.target.value = "";
-      setHeroImageUploadError("Hero image must be 5MB or smaller.");
+      setHeroImageUploadError("Desktop hero image must be 5MB or smaller.");
       return;
     }
 
     setHeroImageFile(file);
+  };
+  const handleMobileHeroImageFileChange = (
+    event: ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0] || null;
+
+    setMobileHeroImageUploadNotice("");
+    setMobileHeroImageUploadError("");
+
+    if (!file) {
+      setMobileHeroImageFile(null);
+      return;
+    }
+
+    if (!isAllowedHeroImageFile(file)) {
+      setMobileHeroImageFile(null);
+      event.target.value = "";
+      setMobileHeroImageUploadError("Upload a JPG, PNG or WebP mobile hero image.");
+      return;
+    }
+
+    if (file.size > HERO_IMAGE_MAX_BYTES) {
+      setMobileHeroImageFile(null);
+      event.target.value = "";
+      setMobileHeroImageUploadError("Mobile hero image must be 5MB or smaller.");
+      return;
+    }
+
+    setMobileHeroImageFile(file);
   };
   const handleBrandingImageFileChange = (
     event: ChangeEvent<HTMLInputElement>
@@ -1221,17 +1266,17 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   };
   const handleUploadHeroImage = async () => {
     if (!lead) {
-      setHeroImageUploadError("Load a lead before uploading a hero image.");
+      setHeroImageUploadError("Load a lead before uploading a desktop hero image.");
       return;
     }
 
     if (!heroImageFile) {
-      setHeroImageUploadError("Choose a hero image to upload first.");
+      setHeroImageUploadError("Choose a desktop hero image to upload first.");
       return;
     }
 
     setUploadingHeroImage(true);
-    setHeroImageUploadNotice("Uploading hero image...");
+    setHeroImageUploadNotice("Uploading desktop hero image...");
     setHeroImageUploadError("");
     setSiteHeroImageNotice("");
     setSiteHeroImageError("");
@@ -1247,7 +1292,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error || "Failed to upload hero image");
+        throw new Error(data.error || "Failed to upload desktop hero image");
       }
 
       const imageUrl = typeof data.imageUrl === "string" ? data.imageUrl : "";
@@ -1258,14 +1303,76 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
 
       setSiteHeroImageUrl(imageUrl);
       setHeroImageFile(null);
-      setHeroImageUploadNotice("Hero image uploaded. Save the hero image URL to keep it.");
+      setHeroImageUploadNotice(
+        "Desktop hero image uploaded. Save the desktop hero image URL to keep it."
+      );
     } catch (error) {
       setHeroImageUploadNotice("");
       setHeroImageUploadError(
-        error instanceof Error ? error.message : "Failed to upload hero image"
+        error instanceof Error
+          ? error.message
+          : "Failed to upload desktop hero image"
       );
     } finally {
       setUploadingHeroImage(false);
+    }
+  };
+  const handleUploadMobileHeroImage = async () => {
+    if (!lead) {
+      setMobileHeroImageUploadError(
+        "Load a lead before uploading a mobile hero image."
+      );
+      return;
+    }
+
+    if (!mobileHeroImageFile) {
+      setMobileHeroImageUploadError("Choose a mobile hero image to upload first.");
+      return;
+    }
+
+    setUploadingMobileHeroImage(true);
+    setMobileHeroImageUploadNotice("Uploading mobile hero image...");
+    setMobileHeroImageUploadError("");
+    setMobileHeroImageNotice("");
+    setMobileHeroImageError("");
+
+    try {
+      const formData = new FormData();
+      formData.append("file", mobileHeroImageFile);
+
+      const res = await fetch(
+        `/api/leads/${lead.slug || lead.id}/hero-image?variant=mobile`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to upload mobile hero image");
+      }
+
+      const imageUrl = typeof data.imageUrl === "string" ? data.imageUrl : "";
+
+      if (!imageUrl) {
+        throw new Error("Upload succeeded but no public image URL was returned.");
+      }
+
+      setMobileHeroImageUrl(imageUrl);
+      setMobileHeroImageFile(null);
+      setMobileHeroImageUploadNotice(
+        "Mobile hero image uploaded. Save the mobile hero image URL to keep it."
+      );
+    } catch (error) {
+      setMobileHeroImageUploadNotice("");
+      setMobileHeroImageUploadError(
+        error instanceof Error
+          ? error.message
+          : "Failed to upload mobile hero image"
+      );
+    } finally {
+      setUploadingMobileHeroImage(false);
     }
   };
   const handleUploadSiteIcon = async () => {
@@ -1378,21 +1485,64 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error || "Failed to save hero image");
+        throw new Error(data.error || "Failed to save desktop hero image");
       }
 
       const updatedLead = data.lead as LeadWithGeneratedContent;
 
       setLead(updatedLead);
       setSiteHeroImageUrl(updatedLead.heroImageUrl || "");
-      setSiteHeroImageNotice("Hero image saved for future generated sites.");
+      setSiteHeroImageNotice(
+        "Desktop hero image saved for future generated sites."
+      );
       setHeroImageUploadNotice("");
     } catch (error) {
       setSiteHeroImageError(
-        error instanceof Error ? error.message : "Failed to save hero image"
+        error instanceof Error ? error.message : "Failed to save desktop hero image"
       );
     } finally {
       setSavingSiteHeroImage(false);
+    }
+  };
+  const handleSaveMobileHeroImage = async () => {
+    if (!lead) return;
+
+    const nextMobileHeroImageUrl = normalizeWebsite(mobileHeroImageUrl);
+
+    setSavingMobileHeroImage(true);
+    setMobileHeroImageNotice("");
+    setMobileHeroImageError("");
+
+    try {
+      const res = await fetch(`/api/leads/${lead.slug || lead.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          mobileHeroImageUrl: nextMobileHeroImageUrl,
+        }),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to save mobile hero image");
+      }
+
+      const updatedLead = data.lead as LeadWithGeneratedContent;
+
+      setLead(updatedLead);
+      setMobileHeroImageUrl(updatedLead.mobileHeroImageUrl || "");
+      setMobileHeroImageNotice(
+        "Mobile hero image saved for future generated sites."
+      );
+      setMobileHeroImageUploadNotice("");
+    } catch (error) {
+      setMobileHeroImageError(
+        error instanceof Error ? error.message : "Failed to save mobile hero image"
+      );
+    } finally {
+      setSavingMobileHeroImage(false);
     }
   };
   const handleSaveSiteIcon = async () => {
@@ -1567,6 +1717,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
         instagram: updatedLead.instagram || "",
       });
       setSiteHeroImageUrl(updatedLead.heroImageUrl || "");
+      setMobileHeroImageUrl(updatedLead.mobileHeroImageUrl || "");
       setSiteBrandingUrl(updatedLead.siteBrandingUrl || "");
       setSiteIconUrl(updatedLead.siteIconUrl || "");
       setSmsTo(updatedLead.phone || "");
@@ -3268,9 +3419,9 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
             <div className="mt-6 rounded-xl border border-white/10 bg-slate-950 p-4">
               <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <h3 className="font-bold text-white">Hero Image</h3>
+                  <h3 className="font-bold text-white">Desktop Hero Image</h3>
                   <p className="mt-1 text-sm text-slate-400">
-                    Used as the generated site hero/background image.
+                    Used as the generated site desktop hero/background image.
                   </p>
                 </div>
 
@@ -3280,13 +3431,13 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                   disabled={savingSiteHeroImage}
                   className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {savingSiteHeroImage ? "Saving..." : "Save Hero Image"}
+                  {savingSiteHeroImage ? "Saving..." : "Save Desktop Hero Image"}
                 </button>
               </div>
 
               <div className="space-y-3">
                 <label className="grid gap-2 text-sm font-bold text-slate-300">
-                  Hero Image URL
+                  Desktop Hero Image URL
                   <input
                     value={siteHeroImageUrl}
                     onChange={(event) => {
@@ -3303,7 +3454,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                   <div className="overflow-hidden rounded-lg border border-white/10 bg-slate-900">
                     <Image
                       src={siteHeroImageUrl}
-                      alt="Hero image preview"
+                      alt="Desktop hero image preview"
                       width={640}
                       height={240}
                       sizes="(min-width: 1024px) 50vw, 100vw"
@@ -3312,14 +3463,14 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                   </div>
                 ) : (
                   <p className="rounded-lg bg-white/5 px-3 py-2 text-sm text-slate-500">
-                    No hero image override set. Generated sites will use the
+                    No desktop hero image override set. Generated sites will use the
                     business, trade or default fallback image.
                   </p>
                 )}
 
                 <div className="rounded-lg border border-white/10 bg-slate-900 p-3">
                   <label className="grid gap-2 text-sm font-bold text-slate-300">
-                    Upload hero image
+                    Upload desktop hero image
                     <input
                       type="file"
                       accept={HERO_IMAGE_ACCEPT}
@@ -3336,7 +3487,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                       disabled={uploadingHeroImage || !heroImageFile}
                       className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      {uploadingHeroImage ? "Uploading..." : "Upload"}
+                      {uploadingHeroImage ? "Uploading..." : "Upload desktop hero image"}
                     </button>
 
                     {heroImageFile ? (
@@ -3372,6 +3523,120 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 {siteHeroImageError ? (
                   <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm font-bold text-red-300">
                     {siteHeroImageError}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="mt-6 rounded-xl border border-white/10 bg-slate-950 p-4">
+              <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="font-bold text-white">Mobile Hero Image</h3>
+                  <p className="mt-1 text-sm text-slate-400">
+                    Used as the generated site mobile hero/background image.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleSaveMobileHeroImage}
+                  disabled={savingMobileHeroImage}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {savingMobileHeroImage ? "Saving..." : "Save Mobile Hero Image"}
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <label className="grid gap-2 text-sm font-bold text-slate-300">
+                  Mobile Hero Image URL
+                  <input
+                    value={mobileHeroImageUrl}
+                    onChange={(event) => {
+                      setMobileHeroImageUrl(event.target.value);
+                      setMobileHeroImageNotice("");
+                      setMobileHeroImageError("");
+                    }}
+                    className="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-sm text-white outline-none"
+                    placeholder="https://example.com/mobile-hero.jpg"
+                  />
+                </label>
+
+                {isPreviewableImageUrl(mobileHeroImageUrl) ? (
+                  <div className="mx-auto max-w-xs overflow-hidden rounded-lg border border-white/10 bg-slate-900">
+                    <Image
+                      src={mobileHeroImageUrl}
+                      alt="Mobile hero image preview"
+                      width={360}
+                      height={520}
+                      sizes="320px"
+                      className="h-72 w-full object-cover"
+                    />
+                  </div>
+                ) : (
+                  <p className="rounded-lg bg-white/5 px-3 py-2 text-sm text-slate-500">
+                    No mobile hero image override set. Generated sites will use
+                    the desktop hero image on mobile.
+                  </p>
+                )}
+
+                <div className="rounded-lg border border-white/10 bg-slate-900 p-3">
+                  <label className="grid gap-2 text-sm font-bold text-slate-300">
+                    Upload mobile hero image
+                    <input
+                      type="file"
+                      accept={HERO_IMAGE_ACCEPT}
+                      onChange={handleMobileHeroImageFileChange}
+                      disabled={uploadingMobileHeroImage}
+                      className="block w-full text-sm text-slate-300 file:mr-4 file:rounded-lg file:border-0 file:bg-slate-700 file:px-3 file:py-2 file:text-sm file:font-bold file:text-white hover:file:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
+                    />
+                  </label>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={handleUploadMobileHeroImage}
+                      disabled={uploadingMobileHeroImage || !mobileHeroImageFile}
+                      className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {uploadingMobileHeroImage
+                        ? "Uploading..."
+                        : "Upload mobile hero image"}
+                    </button>
+
+                    {mobileHeroImageFile ? (
+                      <span className="text-xs text-slate-400">
+                        {mobileHeroImageFile.name}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <p className="mt-2 text-xs text-slate-500">
+                    JPG, PNG or WebP. Maximum 5MB.
+                  </p>
+
+                  {mobileHeroImageUploadNotice ? (
+                    <p className="mt-2 rounded-lg bg-green-500/10 px-3 py-2 text-xs font-bold text-green-300">
+                      {mobileHeroImageUploadNotice}
+                    </p>
+                  ) : null}
+
+                  {mobileHeroImageUploadError ? (
+                    <p className="mt-2 rounded-lg bg-red-500/10 px-3 py-2 text-xs font-bold text-red-300">
+                      {mobileHeroImageUploadError}
+                    </p>
+                  ) : null}
+                </div>
+
+                {mobileHeroImageNotice ? (
+                  <p className="rounded-lg bg-green-500/10 px-3 py-2 text-sm font-bold text-green-300">
+                    {mobileHeroImageNotice}
+                  </p>
+                ) : null}
+
+                {mobileHeroImageError ? (
+                  <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm font-bold text-red-300">
+                    {mobileHeroImageError}
                   </p>
                 ) : null}
               </div>

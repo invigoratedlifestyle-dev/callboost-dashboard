@@ -127,6 +127,7 @@ function getRequestLeadDisplayFields(lead: Record<string, unknown>) {
   return {
     siteBrandingUrl: getStringField(lead, "siteBrandingUrl"),
     heroImageUrl: getStringField(lead, "heroImageUrl"),
+    mobileHeroImageUrl: getStringField(lead, "mobileHeroImageUrl"),
     siteIconUrl: getStringField(lead, "siteIconUrl"),
   };
 }
@@ -278,6 +279,9 @@ Return ONLY valid JSON:
       heroImageUrl:
         getStringField(existingLead, "heroImageUrl") ||
         requestDisplayFields.heroImageUrl,
+      mobileHeroImageUrl:
+        getStringField(existingLead, "mobileHeroImageUrl") ||
+        requestDisplayFields.mobileHeroImageUrl,
       siteIconUrl:
         getStringField(existingLead, "siteIconUrl") ||
         requestDisplayFields.siteIconUrl,
@@ -297,6 +301,7 @@ Return ONLY valid JSON:
     console.log("GENERATE_SITE_ASSETS", {
       siteBrandingUrl: getStringField(updatedLead, "siteBrandingUrl"),
       heroImageUrl: getStringField(updatedLead, "heroImageUrl"),
+      mobileHeroImageUrl: getStringField(updatedLead, "mobileHeroImageUrl"),
       siteIconUrl: getStringField(updatedLead, "siteIconUrl"),
     });
 

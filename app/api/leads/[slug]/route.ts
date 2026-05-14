@@ -161,6 +161,13 @@ export async function PATCH(
       }
 
       if (
+        hasOwn(body, "mobileHeroImageUrl") &&
+        typeof body.mobileHeroImageUrl === "string"
+      ) {
+        nextLead.mobileHeroImageUrl = body.mobileHeroImageUrl;
+      }
+
+      if (
         hasOwn(body, "siteBrandingUrl") &&
         typeof body.siteBrandingUrl === "string"
       ) {

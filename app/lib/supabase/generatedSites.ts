@@ -36,6 +36,8 @@ const generatedSiteReferenceFields = [
   "generatedHtml",
   "siteHtml",
   "heroImageUrl",
+  "mobileHeroImageUrl",
+  "heroImageMobileUrl",
   "heroImageOverride",
   "generatedHeroImageUrl",
   "generatedHeroImage",
@@ -145,6 +147,7 @@ export async function purgeGeneratedSiteForLead(args: {
 
   for (const key of storageKeys) {
     await removeStoragePrefix(supabase, `hero-images/${key}`);
+    await removeStoragePrefix(supabase, `mobile-hero-images/${key}`);
     await removeStoragePrefix(supabase, `site-branding/${key}`);
     await removeStoragePrefix(supabase, `site-icons/${key}`);
   }
@@ -192,6 +195,7 @@ export async function purgeGeneratedSiteForLeadBestEffort(args: {
   for (const key of storageKeys) {
     for (const storagePath of [
       `hero-images/${key}`,
+      `mobile-hero-images/${key}`,
       `site-branding/${key}`,
       `site-icons/${key}`,
     ]) {
@@ -622,6 +626,26 @@ function getBusinessHeroImage(lead: LeadRecord) {
   const bestCandidate = candidates.sort((a, b) => b.score - a.score)[0];
 
   return bestCandidate ? { source: bestCandidate.source, url: bestCandidate.url } : null;
+}
+
+function getBusinessMobileHeroImage(lead: LeadRecord) {
+  const leadRecord = getRecord(lead) || {};
+  const explicitPaths = [
+    ["mobileHeroImageUrl"],
+    ["mobileHeroImage"],
+    ["heroImageMobileUrl"],
+    ["hero_image_mobile_url"],
+    ["data", "mobileHeroImageUrl"],
+    ["data", "mobileHeroImage"],
+  ];
+
+  for (const path of explicitPaths) {
+    const url = getImageUrl(getNestedValue(leadRecord, path));
+
+    if (url) return url;
+  }
+
+  return "";
 }
 
 function isPlumberTrade(trade: unknown) {
@@ -1582,6 +1606,7 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
     trade: primaryTrade || trade,
     seed,
   });
+  const mobileHeroImage = getBusinessMobileHeroImage(lead) || heroImage;
   const siteBrandingUrl = getText(lead.siteBrandingUrl).trim();
   const hasSiteBranding = isValidHttpUrl(siteBrandingUrl);
   const siteIconUrl = getText(lead.siteIconUrl).trim();
@@ -1904,7 +1929,7 @@ ${iconLinkHtml}
     .footer-bottom { display: flex; justify-content: space-between; gap: 18px; margin-top: 34px; padding-top: 22px; border-top: 1px solid rgba(255, 255, 255, 0.16); color: rgba(255, 255, 255, 0.9); font-size: 14px; }
     .mobile-call-bar { display: none; }
     @media (max-width: 980px) { .nav { min-height: 110px; display: flex; justify-content: space-between; } .brand.has-logo { min-width: 0; max-width: min(620px, calc(100% - 190px)); } .brand-logo { max-width: min(620px, 100%); max-height: 82px; } .nav-links { display: none; } .template-hero-image-led .visual-hero-content { justify-content: flex-start; } .template-hero-image-led .visual-hero-cta { justify-content: flex-start; } .quote-card, .areas-panel, .contact-layout { grid-template-columns: 1fr; } .services-grid, .trust-grid, .review-grid, .faq-grid, .footer-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-    @media (max-width: 700px) { body { padding-bottom: 82px; } .container { width: min(100% - 28px, 1120px); } .nav { min-height: 88px; gap: 12px; } .brand.has-logo { min-width: 0; max-width: 100%; } .brand strong { max-width: 230px; font-size: 16px; line-height: 1.2; } .brand span { font-size: 12px; } .brand-logo { width: auto; height: auto; max-width: min(340px, 100%); max-height: 58px; object-fit: contain; } .nav-call { display: none; } .hero { min-height: auto; padding: 58px 0 86px; } .template-hero-image-led .site-header { background: rgba(2, 6, 23, 0.06); backdrop-filter: blur(5px); } .template-hero-image-led .nav { min-height: 64px; gap: 8px; align-items: center; padding-top: 8px; padding-bottom: 8px; } .template-hero-image-led .brand { max-width: calc(100% - 118px); } .template-hero-image-led .brand.has-logo { max-width: calc(100% - 118px); } .template-hero-image-led .brand strong { max-width: 190px; font-size: 14px; } .template-hero-image-led .brand span { display: none; } .template-hero-image-led .brand-logo { max-width: min(220px, 100%); max-height: 42px; } .template-hero-image-led .nav-call { min-height: 40px; display: inline-flex; padding: 9px 12px; border-radius: 14px; font-size: 12px; } .template-hero-image-led .hero { min-height: clamp(430px, 64vh, 560px); padding: 84px 0 24px; background-position: 54% center; background-size: cover; } .template-hero-image-led .visual-hero-content { justify-content: center; } .template-hero-image-led .visual-hero-cta { width: 100%; justify-content: center; } .template-hero-image-led .hero .button.accent { width: min(100%, 310px); min-height: 52px; padding: 13px 18px; border-radius: 16px; font-size: 15px; box-shadow: 0 16px 34px rgba(2, 6, 23, 0.3), 0 0 24px rgba(20, 184, 166, 0.18); } h1 { font-size: clamp(36px, 12vw, 48px); } .hero-subtitle { font-size: 18px; } .hero-bullets { display: grid; grid-template-columns: 1fr 1fr; } .hero-bullets span { border-radius: 12px; } .button, .cta-row, .cta-row a { width: 100%; } .quote-strip { margin-top: -44px; } .template-hero-image-led .quote-strip { margin-top: 0; padding-top: 24px; } .quote-card, .contact-panel, .callback-form, .areas-panel { padding: 22px; } .mini-form, .services-grid, .trust-grid, .review-grid, .faq-grid, .footer-grid { grid-template-columns: 1fr; } .section { padding: 58px 0; } .footer { padding-bottom: 32px; } .footer-bottom { display: grid; } .mobile-call-bar { display: block; position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 80; } .mobile-call-bar a { min-height: 58px; display: flex; align-items: center; justify-content: center; border-radius: 12px; background: var(--cta-color); color: var(--cta-text-color); box-shadow: 0 18px 38px rgba(2, 6, 23, 0.24); font-size: 17px; font-weight: 950; text-decoration: none; } }
+    @media (max-width: 700px) { body { padding-bottom: 82px; } .container { width: min(100% - 28px, 1120px); } .nav { min-height: 88px; gap: 12px; } .brand.has-logo { min-width: 0; max-width: 100%; } .brand strong { max-width: 230px; font-size: 16px; line-height: 1.2; } .brand span { font-size: 12px; } .brand-logo { width: auto; height: auto; max-width: min(340px, 100%); max-height: 58px; object-fit: contain; } .nav-call { display: none; } .hero { min-height: auto; padding: 58px 0 86px; background-image: linear-gradient(rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.55)), var(--hero-img-mobile); } .template-hero-image-led .site-header { background: rgba(2, 6, 23, 0.06); backdrop-filter: blur(5px); } .template-hero-image-led .nav { min-height: 64px; gap: 8px; align-items: center; padding-top: 8px; padding-bottom: 8px; } .template-hero-image-led .brand { max-width: calc(100% - 118px); } .template-hero-image-led .brand.has-logo { max-width: calc(100% - 118px); } .template-hero-image-led .brand strong { max-width: 190px; font-size: 14px; } .template-hero-image-led .brand span { display: none; } .template-hero-image-led .brand-logo { max-width: min(220px, 100%); max-height: 42px; } .template-hero-image-led .nav-call { min-height: 40px; display: inline-flex; padding: 9px 12px; border-radius: 14px; font-size: 12px; } .template-hero-image-led .hero { min-height: clamp(430px, 64vh, 560px); padding: 84px 0 24px; background-image: linear-gradient(180deg, rgba(2, 6, 23, 0.22) 0%, rgba(2, 6, 23, 0.02) 46%, rgba(2, 6, 23, 0.28) 100%), var(--hero-img-mobile); background-position: 54% center; background-size: cover; } .template-hero-image-led .visual-hero-content { justify-content: center; } .template-hero-image-led .visual-hero-cta { width: 100%; justify-content: center; } .template-hero-image-led .hero .button.accent { width: min(100%, 310px); min-height: 52px; padding: 13px 18px; border-radius: 16px; font-size: 15px; box-shadow: 0 16px 34px rgba(2, 6, 23, 0.3), 0 0 24px rgba(20, 184, 166, 0.18); } h1 { font-size: clamp(36px, 12vw, 48px); } .hero-subtitle { font-size: 18px; } .hero-bullets { display: grid; grid-template-columns: 1fr 1fr; } .hero-bullets span { border-radius: 12px; } .button, .cta-row, .cta-row a { width: 100%; } .quote-strip { margin-top: -44px; } .template-hero-image-led .quote-strip { margin-top: 0; padding-top: 24px; } .quote-card, .contact-panel, .callback-form, .areas-panel { padding: 22px; } .mini-form, .services-grid, .trust-grid, .review-grid, .faq-grid, .footer-grid { grid-template-columns: 1fr; } .section { padding: 58px 0; } .footer { padding-bottom: 32px; } .footer-bottom { display: grid; } .mobile-call-bar { display: block; position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 80; } .mobile-call-bar a { min-height: 58px; display: flex; align-items: center; justify-content: center; border-radius: 12px; background: var(--cta-color); color: var(--cta-text-color); box-shadow: 0 18px 38px rgba(2, 6, 23, 0.24); font-size: 17px; font-weight: 950; text-decoration: none; } }
   </style>
 </head>
 <body class="${escapeAttribute([variant, templateClassName].filter(Boolean).join(" "))}">
@@ -1923,7 +1948,7 @@ ${iconLinkHtml}
     </div>
   </header>
 
-  <section class="hero" style="--hero-img: url('${escapeAttribute(heroImage)}');">
+  <section class="hero" style="--hero-img: url('${escapeAttribute(heroImage)}'); --hero-img-mobile: url('${escapeAttribute(mobileHeroImage)}');">
     <div class="container">
       ${heroContentHtml}
     </div>

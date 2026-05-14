@@ -289,6 +289,36 @@ export async function uploadLeadHeroImage(args: {
   };
 }
 
+export async function uploadLeadMobileHeroImage(args: {
+  leadKey: string;
+  file: File;
+}): Promise<UploadedLeadHeroImage> {
+  const supabase = getSupabaseAdmin();
+  const leadKey = normalizeKey(args.leadKey, "lead");
+  const extension = getFileExtension(args.file.name, args.file.type);
+  const fileBaseName = sanitizeFileBaseName(args.file.name);
+  const timestamp = Date.now();
+  const storagePath = `mobile-hero-images/${leadKey}/${timestamp}-${fileBaseName}.${extension}`;
+  const bytes = await args.file.arrayBuffer();
+  const { error: uploadError } = await supabase.storage
+    .from(SITE_ASSETS_BUCKET)
+    .upload(storagePath, bytes, {
+      contentType: args.file.type || "image/jpeg",
+      upsert: false,
+    });
+
+  if (uploadError) throw uploadError;
+
+  const { data: publicUrlData } = supabase.storage
+    .from(SITE_ASSETS_BUCKET)
+    .getPublicUrl(storagePath);
+
+  return {
+    imageUrl: publicUrlData.publicUrl,
+    storagePath,
+  };
+}
+
 export async function uploadLeadSiteBrandingImage(args: {
   leadKey: string;
   file: File;

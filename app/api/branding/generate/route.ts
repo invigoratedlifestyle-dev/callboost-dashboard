@@ -48,6 +48,21 @@ function buildPrompt(args: {
         ].join(" ")
       : "";
 
+  if (args.mode === "mobile-hero") {
+    return [
+      `Create a premium mobile-first hero image for ${leadName}, a ${trade} business in ${city}.`,
+      "Use portrait/mobile-first composition with 4:5 or 9:16 style framing.",
+      "Keep the focal subject centered and mobile crop safe.",
+      "If including text, use a short readable stacked headline and keep it away from extreme left/right edges.",
+      "Leave safe space for top navigation and a bottom call-to-action button.",
+      "Keep vehicle or business branding visible where suitable.",
+      heroImageLedGuidance,
+      args.prompt,
+    ]
+      .filter(Boolean)
+      .join(" ");
+  }
+
   if (args.mode === "hero") {
     return [
       "Clean this local trade business hero image.",
@@ -55,6 +70,9 @@ function buildPrompt(args: {
         ? "Preserve tasteful branded campaign-style text if it is intentional, readable and useful."
         : "Remove visible text, watermarks, contact numbers, labels, banners and overlays where present.",
       "Keep the photo natural and realistic. Do not distort the main subject.",
+      templateType === "hero-image-led"
+        ? "Desktop and mobile hero images may be separate assets; keep this desktop version cinematic and landscape-friendly."
+        : "",
       heroImageLedGuidance,
       args.prompt,
     ]
@@ -114,8 +132,10 @@ export async function POST(req: Request) {
     }
 
     const finalPrompt = buildPrompt({ mode, lead, leadSlug, prompt, transparent });
-    const outputFormat = transparent && mode !== "hero" ? "png" : "webp";
+    const isHeroMode = mode === "hero" || mode === "mobile-hero";
+    const outputFormat = transparent && !isHeroMode ? "png" : "webp";
     const square = mode === "icon";
+    const imageSize = mode === "mobile-hero" ? "1024x1536" : "1536x1024";
     const imageResponse = sourceImage
       ? await openai.images.edit({
           model: "gpt-image-1",
@@ -123,18 +143,18 @@ export async function POST(req: Request) {
             type: sourceImage.contentType,
           }),
           prompt: finalPrompt,
-          background: transparent && mode !== "hero" ? "transparent" : "auto",
+          background: transparent && !isHeroMode ? "transparent" : "auto",
           output_format: outputFormat,
           quality: "high",
-          size: square ? "1024x1024" : "1536x1024",
+          size: square ? "1024x1024" : imageSize,
         })
       : await openai.images.generate({
           model: "gpt-image-1",
           prompt: finalPrompt,
-          background: transparent ? "transparent" : "auto",
+          background: transparent && !isHeroMode ? "transparent" : "auto",
           output_format: outputFormat,
           quality: "high",
-          size: "1536x1024",
+          size: square ? "1024x1024" : imageSize,
         });
     const b64 = imageResponse.data?.[0]?.b64_json;
 
@@ -147,7 +167,7 @@ export async function POST(req: Request) {
 
     const processed = await normalizeGeneratedImage({
       buffer: Buffer.from(b64, "base64"),
-      transparent: transparent && mode !== "hero",
+      transparent: transparent && !isHeroMode,
       cropWhitespace,
       square,
     });

@@ -117,6 +117,10 @@ export type Lead = {
   aiGeneratedAt?: string;
   enrichedAt?: string;
   generatedSiteUrl?: string;
+  heroImageUrl?: string;
+  mobileHeroImageUrl?: string;
+  siteBrandingUrl?: string;
+  siteIconUrl?: string;
   websiteEvaluation?: WebsiteEvaluation;
   website_opportunity_v2?: StoredWebsiteOpportunityResult;
   callbackForwardingEnabled?: boolean;

@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { isArchivedLead } from "../../../../lib/leadLifecycle";
-import { uploadLeadHeroImage } from "../../../../lib/siteAssets";
+import {
+  uploadLeadHeroImage,
+  uploadLeadMobileHeroImage,
+} from "../../../../lib/siteAssets";
 import { getLeadBySlug } from "../../../../lib/supabase/leads";
 
 const HERO_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
@@ -65,7 +68,11 @@ export async function POST(
       );
     }
 
-    const uploadedImage = await uploadLeadHeroImage({
+    const url = new URL(req.url);
+    const variant = url.searchParams.get("variant");
+    const uploadImage =
+      variant === "mobile" ? uploadLeadMobileHeroImage : uploadLeadHeroImage;
+    const uploadedImage = await uploadImage({
       leadKey: String(lead.slug || lead.id || slug),
       file,
     });

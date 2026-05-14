@@ -215,6 +215,7 @@ export function rowToLead(row: LeadRow): LeadRecord {
       getString(row.client_started_at) || getString(data.clientStartedAt),
     siteBrandingUrl: getString(data.siteBrandingUrl),
     heroImageUrl: getString(data.heroImageUrl),
+    mobileHeroImageUrl: getString(data.mobileHeroImageUrl),
     siteIconUrl: getString(data.siteIconUrl),
   });
 }
@@ -470,6 +471,7 @@ export async function updateLeadBrandingAssets(
   assets: {
     siteBrandingUrl?: string;
     heroImageUrl?: string;
+    mobileHeroImageUrl?: string;
     siteIconUrl?: string;
   }
 ) {
@@ -494,6 +496,9 @@ export async function updateLeadBrandingAssets(
     ...existingLead,
     ...(assets.siteBrandingUrl ? { siteBrandingUrl: assets.siteBrandingUrl } : {}),
     ...(assets.heroImageUrl ? { heroImageUrl: assets.heroImageUrl } : {}),
+    ...(assets.mobileHeroImageUrl
+      ? { mobileHeroImageUrl: assets.mobileHeroImageUrl }
+      : {}),
     ...(assets.siteIconUrl ? { siteIconUrl: assets.siteIconUrl } : {}),
     status: nextStatus,
     workflowStatus: nextStatus,
