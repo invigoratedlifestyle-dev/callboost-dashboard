@@ -1813,6 +1813,12 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       websiteEvaluation: lead.websiteEvaluation,
       websiteOpportunity: lead.websiteOpportunity,
       websiteOpportunityV2: lead.website_opportunity_v2,
+      engagement: {
+        engagement_state: engagementState,
+        total_open_count: totalOpenCount,
+        total_click_count: totalPreviewClickCount,
+        last_engaged_at: lastClickedAt || lastOpenedAt || "",
+      },
     });
     const composerFollowUpBody =
       destination.channel === "email"
@@ -2059,7 +2065,29 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     .filter(Boolean)
     .sort()
     .at(-1);
-  const isEngagedHotLead = totalPreviewClickCount > 0 || totalOpenCount >= 3;
+  const engagementState =
+    lead.stage === "client" || lead.stage === "archived"
+      ? "none"
+      : totalPreviewClickCount > 0
+        ? "hot"
+        : totalOpenCount >= 3
+          ? "warm"
+          : "none";
+  const engagementReason =
+    engagementState === "hot"
+      ? "Preview viewed"
+      : engagementState === "warm"
+        ? "Repeat engagement"
+        : "";
+  const engagementRecommendedAction =
+    engagementState === "hot"
+      ? "Send Follow-up 1"
+      : engagementState === "warm"
+        ? "Send Follow-up 2"
+        : "";
+  const engagementRecommendedStage: FollowUpStage | null =
+    engagementState === "hot" ? 1 : engagementState === "warm" ? 2 : null;
+  const isEngagedHotLead = engagementState === "hot" || engagementState === "warm";
   const latestInboundMessageTime = getLatestLeadMessageTime(messages, "inbound");
   const latestOutboundMessageTime = getLatestLeadMessageTime(
     messages,
@@ -2075,7 +2103,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const smsSegmentEstimate = estimateSmsSegments(smsBody);
   const hasReplyAfterLastOutbound =
     latestInboundMessageTime > latestOutboundMessageTime;
-  const canShowFollowUpActions = leadStage === "contacted";
+  const canShowFollowUpActions = leadStage === "contacted" || leadStage === "lead";
   const hasFollowUpDestination = hasUsableFollowUpContact({
     phone: lead.phone,
     email: lead.email,
@@ -3898,10 +3926,29 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
             <h2 className="text-xl font-bold">Engagement</h2>
             {isEngagedHotLead ? (
               <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-bold uppercase text-emerald-300">
-                Hot lead
+                {engagementState === "hot" ? "Hot lead" : "Warm lead"}
               </span>
             ) : null}
           </div>
+          {engagementReason ? (
+            <div className="mb-4 rounded-xl border border-white/10 bg-slate-900 px-4 py-3">
+              <p className="text-sm font-bold text-white">{engagementReason}</p>
+              <p className="mt-1 text-sm text-slate-400">
+                Recommended action: {engagementRecommendedAction}
+              </p>
+              {engagementRecommendedStage ? (
+                <button
+                  onClick={() => handlePrepareFollowUp(engagementRecommendedStage)}
+                  disabled={followUpDisabled}
+                  className="mt-3 rounded-lg bg-blue-600 px-4 py-2 text-xs font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {preparingFollowUp === engagementRecommendedStage
+                    ? "Preparing..."
+                    : engagementRecommendedAction}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <div className="rounded-xl border border-white/10 bg-slate-900 px-4 py-3">
               <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">

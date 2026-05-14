@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getLeadStage } from "../../../../lib/leadLifecycle";
+import { getLeadEngagementSummary } from "../../../../lib/engagementPriority";
 import {
   buildFollowUpBody,
   getFollowUpDestination,
@@ -82,9 +83,11 @@ export async function POST(
 
     const lead = rowToLead(leadRow);
 
-    if (getLeadStage(lead) !== "contacted") {
+    const leadStage = getLeadStage(lead);
+
+    if (leadStage !== "contacted" && leadStage !== "lead") {
       return NextResponse.json(
-        { error: "Follow-ups are only available for contacted leads" },
+        { error: "Follow-ups are only available for active leads" },
         { status: 400 }
       );
     }
@@ -107,6 +110,7 @@ export async function POST(
     const websiteEvaluation = getRecord(lead.websiteEvaluation);
     const websiteOpportunity = getRecord(lead.websiteOpportunity);
     const websiteOpportunityV2 = getRecord(lead.website_opportunity_v2);
+    const engagement = await getLeadEngagementSummary(lead);
     const destination = getFollowUpDestination({
       latestOutboundChannel: getLatestOutboundMessageChannel(messages),
       phone: lead.phone,
@@ -156,6 +160,7 @@ export async function POST(
         : null,
       websiteOpportunityV2:
         websiteOpportunityV2 as StoredWebsiteOpportunityResult | null,
+      engagement,
     });
     const trackedFollowUpBody = replacePreviewUrlWithTrackingUrl({
       body: followUpBody,

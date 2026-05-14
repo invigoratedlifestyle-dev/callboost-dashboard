@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { enrichLeadsWithEngagement } from "../../lib/engagementPriority";
 import {
+  getLeadStage,
   isLifecycleStage,
   type LifecycleStage,
 } from "../../lib/leadLifecycle";
@@ -32,11 +34,22 @@ export async function GET(req: Request) {
       leads = leads.filter((lead) => statusSlugs.has(String(lead.slug)));
     }
 
+    const leadsWithEngagement = await enrichLeadsWithEngagement(leads);
+    const visibleLeads =
+      stage === "engaged"
+        ? leadsWithEngagement.filter(
+            (lead) =>
+              lead.engagement_state !== "none" &&
+              getLeadStage(lead) !== "client" &&
+              getLeadStage(lead) !== "archived"
+          )
+        : leadsWithEngagement;
+
     console.log("Lead stage filter:", stage || "all");
     console.log("Lead status filter:", status || "all");
-    console.log("Fetched leads count:", leads.length);
+    console.log("Fetched leads count:", visibleLeads.length);
 
-    return NextResponse.json({ leads });
+    return NextResponse.json({ leads: visibleLeads });
   } catch (error) {
     console.error("Failed to load leads:", error);
 

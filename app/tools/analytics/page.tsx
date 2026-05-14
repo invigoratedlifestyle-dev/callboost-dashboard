@@ -30,6 +30,10 @@ function SummaryCard({ label, value }: { label: string; value: string | number }
 
 export default async function AnalyticsPage() {
   const analytics = await getCallBoostAnalytics();
+  const hotLeadCount = analytics.hotLeads.filter((lead) => lead.clicks > 0).length;
+  const warmLeadCount = analytics.hotLeads.filter(
+    (lead) => lead.clicks === 0 && lead.opens >= 3
+  ).length;
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">
@@ -53,7 +57,7 @@ export default async function AnalyticsPage() {
           </Link>
         </div>
 
-        <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
           <SummaryCard
             label="Messages Sent"
             value={analytics.totalOutboundMessages}
@@ -71,12 +75,18 @@ export default async function AnalyticsPage() {
             label="Total Preview Clicks"
             value={analytics.totalClicks}
           />
-          <SummaryCard label="Hot Leads" value={analytics.hotLeadCount} />
+          <Link href="/?stage=engaged">
+            <SummaryCard label="Hot Leads" value={hotLeadCount} />
+          </Link>
+          <Link href="/?stage=engaged">
+            <SummaryCard label="Warm Leads" value={warmLeadCount} />
+          </Link>
         </div>
 
         <p className="mb-6 rounded-xl border border-blue-400/20 bg-blue-500/10 px-4 py-3 text-sm text-blue-100">
           Email opens are estimates because some email clients block or pre-load
-          tracking pixels. Preview clicks are a stronger intent signal.
+          tracking pixels. Preview clicks are a stronger intent signal. Use the
+          Engaged stage to action hot and warm leads.
         </p>
 
         <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">

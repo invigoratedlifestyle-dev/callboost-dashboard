@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { recordMessageClick } from "../../lib/supabase/leadMessages";
+import { getLeadEngagementSummary } from "../../lib/engagementPriority";
 import { getLeadBySlug } from "../../lib/supabase/leads";
 import { getPreviewUrl } from "../../lib/previewUrls";
 
@@ -30,6 +31,9 @@ export async function GET(
     }
 
     const lead = message.slug ? await getLeadBySlug(message.slug) : null;
+    if (lead) {
+      await getLeadEngagementSummary(lead);
+    }
     const previewUrl =
       message.previewUrl ||
       (lead ? getPreviewUrl(lead, new URL(req.url).origin) : "") ||

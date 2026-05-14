@@ -287,6 +287,12 @@ export function buildFollowUpBody(
     websiteEvaluation?: FollowUpWebsiteEvaluation | null;
     websiteOpportunity?: FollowUpWebsiteOpportunity | null;
     websiteOpportunityV2?: StoredWebsiteOpportunityResult | null;
+    engagement?: {
+      engagement_state?: "hot" | "warm" | "none";
+      total_open_count?: number;
+      total_click_count?: number;
+      last_engaged_at?: string | null;
+    } | null;
   } = {}
 ) {
   const firstName = getLeadFirstName(name);
@@ -296,8 +302,32 @@ export function buildFollowUpBody(
   const websiteOpportunitySection = buildWebsiteOpportunitySection(args);
   const smsIssueSummary = getSmsIssueSummary(args);
   const smsName = name.trim() || stageTwoName;
+  const engagementState = args.engagement?.engagement_state || "none";
 
   if (stage === 1) {
+    if (engagementState === "hot") {
+      if (args.channel === "sms") {
+        return `Hi ${smsName}, just wanted to check whether the preview looked close to what you'd want for the business:
+${previewUrl}
+
+Reply if you'd like any quick changes.
+
+- Jamie, CallBoost Tasmania`;
+      }
+
+      return `Hey ${firstName},
+
+Just wanted to check whether the preview looked close to what you'd want for the business:
+
+${previewUrl}
+
+Happy to make a couple of quick changes if there is anything you'd like adjusted.
+
+Cheers,
+Jamie
+CallBoost Tasmania`;
+    }
+
     if (previewUrl && args.channel === "sms") {
       return `Hi ${smsName}, just checking you saw the website preview I made for you:
 ${previewUrl}
@@ -333,6 +363,32 @@ CallBoost Tasmania`;
   }
 
   if (stage === 2) {
+    if (engagementState === "warm") {
+      if (args.channel === "sms") {
+        return `Hi ${smsName}, just floating this back to the top in case it was useful:
+${previewUrl}
+
+Reply if you'd like any quick changes or want me to keep it live.
+
+- Jamie, CallBoost Tasmania`;
+      }
+
+      return `Hey ${stageTwoName},
+
+Just floating this back to the top in case it was useful.
+
+Your preview is still live here:
+
+${previewUrl}
+
+Happy to make a couple of quick changes if you'd like it closer to what you want for the business.
+
+Cheers,
+
+Jamie
+CallBoost Tasmania`;
+    }
+
     if (args.channel === "sms") {
       if (smsIssueSummary) {
         return `Hi ${smsName}, quick follow-up on the website preview I made for you: ${previewUrl}

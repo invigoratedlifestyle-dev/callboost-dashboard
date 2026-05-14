@@ -1,4 +1,6 @@
 import { recordMessageOpen } from "../../../../lib/supabase/leadMessages";
+import { getLeadEngagementSummary } from "../../../../lib/engagementPriority";
+import { getLeadBySlug } from "../../../../lib/supabase/leads";
 
 const transparentGif = Uint8Array.from([
   71, 73, 70, 56, 57, 97, 1, 0, 1, 0, 128, 0, 0, 0, 0, 0, 255, 255, 255, 33,
@@ -26,7 +28,12 @@ export async function GET(
     const { token } = await params;
 
     if (token) {
-      await recordMessageOpen(token);
+      const message = await recordMessageOpen(token);
+      const lead = message?.slug ? await getLeadBySlug(message.slug) : null;
+
+      if (lead) {
+        await getLeadEngagementSummary(lead);
+      }
     }
   } catch (error) {
     console.error("OPEN_TRACKING_FAILED", error);

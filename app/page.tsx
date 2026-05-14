@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Lead, LeadStage, WebsiteEvaluation } from "./lib/leads";
 import type {
@@ -17,8 +17,17 @@ import { CALLBOOST_MONTHLY_RECURRING_REVENUE } from "./lib/pricing";
 
 type LeadPriority = "high" | "medium" | "low";
 type WebsiteStatus = "no_website" | "weak_website" | "has_website";
-type LeadFilter = "all" | LeadStage;
-const DEFAULT_LEAD_FILTER: LeadFilter = "lead";
+type LeadFilter = "leads" | "contacted" | "engaged" | "client" | "archived";
+type EngagementState = "hot" | "warm" | "none";
+const DEFAULT_LEAD_FILTER: LeadFilter = "leads";
+const LAST_LEAD_STAGE_KEY = "callboost:lastLeadStage";
+const validLeadFilters = new Set<LeadFilter>([
+  "leads",
+  "contacted",
+  "engaged",
+  "client",
+  "archived",
+]);
 type NavigationMenuKey = "leads" | "tools" | "account";
 type NavigationMenuItem =
   | {
@@ -42,6 +51,16 @@ type DashboardLead = Lead & {
   website_opportunity_v2?: StoredWebsiteOpportunityResult;
   payment_status?: string | null;
   client_started_at?: string | null;
+  engagement_state?: EngagementState;
+  engagement_priority?: number;
+  engagement_reason?: string;
+  total_open_count?: number;
+  total_click_count?: number;
+  last_opened_at?: string;
+  last_clicked_at?: string;
+  last_engaged_at?: string;
+  recommended_action?: string;
+  recommended_follow_up_type?: "follow_up_1" | "follow_up_2" | "none";
 };
 
 type DashboardNotification =
@@ -81,6 +100,17 @@ type DashboardNotification =
       label: string;
     }
   | {
+      type: "hot_lead_engaged" | "warm_lead_engaged";
+      id: string;
+      leadSlug: string;
+      businessName: string;
+      body: string;
+      engagementState: "hot" | "warm";
+      recommendedAction: string;
+      createdAt: string | null;
+      label: string;
+    }
+  | {
       type: "follow_up";
       id: string;
       leadSlug: string;
@@ -109,9 +139,9 @@ type FollowUpQueueItem = {
 };
 
 const leadFilters: Array<{ value: LeadFilter; label: string }> = [
-  { value: "all", label: "All" },
-  { value: "lead", label: "Leads" },
+  { value: "leads", label: "Leads" },
   { value: "contacted", label: "Contacted" },
+  { value: "engaged", label: "Engaged" },
   { value: "client", label: "Clients" },
   { value: "archived", label: "Archived" },
 ];
@@ -124,9 +154,9 @@ const stageLabels: Record<LeadStage, string> = {
 };
 
 const filterTitles: Record<LeadFilter, string> = {
-  all: "All Leads",
-  lead: "Leads",
+  leads: "Leads",
   contacted: "Contacted Leads",
+  engaged: "Engaged Leads",
   client: "Clients",
   archived: "Archived Leads",
 };
@@ -248,15 +278,26 @@ function getNotificationPreview(notification: DashboardNotification) {
     return notification.body;
   }
 
+  if (
+    notification.type === "hot_lead_engaged" ||
+    notification.type === "warm_lead_engaged"
+  ) {
+    return notification.body;
+  }
+
   if (notification.type === "email_bounce") {
     return notification.reason
       ? `${notification.body} ${notification.reason}`
       : notification.body;
   }
 
-  const text = notification.body || notification.subject || "New reply";
+  if (notification.type === "reply") {
+    const text = notification.body || notification.subject || "New reply";
 
-  return text.length > 90 ? `${text.slice(0, 87)}...` : text;
+    return text.length > 90 ? `${text.slice(0, 87)}...` : text;
+  }
+
+  return notification.label;
 }
 
 function isActiveNavHref(pathname: string, href: string) {
@@ -433,7 +474,10 @@ function isHotLeadReply(notification: DashboardNotification) {
 }
 
 function playLeadReplySound(notification: DashboardNotification) {
-  if (isHotLeadReply(notification)) {
+  if (
+    isHotLeadReply(notification) ||
+    notification.type === "hot_lead_engaged"
+  ) {
     playTripleBeep();
     return;
   }
@@ -457,8 +501,43 @@ function getLeadSelectionKey(lead: DashboardLead) {
   }`;
 }
 
+function normalizeLeadFilter(value: unknown): LeadFilter | null {
+  const normalized = String(value || "").trim().toLowerCase();
+  const filter = normalized === "lead" ? "leads" : normalized;
+
+  return validLeadFilters.has(filter as LeadFilter) ? (filter as LeadFilter) : null;
+}
+
+function getInitialLeadFilter() {
+  if (typeof window === "undefined") return DEFAULT_LEAD_FILTER;
+
+  const params = new URLSearchParams(window.location.search);
+  const queryFilter = normalizeLeadFilter(params.get("stage"));
+  const storedFilter = normalizeLeadFilter(
+    window.localStorage.getItem(LAST_LEAD_STAGE_KEY)
+  );
+
+  return queryFilter || storedFilter || DEFAULT_LEAD_FILTER;
+}
+
+function getEngagementBadgeClass(state?: EngagementState) {
+  if (state === "hot") return "bg-emerald-500/15 text-emerald-300";
+  if (state === "warm") return "bg-amber-500/15 text-amber-300";
+
+  return "bg-white/10 text-slate-400";
+}
+
+function getEngagementLabel(state?: EngagementState) {
+  if (state === "hot") return "Hot Lead";
+  if (state === "warm") return "Warm Lead";
+
+  return "";
+}
+
 export default function DashboardPage() {
   const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [leads, setLeads] = useState<DashboardLead[]>([]);
   const [clientRevenueLeads, setClientRevenueLeads] = useState<DashboardLead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -472,7 +551,7 @@ export default function DashboardPage() {
     () => new Set()
   );
   const [activeFilter, setActiveFilter] =
-    useState<LeadFilter>(DEFAULT_LEAD_FILTER);
+    useState<LeadFilter>(getInitialLeadFilter);
   const [notifications, setNotifications] = useState<
     DashboardNotification[]
   >([]);
@@ -486,13 +565,14 @@ export default function DashboardPage() {
   const permissionRequestedRef = useRef(false);
   const selectAllCheckboxRef = useRef<HTMLInputElement | null>(null);
   const topNavigationRef = useRef<HTMLDivElement | null>(null);
+  const restoredFilterRef = useRef(true);
   const actionRunning = enriching || Boolean(bulkActionRunning);
 
   const loadLeads = useCallback(
     async (filter: LeadFilter) => {
       const params = new URLSearchParams();
 
-      if (filter !== "all") params.set("stage", filter);
+      params.set("stage", filter);
 
       const query = params.toString();
       const url = query ? `/api/leads?${query}` : "/api/leads";
@@ -575,6 +655,10 @@ export default function DashboardPage() {
           new Notification(
             newestNotification.type === "reply"
               ? "New Lead Reply"
+              : newestNotification.type === "hot_lead_engaged"
+                ? "Hot Lead"
+              : newestNotification.type === "warm_lead_engaged"
+                ? "Warm Lead"
               : "Follow-up Due",
             {
               body: `${newestNotification.businessName}: ${getNotificationPreview(
@@ -660,6 +744,22 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
+    if (!restoredFilterRef.current) return;
+
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(LAST_LEAD_STAGE_KEY, activeFilter);
+    }
+
+    const current = normalizeLeadFilter(searchParams.get("stage"));
+
+    if (current !== activeFilter) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("stage", activeFilter);
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    }
+  }, [activeFilter, pathname, router, searchParams]);
+
+  useEffect(() => {
     // Initial dashboard data load.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadLeads(activeFilter);
@@ -722,6 +822,18 @@ export default function DashboardPage() {
     return [...leads].sort((a, b) => {
       if (activeFilter === "client") {
         return getClientStartedTime(b) - getClientStartedTime(a);
+      }
+
+      if (activeFilter === "engaged") {
+        const priorityDiff =
+          (b.engagement_priority || 0) - (a.engagement_priority || 0);
+
+        if (priorityDiff !== 0) return priorityDiff;
+
+        return (
+          new Date(b.last_engaged_at || "").getTime() -
+          new Date(a.last_engaged_at || "").getTime()
+        );
       }
 
       return getOpportunitySortWeight(b) - getOpportunitySortWeight(a);
@@ -1045,6 +1157,10 @@ export default function DashboardPage() {
                                     ? "bg-emerald-500/15 text-emerald-300"
                                   : notification.type === "email_bounce"
                                     ? "bg-rose-500/15 text-rose-300"
+                                  : notification.type === "hot_lead_engaged"
+                                    ? "bg-emerald-500/15 text-emerald-300"
+                                  : notification.type === "warm_lead_engaged"
+                                    ? "bg-amber-500/15 text-amber-300"
                                     : "bg-blue-500/15 text-blue-300"
                               }`}
                             >
@@ -1054,6 +1170,10 @@ export default function DashboardPage() {
                                   ? "Payment"
                                   : notification.type === "email_bounce"
                                     ? "Email bounced"
+                                  : notification.type === "hot_lead_engaged"
+                                    ? "Hot lead"
+                                  : notification.type === "warm_lead_engaged"
+                                    ? "Warm lead"
                                     : "Follow-up due"}
                             </span>
                             {notification.type === "reply" ? (
@@ -1062,6 +1182,12 @@ export default function DashboardPage() {
                               </span>
                             ) : null}
                           </div>
+                          {notification.type === "hot_lead_engaged" ||
+                          notification.type === "warm_lead_engaged" ? (
+                            <span className="mt-2 inline-block text-[11px] font-bold text-blue-300">
+                              Stage: Engaged
+                            </span>
+                          ) : null}
                           <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-300">
                             {getNotificationPreview(notification)}
                           </p>
@@ -1340,6 +1466,9 @@ export default function DashboardPage() {
                     const paymentFailed =
                       getPaymentStatus(lead) === "payment_failed";
                     const leadStage = getLeadStage(lead);
+                    const engagementLabel = getEngagementLabel(
+                      lead.engagement_state
+                    );
                     const lastActivity =
                       lead.lastActivityAt || lead.last_activity_at || "";
 
@@ -1375,7 +1504,36 @@ export default function DashboardPage() {
                                 New reply
                               </span>
                             ) : null}
+                            {engagementLabel ? (
+                              <span
+                                className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${getEngagementBadgeClass(
+                                  lead.engagement_state
+                                )}`}
+                              >
+                                {engagementLabel}
+                              </span>
+                            ) : null}
                           </div>
+                          {activeFilter === "engaged" ? (
+                            <div className="mt-2 space-y-1 text-xs text-slate-400">
+                              <p>
+                                {lead.engagement_reason || "Engaged"} · Opens:{" "}
+                                {lead.total_open_count || 0} · Preview clicks:{" "}
+                                {lead.total_click_count || 0}
+                              </p>
+                              <p>
+                                Last engagement:{" "}
+                                {lead.last_engaged_at
+                                  ? getLastActivityLabel(lead.last_engaged_at)
+                                  : "Unknown"}
+                              </p>
+                              {lead.recommended_action ? (
+                                <p className="font-bold text-blue-300">
+                                  {lead.recommended_action}
+                                </p>
+                              ) : null}
+                            </div>
+                          ) : null}
                         </td>
 
                         <td className="px-5 py-4 text-sm font-bold text-slate-200">

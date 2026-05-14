@@ -4,6 +4,8 @@ import {
   listBouncedEmailNotifications,
   listUnreadReplyNotifications,
 } from "../../lib/supabase/leadMessages";
+import { enrichLeadsWithEngagement } from "../../lib/engagementPriority";
+import { listLeads } from "../../lib/supabase/leads";
 import { getSupabaseAdmin } from "../../lib/supabase/server";
 
 type PaidLeadNotificationRow = {
@@ -51,11 +53,53 @@ async function listPaidLeadNotifications(limit = 20) {
   });
 }
 
+async function listEngagedLeadNotifications(limit = 20) {
+  const leads = await enrichLeadsWithEngagement(await listLeads());
+
+  return leads
+    .filter((lead) => lead.engagement_state === "hot" || lead.engagement_state === "warm")
+    .sort((a, b) => {
+      if (a.engagement_state !== b.engagement_state) {
+        return a.engagement_state === "hot" ? -1 : 1;
+      }
+
+      return (
+        new Date(b.last_engaged_at || "").getTime() -
+        new Date(a.last_engaged_at || "").getTime()
+      );
+    })
+    .slice(0, limit)
+    .map((lead) => {
+      const slug = getString(lead.slug);
+      const businessName =
+        getString(lead.businessName) ||
+        getString(lead.name) ||
+        slug ||
+        "Unknown business";
+      const isHot = lead.engagement_state === "hot";
+
+      return {
+        type: isHot ? ("hot_lead_engaged" as const) : ("warm_lead_engaged" as const),
+        id: `${isHot ? "hot" : "warm"}-lead-${lead.id || slug}`,
+        leadSlug: slug,
+        businessName,
+        body: isHot
+          ? `${businessName} viewed their preview. Send Follow-up 1.`
+          : `${businessName} has repeat engagement. Send Follow-up 2.`,
+        engagementState: lead.engagement_state,
+        recommendedAction: lead.recommended_action,
+        createdAt: lead.last_engaged_at,
+        label: isHot ? "Hot lead" : "Warm lead",
+      };
+    });
+}
+
 export async function GET() {
   try {
-    const [replies, bouncedEmails, followUps, payments] = await Promise.all([
+    const [replies, bouncedEmails, engagedLeads, followUps, payments] = await Promise.all([
       listUnreadReplyNotifications(20),
       listBouncedEmailNotifications(20),
+      listEngagedLeadNotifications(20),
       listNeedsFollowUp(),
       listPaidLeadNotifications(20),
     ]);
@@ -103,17 +147,27 @@ export async function GET() {
       label: "Email bounced",
     }));
     const notifications = [
+      ...engagedLeads,
       ...replyNotifications,
       ...bouncedEmailNotifications,
       ...payments,
       ...followUpNotifications,
     ].sort(
       (a, b) => {
+        const priority = (notification: { type: string }) => {
+          if (notification.type === "hot_lead_engaged") return 30;
+          if (notification.type === "warm_lead_engaged") return 20;
+          return 0;
+        };
+        const priorityDiff = priority(b) - priority(a);
+
+        if (priorityDiff !== 0) return priorityDiff;
+
         const aTime = new Date(a.createdAt || "").getTime();
         const bTime = new Date(b.createdAt || "").getTime();
 
-        return (Number.isFinite(aTime) ? aTime : 0) -
-          (Number.isFinite(bTime) ? bTime : 0);
+        return (Number.isFinite(bTime) ? bTime : 0) -
+          (Number.isFinite(aTime) ? aTime : 0);
       }
     );
 
