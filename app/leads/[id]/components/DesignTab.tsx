@@ -25,6 +25,28 @@ type MobilePreviewCardProps = {
   refreshSignal?: number;
 };
 
+function buildPreviewUrl(
+  generatedSiteUrl: string | null | undefined,
+  viewport: MobilePreviewPreset,
+  refreshValue: number
+) {
+  if (!generatedSiteUrl) return generatedSiteUrl;
+
+  const [urlWithoutHash, hash = ""] = generatedSiteUrl.split("#");
+  const params = new URLSearchParams();
+
+  params.set("previewViewport", viewport === "tablet" ? "tablet" : "mobile");
+
+  if (refreshValue > 0) {
+    params.set("previewRefresh", String(refreshValue));
+  }
+
+  const separator = urlWithoutHash.includes("?") ? "&" : "?";
+  const nextUrl = `${urlWithoutHash}${separator}${params.toString()}`;
+
+  return hash ? `${nextUrl}#${hash}` : nextUrl;
+}
+
 export default function DesignTab({ isActive, children }: DesignTabProps) {
   return (
     <div className={isActive ? "mt-8 space-y-6" : "hidden"}>{children}</div>
@@ -43,12 +65,11 @@ export function MobilePreviewCard({
   const viewport = mobilePreviewViewports[previewPreset];
   const canPreview = Boolean(generatedSiteUrl) && !isLeadArchived;
   const iframeRefreshValue = refreshSignal + previewRefreshKey;
-  const previewSrc =
-    generatedSiteUrl && iframeRefreshValue > 0
-      ? `${generatedSiteUrl}${
-          generatedSiteUrl.includes("?") ? "&" : "?"
-        }previewRefresh=${iframeRefreshValue}`
-      : generatedSiteUrl;
+  const previewSrc = buildPreviewUrl(
+    generatedSiteUrl,
+    previewPreset,
+    iframeRefreshValue
+  );
   const isTabletPreview = previewPreset === "tablet";
 
   return (
