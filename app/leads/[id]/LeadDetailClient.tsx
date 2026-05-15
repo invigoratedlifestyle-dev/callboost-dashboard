@@ -2924,7 +2924,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                       }}
                       className="min-h-10 w-full whitespace-nowrap rounded-lg border border-white/10 bg-slate-900/80 px-4 py-2 text-sm font-bold text-slate-200 hover:bg-slate-800 sm:w-auto"
                     >
-                      View Page
+                      View Desktop Preview
                     </button>
                   )}
                 </div>

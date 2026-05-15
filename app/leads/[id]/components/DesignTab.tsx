@@ -95,7 +95,7 @@ export function MobilePreviewCard({
               rel="noopener noreferrer"
               className="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-xs font-bold text-slate-200 hover:bg-slate-800"
             >
-              View Page
+              View Desktop Preview
             </a>
           ) : null}
         </div>
