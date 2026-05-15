@@ -1752,7 +1752,7 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
   const showReviewsSection = hasReviews && (hasStrongHeroRating || reviews.length > 0);
   const reviewsHeading = usingGoogleReviews
     ? "Google reviews from local customers"
-    : "What locals are saying";
+    : "Customer reviews";
   const reviewsIntro =
     usingGoogleReviews && hasStrongHeroRating
       ? "Real Google reviews from recent local customers."
