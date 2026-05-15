@@ -130,21 +130,28 @@ export function MobilePreviewCard({
           >
             <div className="mb-2 mx-auto h-1.5 w-16 rounded-full bg-slate-700" />
             <div
-              className={`overflow-hidden border border-black/60 bg-white ${
+              className={`overflow-auto border border-black/60 bg-white ${
                 isTabletPreview ? "rounded-[1.25rem]" : "rounded-[1.5rem]"
               }`}
               style={{
+                boxSizing: "content-box",
                 width: `${viewport.width}px`,
+                minWidth: `${viewport.width}px`,
                 height: `${viewport.height}px`,
+                minHeight: `${viewport.height}px`,
               }}
             >
               <iframe
                 src={previewSrc}
                 title="Generated site mobile and tablet preview"
-                className="border-0"
+                className="block border-0"
                 style={{
+                  boxSizing: "border-box",
+                  display: "block",
                   width: `${viewport.width}px`,
+                  minWidth: `${viewport.width}px`,
                   height: `${viewport.height}px`,
+                  minHeight: `${viewport.height}px`,
                 }}
                 onLoad={() => setIsPreviewLoading(false)}
               />
