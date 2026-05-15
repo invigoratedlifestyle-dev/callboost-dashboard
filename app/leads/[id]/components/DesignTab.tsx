@@ -8,7 +8,7 @@ type DesignTabProps = {
   children: ReactNode;
 };
 
-type MobilePreviewPreset = "iphone" | "android";
+type MobilePreviewPreset = "iphone" | "android" | "tablet";
 
 const mobilePreviewViewports: Record<
   MobilePreviewPreset,
@@ -16,11 +16,13 @@ const mobilePreviewViewports: Record<
 > = {
   iphone: { label: "iPhone", width: 390, height: 844 },
   android: { label: "Android", width: 412, height: 915 },
+  tablet: { label: "Tablet", width: 768, height: 1024 },
 };
 
 type MobilePreviewCardProps = {
   generatedSiteUrl?: string | null;
   isLeadArchived: boolean;
+  refreshSignal?: number;
 };
 
 export default function DesignTab({ isActive, children }: DesignTabProps) {
@@ -32,6 +34,7 @@ export default function DesignTab({ isActive, children }: DesignTabProps) {
 export function MobilePreviewCard({
   generatedSiteUrl,
   isLeadArchived,
+  refreshSignal = 0,
 }: MobilePreviewCardProps) {
   const [previewPreset, setPreviewPreset] =
     useState<MobilePreviewPreset>("iphone");
@@ -39,12 +42,14 @@ export function MobilePreviewCard({
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const viewport = mobilePreviewViewports[previewPreset];
   const canPreview = Boolean(generatedSiteUrl) && !isLeadArchived;
+  const iframeRefreshValue = refreshSignal + previewRefreshKey;
   const previewSrc =
-    generatedSiteUrl && previewRefreshKey > 0
+    generatedSiteUrl && iframeRefreshValue > 0
       ? `${generatedSiteUrl}${
           generatedSiteUrl.includes("?") ? "&" : "?"
-        }previewRefresh=${previewRefreshKey}`
+        }previewRefresh=${iframeRefreshValue}`
       : generatedSiteUrl;
+  const isTabletPreview = previewPreset === "tablet";
 
   return (
     <div className="mt-6 rounded-xl border border-white/10 bg-slate-950 p-4">
@@ -52,8 +57,8 @@ export function MobilePreviewCard({
         <div>
           <h3 className="font-bold text-white">Mobile Preview</h3>
           <p className="mt-1 text-sm text-slate-400">
-            Check the generated site in a phone-sized frame without leaving the
-            dashboard.
+            Check the generated site in a mobile or tablet frame without leaving
+            the dashboard.
           </p>
         </div>
 
@@ -61,7 +66,7 @@ export function MobilePreviewCard({
           <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-300">
             {viewport.width} x {viewport.height}
           </span>
-          {(["iphone", "android"] as MobilePreviewPreset[]).map((preset) => (
+          {(["iphone", "android", "tablet"] as MobilePreviewPreset[]).map((preset) => (
             <button
               key={preset}
               type="button"
@@ -88,41 +93,38 @@ export function MobilePreviewCard({
               {isPreviewLoading ? "Refreshing..." : "Refresh Preview"}
             </button>
           ) : null}
-          {generatedSiteUrl && !isLeadArchived ? (
-            <a
-              href={generatedSiteUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-xs font-bold text-slate-200 hover:bg-slate-800"
-            >
-              View Desktop Preview
-            </a>
-          ) : null}
         </div>
       </div>
 
       {canPreview && previewSrc ? (
         <div className="overflow-x-auto pb-2">
           <div
-            className="mx-auto rounded-[2rem] border border-white/15 bg-slate-900 p-3 shadow-2xl shadow-black/40"
+            className={`mx-auto border border-white/15 bg-slate-900 p-3 shadow-2xl shadow-black/40 ${
+              isTabletPreview ? "rounded-[1.75rem]" : "rounded-[2rem]"
+            }`}
             style={{
-              width: `min(100%, ${viewport.width + 28}px)`,
+              width: `${viewport.width + 28}px`,
               maxWidth: `${viewport.width + 28}px`,
             }}
           >
             <div className="mb-2 mx-auto h-1.5 w-16 rounded-full bg-slate-700" />
             <div
-              className="overflow-hidden rounded-[1.5rem] border border-black/60 bg-white"
+              className={`overflow-hidden border border-black/60 bg-white ${
+                isTabletPreview ? "rounded-[1.25rem]" : "rounded-[1.5rem]"
+              }`}
               style={{
-                aspectRatio: `${viewport.width} / ${viewport.height}`,
-                height: `min(72vh, ${viewport.height}px)`,
-                maxHeight: `${viewport.height}px`,
+                width: `${viewport.width}px`,
+                height: `${viewport.height}px`,
               }}
             >
               <iframe
                 src={previewSrc}
-                title="Generated site mobile preview"
-                className="h-full w-full border-0"
+                title="Generated site mobile and tablet preview"
+                className="border-0"
+                style={{
+                  width: `${viewport.width}px`,
+                  height: `${viewport.height}px`,
+                }}
                 onLoad={() => setIsPreviewLoading(false)}
               />
             </div>

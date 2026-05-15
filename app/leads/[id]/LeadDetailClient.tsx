@@ -746,6 +746,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const [portalError, setPortalError] = useState("");
   const [redoingOpportunity, setRedoingOpportunity] = useState(false);
   const [opportunityError, setOpportunityError] = useState("");
+  const [mobilePreviewRefreshSignal, setMobilePreviewRefreshSignal] =
+    useState(0);
 
   function handleTabChange(tabId: LeadDetailTabId) {
     const nextParams = new URLSearchParams(searchParams.toString());
@@ -945,6 +947,10 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
         buildOpportunityEmail(nextLead, getCustomerPreviewUrl(nextLead))
       );
     }
+  };
+  const handleGeneratedSiteUpdated = (updatedLead: Lead) => {
+    handleLeadUpdated(updatedLead);
+    setMobilePreviewRefreshSignal((current) => current + 1);
   };
   const saveServiceModifiers = async (modifiers: ServiceModifier[]) => {
     setSavingServiceModifiers(true);
@@ -2889,7 +2895,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                         lead={lead}
                         templateTrade={templateTrade}
                         templateType={templateType}
-                        onGenerated={handleLeadUpdated}
+                        onGenerated={handleGeneratedSiteUpdated}
                       />
                     </div>
                   ) : null}
@@ -2934,6 +2940,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
             <MobilePreviewCard
               generatedSiteUrl={generatedSiteUrl}
               isLeadArchived={isLeadArchived}
+              refreshSignal={mobilePreviewRefreshSignal}
             />
 
             <div className="mt-6 rounded-xl border border-white/10 bg-slate-950 p-4">
