@@ -677,8 +677,12 @@ function getBusinessMobileHeroImage(lead: LeadRecord) {
     ["mobileHeroImage"],
     ["heroImageMobileUrl"],
     ["hero_image_mobile_url"],
+    ["mobile_hero_image_url"],
     ["data", "mobileHeroImageUrl"],
     ["data", "mobileHeroImage"],
+    ["data", "heroImageMobileUrl"],
+    ["data", "hero_image_mobile_url"],
+    ["data", "mobile_hero_image_url"],
   ];
 
   for (const path of explicitPaths) {
@@ -1635,12 +1639,13 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
   const businessSlug = slugify(slugSource);
   const seed = `${businessSlug}-${citySlug}-${tradeSlug}`;
   // Business-specific and library imagery can improve trust and conversion. Stock trade imagery remains the safe fallback.
-  const heroImage = await getGeneratedHeroImage({
+  const desktopHeroImage = await getGeneratedHeroImage({
     lead,
     trade: primaryTrade || trade,
     seed,
   });
-  const mobileHeroImage = getBusinessMobileHeroImage(lead) || heroImage;
+  const uploadedMobileHeroImage = getBusinessMobileHeroImage(lead);
+  const mobileHeroImage = uploadedMobileHeroImage || desktopHeroImage;
   const siteBrandingUrl = getText(lead.siteBrandingUrl).trim();
   const hasSiteBranding = isValidHttpUrl(siteBrandingUrl);
   const siteIconUrl = getText(lead.siteIconUrl).trim();
@@ -2057,7 +2062,9 @@ ${iconLinkHtml}
     </div>
   </header>
 
-  <section class="hero" style="--hero-img-desktop: url('${escapeAttribute(heroImage)}'); --hero-img: var(--hero-img-desktop); --hero-img-mobile: url('${escapeAttribute(mobileHeroImage)}');">
+  <!-- DESKTOP HERO: ${escapeHtml(desktopHeroImage || "missing")} -->
+  <!-- MOBILE HERO: ${escapeHtml(uploadedMobileHeroImage || "missing")} -->
+  <section class="hero" style="--hero-img-desktop: url('${escapeAttribute(desktopHeroImage)}'); --hero-img: var(--hero-img-desktop); --hero-img-mobile: url('${escapeAttribute(mobileHeroImage)}');">
     <div class="container">
       ${heroContentHtml}
     </div>
