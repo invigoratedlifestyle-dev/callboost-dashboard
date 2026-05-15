@@ -1882,10 +1882,12 @@ ${iconLinkHtml}
     .template-hero-image-led .service-card p, .template-hero-image-led .trust-card p, .template-hero-image-led .review-card p, .template-hero-image-led .faq-item p { color: #334155; line-height: 1.62; }
     .template-hero-image-led .service-card a { margin-top: 6px; color: var(--body-accent-color); font-size: 14px; letter-spacing: 0.04em; text-transform: uppercase; }
     .template-hero-image-led .trust-section { background: radial-gradient(circle at 16% 0%, rgba(20, 184, 166, 0.16), transparent 28%), linear-gradient(135deg, #06101d, #0b1e2f 58%, #082f2f); color: white; }
+    .template-hero-image-led .section.soft.trust-section { background: radial-gradient(circle at 18% 0%, rgba(20, 184, 166, 0.14), transparent 30%), linear-gradient(180deg, #eef4f2, #e2ece9); color: #07111f; }
     .template-hero-image-led .trust-section h2, .template-hero-image-led .trust-section h3 { color: white; }
-    .template-hero-image-led .trust-section .muted { margin-left: auto; margin-right: auto; color: #dbe7ee; }
-    .template-hero-image-led .trust-section .section-kicker { color: #7dd3fc; }
-    .template-hero-image-led .trust-card { padding: 28px; border-color: rgba(255, 255, 255, 0.18); background: linear-gradient(145deg, #102235, #0d1b2b); box-shadow: 0 20px 44px rgba(0, 0, 0, 0.28); }
+    .template-hero-image-led .section.soft.trust-section h2 { color: #07111f; }
+    .template-hero-image-led .trust-section .muted { margin-left: auto; margin-right: auto; color: #334155; }
+    .template-hero-image-led .trust-section .section-kicker { color: var(--body-accent-color); }
+    .template-hero-image-led .trust-card { padding: 28px; border-color: rgba(15, 23, 42, 0.18); background: linear-gradient(145deg, #102235, #0d1b2b); box-shadow: 0 20px 44px rgba(15, 23, 42, 0.2); }
     .template-hero-image-led .trust-card h3 { color: white; }
     .template-hero-image-led .trust-card p { color: #d7e1ea; }
     .template-hero-image-led .review-section .section-header { margin-left: auto; margin-right: auto; text-align: center; }
