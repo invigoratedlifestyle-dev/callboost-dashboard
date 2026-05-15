@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { type ChangeEvent, useEffect, useState } from "react";
 import type {
   CallbackRequest,
@@ -55,6 +56,10 @@ import {
   getLeadName,
   type InterestedReplyPersonalization,
 } from "../../lib/outreachCopy";
+import BusinessInfoTab from "./components/BusinessInfoTab";
+import ClientSettingsTab from "./components/ClientSettingsTab";
+import CommunicationTab from "./components/CommunicationTab";
+import DesignTab from "./components/DesignTab";
 import { EnrichButton } from "./EnrichButton";
 import GenerateSiteButton from "./GenerateSiteButton";
 
@@ -216,6 +221,19 @@ const stageLabels: Record<LeadStage, string> = {
   client: "Client",
   archived: "Archived",
 };
+
+const LEAD_DETAIL_TABS = [
+  { id: "business-info", label: "Business Info" },
+  { id: "design", label: "Design" },
+  { id: "communication", label: "Communication" },
+  { id: "client-settings", label: "Client Settings" },
+] as const;
+
+type LeadDetailTabId = (typeof LEAD_DETAIL_TABS)[number]["id"];
+
+function isLeadDetailTabId(value: string | null): value is LeadDetailTabId {
+  return LEAD_DETAIL_TABS.some((tab) => tab.id === value);
+}
 
 function getLeadStage(lead: Pick<LeadWithGeneratedContent, "stage">) {
   return lead.stage || "lead";
@@ -609,6 +627,13 @@ function getLatestLeadMessageTime(
 }
 
 export default function LeadDetailClient({ slug }: { slug: string }) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const activeTab: LeadDetailTabId = isLeadDetailTabId(tabParam)
+    ? tabParam
+    : "business-info";
   const [lead, setLead] = useState<LeadWithGeneratedContent | null>(null);
   const [callbacks, setCallbacks] = useState<CallbackRequest[]>([]);
   const [messages, setMessages] = useState<LeadMessage[]>([]);
@@ -724,6 +749,12 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
   const [portalError, setPortalError] = useState("");
   const [redoingOpportunity, setRedoingOpportunity] = useState(false);
   const [opportunityError, setOpportunityError] = useState("");
+
+  function handleTabChange(tabId: LeadDetailTabId) {
+    const nextParams = new URLSearchParams(searchParams.toString());
+    nextParams.set("tab", tabId);
+    router.replace(`${pathname}?${nextParams.toString()}`, { scroll: false });
+  }
   const [templateTrade, setTemplateTrade] = useState("plumber");
   const [templateType, setTemplateType] = useState("modern");
   const [selectedServiceModifiers, setSelectedServiceModifiers] = useState<
@@ -2331,11 +2362,44 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
           </div>
         </div>
 
-        <div className="mt-8 grid gap-6 lg:grid-cols-2">
+        <div className="sticky top-0 z-20 -mx-4 mt-8 border-y border-white/10 bg-slate-950/95 px-4 py-3 backdrop-blur sm:mx-0 sm:rounded-2xl sm:border">
+          <div className="flex gap-2 overflow-x-auto">
+            {LEAD_DETAIL_TABS.map((tab) => {
+              const isActive = activeTab === tab.id;
+
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => handleTabChange(tab.id)}
+                  className={`shrink-0 rounded-lg px-4 py-2 text-sm font-bold transition ${
+                    isActive
+                      ? "bg-blue-600 text-white shadow-lg shadow-blue-950/30"
+                      : "text-slate-400 hover:bg-white/10 hover:text-white"
+                  }`}
+                  aria-current={isActive ? "page" : undefined}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <BusinessInfoTab isActive={activeTab === "business-info"}>
           <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-xl font-bold">Business Info</h2>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-300">
+                  Lead summary
+                </p>
+                <h2 className="mt-2 text-2xl font-black tracking-tight text-white">
+                  Business info
+                </h2>
+                <p className="mt-2 max-w-2xl text-sm text-slate-400">
+                  Core lead details, contact methods, online presence and CRM
+                  metadata for assessment.
+                </p>
               </div>
 
               {isEditingContact ? (
@@ -2372,7 +2436,17 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
               </p>
             ) : null}
 
-            <div className="space-y-3 text-slate-300">
+            <div className="grid gap-4 text-slate-300 lg:grid-cols-[1.15fr_0.85fr]">
+              <div className="rounded-xl border border-white/10 bg-slate-950 p-4">
+                <h3 className="font-bold text-white">
+                  Business profile & contact details
+                </h3>
+                <p className="mt-1 text-sm text-slate-400">
+                  The editable information used across enrichment, outreach and
+                  generated previews.
+                </p>
+
+                <div className="mt-4 space-y-3">
               <div>
                 <strong className="text-white">Trade:</strong>{" "}
                 {isEditingContact ? (
@@ -2692,10 +2766,74 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 )}
               </div>
 
-              <p>
-                <strong className="text-white">Rating:</strong>{" "}
-                {lead.rating || "-"} from {lead.reviewCount || "0"} reviews
-              </p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="rounded-xl border border-white/10 bg-slate-950 p-4">
+                  <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h3 className="font-bold text-white">
+                        Business enrichment
+                      </h3>
+                      <p className="mt-1 text-sm text-slate-400">
+                        Refresh external business data, reviews and source
+                        links.
+                      </p>
+                    </div>
+
+                    <div className="w-full min-w-0 [&>button]:min-h-10 [&>button]:w-full [&>button]:whitespace-nowrap [&>button]:border [&>button]:border-white/10 [&>button]:bg-slate-800/80 [&>button]:text-slate-200 [&>button]:hover:bg-slate-700 sm:w-auto sm:[&>button]:w-auto">
+                      <EnrichButton lead={lead} onEnriched={handleLeadUpdated} />
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <p>
+                      <strong className="text-white">Rating:</strong>{" "}
+                      {lead.rating || "-"} from {lead.reviewCount || "0"} reviews
+                    </p>
+
+                    <p>
+                      <strong className="text-white">Google Maps:</strong>{" "}
+                      {googleMapsUrl ? (
+                        <a
+                          href={googleMapsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-400 hover:text-blue-300 hover:underline"
+                        >
+                          Open in Google Maps
+                        </a>
+                      ) : (
+                        <span className="text-slate-500">Not available</span>
+                      )}
+                    </p>
+
+                    <p>
+                      <strong className="text-white">Yellow Pages:</strong>{" "}
+                      {yellowPagesUrl ? (
+                        <a
+                          href={yellowPagesUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-400 hover:text-blue-300 hover:underline"
+                        >
+                          Open in Yellow Pages
+                        </a>
+                      ) : (
+                        <span className="text-slate-500">Not found yet</span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-white/10 bg-slate-950 p-4">
+                  <h3 className="font-bold text-white">CRM notes & metadata</h3>
+                  <p className="mt-1 text-sm text-slate-400">
+                    Workflow status and key lifecycle timestamps.
+                  </p>
+
+                  <div className="mt-4 space-y-3">
 
               <p>
                 <strong className="text-white">Stage:</strong>{" "}
@@ -2743,68 +2881,159 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                   {formatTimestamp(lead.archivedAt)}
                 </p>
               ) : null}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </BusinessInfoTab>
+
+        <DesignTab isActive={activeTab === "design"}>
+          <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
+            <div className="mb-5">
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-300">
+                Site generation
+              </p>
+              <h2 className="mt-2 text-2xl font-black tracking-tight text-white">
+                Generate / update site
+              </h2>
+              <p className="mt-2 max-w-2xl text-sm text-slate-400">
+                Build the latest preview using the saved template, service
+                profile, colours and image assets.
+              </p>
             </div>
 
-            {lead.business_info_match ? (
-              <div className="mt-5 rounded-xl border border-white/10 bg-slate-950/60 p-4">
-                <h3 className="mb-3 font-bold text-white">
-                  Business Presence Confidence
-                </h3>
-
-                <div className="flex flex-wrap items-center gap-3">
-                  <span
-                    className={`rounded-full px-3 py-1 text-xs font-bold ${getBusinessInfoMatchBadgeClass(
-                      lead.business_info_match
-                    )}`}
-                  >
-                    {getBusinessInfoMatchLabel(lead.business_info_match)}
-                  </span>
-                  <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-200">
-                    Score {lead.business_info_match.score}
-                  </span>
-                  {lead.business_info_match.candidate_source ? (
-                    <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-300">
-                      Source {lead.business_info_match.candidate_source}
-                    </span>
-                  ) : null}
+            <div className="rounded-xl border border-blue-400/20 bg-blue-500/10 p-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0">
+                  <p className="text-xs font-bold uppercase tracking-[0.14em] text-blue-200">
+                    Current preview
+                  </p>
+                  <p className="mt-1 break-all text-sm text-slate-300">
+                    {isLeadArchived ? (
+                      <span className="text-slate-500">
+                        Generated site disabled because this lead is archived.
+                      </span>
+                    ) : generatedSiteUrl ? (
+                      <a
+                        href={generatedSiteUrl}
+                        target="_blank"
+                        className="text-blue-300 hover:text-blue-200"
+                      >
+                        {generatedSiteUrl}
+                      </a>
+                    ) : (
+                      <span className="text-slate-500">
+                        Generate a site first
+                      </span>
+                    )}
+                  </p>
                 </div>
 
-                {lead.business_info_match.reasons?.length ? (
-                  <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-300">
-                    {lead.business_info_match.reasons
-                      .slice(0, 4)
-                      .map((reason) => (
-                        <li key={reason}>{reason}</li>
-                      ))}
-                  </ul>
-                ) : null}
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center lg:shrink-0">
+                  {!isLeadArchived ? (
+                    <div className="w-full [&>button]:min-h-12 [&>button]:w-full [&>button]:bg-blue-600 [&>button]:px-5 [&>button]:py-3 [&>button]:text-base [&>button]:shadow-lg [&>button]:shadow-blue-950/30 [&>button]:hover:bg-blue-500 sm:w-auto sm:[&>button]:w-auto">
+                      <GenerateSiteButton
+                        lead={lead}
+                        templateTrade={templateTrade}
+                        templateType={templateType}
+                        onGenerated={handleLeadUpdated}
+                      />
+                    </div>
+                  ) : null}
+                  <Link
+                    href={`/branding?lead=${encodeURIComponent(lead.slug || lead.id)}`}
+                    className="inline-flex min-h-12 w-full items-center justify-center rounded-lg border border-blue-300/30 bg-white/10 px-5 py-3 text-sm font-bold text-white hover:bg-white/15 sm:w-auto"
+                  >
+                    Open Branding Workspace
+                  </Link>
+                </div>
               </div>
-            ) : null}
-          </section>
 
-          <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
-            <h2 className="mb-4 text-xl font-bold">Generated Site</h2>
+              <div className="mt-4 flex flex-col gap-3 border-t border-white/10 pt-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  {isLeadArchived ? (
+                    <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-sm font-bold text-amber-200">
+                      Generated site disabled because this lead is archived.
+                    </p>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        if (!generatedSiteUrl) {
+                          alert("Generate a site first.");
+                          return;
+                        }
 
-            <p className="break-all text-slate-300">
-              <strong className="text-white">Live URL:</strong>{" "}
-              {isLeadArchived ? (
-                <span className="text-slate-500">
-                  Generated site disabled because this lead is archived.
-                </span>
-              ) : generatedSiteUrl ? (
-                <a
-                  href={generatedSiteUrl}
-                  target="_blank"
-                  className="text-blue-400"
-                >
-                  {generatedSiteUrl}
-                </a>
-              ) : (
-                <span className="text-slate-500">Generate a site first</span>
-              )}
-            </p>
+                        window.open(
+                          generatedSiteUrl,
+                          "_blank",
+                          "noopener,noreferrer"
+                        );
+                      }}
+                      className="min-h-10 w-full whitespace-nowrap rounded-lg border border-white/10 bg-slate-900/80 px-4 py-2 text-sm font-bold text-slate-200 hover:bg-slate-800 sm:w-auto"
+                    >
+                      View Page
+                    </button>
+                  )}
+                </div>
 
-            <div className="mt-6 rounded-xl border border-blue-400/20 bg-blue-500/10 p-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    onClick={handleCreateCheckoutLink}
+                    disabled={creatingCheckout}
+                    className="rounded-lg bg-green-600 px-4 py-2 text-sm font-bold hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {creatingCheckout ? "Creating..." : "Create Checkout Link"}
+                  </button>
+
+                  <span className="text-xs text-slate-400">
+                    Secondary payment action for clients ready to proceed.
+                  </span>
+                </div>
+              </div>
+
+              {checkoutUrl ? (
+                <div className="mt-4 rounded-xl border border-green-400/20 bg-green-500/10 p-4">
+                  <p className="mb-2 text-sm font-bold text-green-300">
+                    Payment Link URL
+                  </p>
+                  <p className="mb-3 text-sm text-green-100">
+                    Checkout summary: {CALLBOOST_CHECKOUT_SUMMARY}.
+                  </p>
+                  <a
+                    href={brandedPaymentUrl || checkoutUrl}
+                    target="_blank"
+                    className="break-all text-sm text-blue-300 hover:text-blue-200"
+                  >
+                    {brandedPaymentUrl || checkoutUrl}
+                  </a>
+                </div>
+              ) : null}
+
+              {checkoutNotice ? (
+                <p className="mt-3 text-sm font-bold text-green-300">
+                  {checkoutNotice}
+                </p>
+              ) : null}
+
+              {checkoutError ? (
+                <p className="mt-3 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">
+                  {checkoutError}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="mt-6 rounded-xl border border-white/10 bg-slate-950 p-4">
+              <div className="mb-4">
+                <h3 className="font-bold text-white">
+                  Template & service profile
+                </h3>
+                <p className="mt-1 text-sm text-slate-400">
+                  Choose the trade template and specialisms that should shape
+                  generated services, FAQs and supporting copy.
+                </p>
+              </div>
+
               <div className="grid min-w-0 gap-4 [grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr))]">
                 <label className="grid min-w-0 gap-2 text-sm font-bold text-slate-300">
                   Template Trade
@@ -2942,105 +3171,12 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                   </p>
                 ) : null}
               </div>
-
-              <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-                {!isLeadArchived ? (
-                  <div className="w-full [&>button]:min-h-11 [&>button]:w-full [&>button]:bg-blue-600 [&>button]:px-5 [&>button]:py-3 [&>button]:text-base [&>button]:hover:bg-blue-500 sm:w-auto sm:[&>button]:w-auto">
-                    <GenerateSiteButton
-                      lead={lead}
-                      templateTrade={templateTrade}
-                      templateType={templateType}
-                      onGenerated={handleLeadUpdated}
-                    />
-                  </div>
-                ) : null}
-                <Link
-                  href={`/branding?lead=${encodeURIComponent(lead.slug || lead.id)}`}
-                  className="inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-white/10 px-5 py-3 text-sm font-bold text-slate-200 hover:bg-white/15 sm:w-auto"
-                >
-                  Open Branding Workspace
-                </Link>
-              </div>
-
-              <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center">
-                {isLeadArchived ? (
-                  <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-sm font-bold text-amber-200">
-                    Generated site disabled because this lead is archived.
-                  </p>
-                ) : (
-                  <button
-                    onClick={() => {
-                      if (!generatedSiteUrl) {
-                        alert("Generate a site first.");
-                        return;
-                      }
-
-                      window.open(
-                        generatedSiteUrl,
-                        "_blank",
-                        "noopener,noreferrer"
-                      );
-                    }}
-                    className="min-h-10 w-full whitespace-nowrap rounded-lg border border-white/10 bg-slate-800/80 px-4 py-2 text-sm font-bold text-slate-200 hover:bg-slate-700 sm:w-auto"
-                  >
-                    View Page
-                  </button>
-                )}
-
-                <div className="w-full min-w-0 [&>button]:min-h-10 [&>button]:w-full [&>button]:whitespace-nowrap [&>button]:border [&>button]:border-white/10 [&>button]:bg-slate-800/80 [&>button]:text-slate-200 [&>button]:hover:bg-slate-700 sm:w-auto sm:[&>button]:w-auto">
-                  <EnrichButton lead={lead} onEnriched={handleLeadUpdated} />
-                </div>
-              </div>
-
-              <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-white/10 pt-4">
-                <button
-                  onClick={handleCreateCheckoutLink}
-                  disabled={creatingCheckout}
-                  className="rounded-lg bg-green-600 px-4 py-2 text-sm font-bold hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {creatingCheckout ? "Creating..." : "Create Checkout Link"}
-                </button>
-
-                <span className="text-xs text-slate-400">
-                  Secondary payment action for clients ready to proceed.
-                </span>
-              </div>
-
-              {checkoutUrl ? (
-                <div className="mt-4 rounded-xl border border-green-400/20 bg-green-500/10 p-4">
-                  <p className="mb-2 text-sm font-bold text-green-300">
-                    Payment Link URL
-                  </p>
-                  <p className="mb-3 text-sm text-green-100">
-                    Checkout summary: {CALLBOOST_CHECKOUT_SUMMARY}.
-                  </p>
-                  <a
-                    href={brandedPaymentUrl || checkoutUrl}
-                    target="_blank"
-                    className="break-all text-sm text-blue-300 hover:text-blue-200"
-                  >
-                    {brandedPaymentUrl || checkoutUrl}
-                  </a>
-                </div>
-              ) : null}
-
-              {checkoutNotice ? (
-                <p className="mt-3 text-sm font-bold text-green-300">
-                  {checkoutNotice}
-                </p>
-              ) : null}
-
-              {checkoutError ? (
-                <p className="mt-3 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">
-                  {checkoutError}
-                </p>
-              ) : null}
             </div>
 
             <div className="mt-6 rounded-xl border border-white/10 bg-slate-950 p-4">
               <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <h3 className="font-bold text-white">Design Colours</h3>
+                  <h3 className="font-bold text-white">Brand colours</h3>
                   <p className="mt-1 text-sm text-slate-400">
                     Applied to generated site CTAs and coloured accent text.
                   </p>
@@ -3301,6 +3437,17 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                   {siteDesignError}
                 </p>
               ) : null}
+            </div>
+
+            <div className="mt-6">
+              <h3 className="font-bold text-white">
+                Logo / favicon / hero assets
+              </h3>
+              <p className="mt-1 max-w-2xl text-sm text-slate-400">
+                Save the visual assets used by generated previews, including
+                navigation branding, desktop and mobile hero imagery, and the
+                browser icon.
+              </p>
             </div>
 
             <div className="mt-6 rounded-xl border border-white/10 bg-slate-950 p-4">
@@ -3765,87 +3912,195 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
               </div>
             </div>
           </section>
-        </div>
+        </DesignTab>
 
+        <ClientSettingsTab isActive={activeTab === "client-settings"}>
         {leadStage === "client" ? (
           <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
-            <h2 className="mb-4 text-xl font-bold">Client Details</h2>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
-                  Payment Status
-                </p>
-                <span
-                  className={`mt-2 inline-flex rounded-full px-3 py-1 text-xs font-bold ${getPaymentStatusBadgeClass(
-                    lead.paymentStatus
-                  )}`}
-                >
-                  {formatClientValue(lead.paymentStatus)}
-                </span>
-              </div>
-
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
-                  Client Since
-                </p>
-                <p className="mt-2 text-sm font-bold text-slate-200">
-                  {formatClientTimestamp(lead.clientStartedAt)}
-                </p>
-              </div>
-
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
-                  Paid At
-                </p>
-                <p className="mt-2 text-sm font-bold text-slate-200">
-                  {formatClientTimestamp(lead.paidAt)}
-                </p>
-              </div>
-
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
-                  Stripe Customer
-                </p>
-                <p className="mt-2 break-all text-sm font-bold text-slate-200">
-                  {formatClientValue(lead.stripeCustomerId)}
-                </p>
-              </div>
-
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
-                  Stripe Subscription
-                </p>
-                <p className="mt-2 break-all text-sm font-bold text-slate-200">
-                  {formatClientValue(lead.stripeSubscriptionId)}
-                </p>
-              </div>
+            <div className="mb-5">
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-300">
+                Client settings
+              </p>
+              <h2 className="mt-2 text-2xl font-black tracking-tight text-white">
+                Account & billing
+              </h2>
+              <p className="mt-2 max-w-2xl text-sm text-slate-400">
+                Client lifecycle, Stripe billing details and account settings
+                for converted customers.
+              </p>
             </div>
 
-            {leadStage === "client" && lead.stripeCustomerId ? (
-              <div className="mt-5">
-                <button
-                  onClick={handleOpenBillingPortal}
-                  disabled={openingPortal}
-                  className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {openingPortal ? "Opening..." : "Open Billing Portal"}
-                </button>
+            <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+              <div className="rounded-xl border border-white/10 bg-slate-950 p-4">
+                <h3 className="font-bold text-white">Client status</h3>
+                <p className="mt-1 text-sm text-slate-400">
+                  Current CRM and payment state for this converted lead.
+                </p>
 
-                {portalError ? (
-                  <p className="mt-3 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">
-                    {portalError}
-                  </p>
-                ) : null}
+                <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                      Lead Stage
+                    </p>
+                    <p className="mt-2 text-sm font-bold text-slate-200">
+                      {stageLabels[leadStage] || "Client"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                      Lead Status
+                    </p>
+                    <span
+                      className={`mt-2 inline-flex rounded-full px-3 py-1 text-xs font-bold ${getLeadStatusBadgeClass(
+                        lead.status
+                      )}`}
+                    >
+                      {getLeadStatusLabel(lead.status)}
+                    </span>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                      Payment Status
+                    </p>
+                    <span
+                      className={`mt-2 inline-flex rounded-full px-3 py-1 text-xs font-bold ${getPaymentStatusBadgeClass(
+                        lead.paymentStatus
+                      )}`}
+                    >
+                      {formatClientValue(lead.paymentStatus)}
+                    </span>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                      Client Since
+                    </p>
+                    <p className="mt-2 text-sm font-bold text-slate-200">
+                      {formatClientTimestamp(lead.clientStartedAt)}
+                    </p>
+                  </div>
+                </div>
               </div>
-            ) : null}
+
+              <div className="space-y-4">
+                <div className="rounded-xl border border-white/10 bg-slate-950 p-4">
+                  <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h3 className="font-bold text-white">Billing</h3>
+                      <p className="mt-1 text-sm text-slate-400">
+                        Stripe customer, subscription and payment recovery
+                        details.
+                      </p>
+                    </div>
+
+                    {leadStage === "client" && lead.stripeCustomerId ? (
+                      <button
+                        onClick={handleOpenBillingPortal}
+                        disabled={openingPortal}
+                        className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {openingPortal ? "Opening..." : "Open Billing Portal"}
+                      </button>
+                    ) : null}
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                        Paid At
+                      </p>
+                      <p className="mt-2 text-sm font-bold text-slate-200">
+                        {formatClientTimestamp(lead.paidAt)}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                        Subscription State
+                      </p>
+                      <p className="mt-2 text-sm font-bold text-slate-200">
+                        {formatClientValue(lead.paymentStatus)}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                        Stripe Customer
+                      </p>
+                      <p className="mt-2 break-all text-sm font-bold text-slate-200">
+                        {formatClientValue(lead.stripeCustomerId)}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
+                        Stripe Subscription
+                      </p>
+                      <p className="mt-2 break-all text-sm font-bold text-slate-200">
+                        {formatClientValue(lead.stripeSubscriptionId)}
+                      </p>
+                    </div>
+                  </div>
+
+                  {portalError ? (
+                    <p className="mt-3 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">
+                      {portalError}
+                    </p>
+                  ) : null}
+                </div>
+
+                <div className="rounded-xl border border-white/10 bg-slate-950 p-4">
+                  <h3 className="font-bold text-white">
+                    Publishing & account settings
+                  </h3>
+                  <p className="mt-1 text-sm text-slate-400">
+                    Domain, hosting, publishing and client account controls will
+                    appear here when available for this client.
+                  </p>
+                </div>
+              </div>
+            </div>
           </section>
         ) : null}
 
+        {leadStage !== "client" ? (
+          <section className="mt-8 rounded-2xl border border-white/10 bg-white/5 p-6">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-300">
+              Client settings
+            </p>
+            <h2 className="mt-2 text-2xl font-black tracking-tight text-white">
+              Not a client yet
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm text-slate-400">
+              Billing, subscription and account controls will appear here once
+              this lead is marked as a client.
+            </p>
+          </section>
+        ) : null}
+        </ClientSettingsTab>
+
+        <CommunicationTab isActive={activeTab === "communication"}>
+          <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
+            <div className="mb-5">
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-300">
+                Outreach actions
+              </p>
+              <h2 className="mt-2 text-2xl font-black tracking-tight text-white">
+                Prepare next reply
+              </h2>
+              <p className="mt-2 max-w-2xl text-sm text-slate-400">
+                Prepare follow-ups, close replies and payment-link messages
+                before loading them into the composer.
+              </p>
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-3">
         {canShowFollowUpActions ? (
-          <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
+          <div className="rounded-xl border border-white/10 bg-slate-950 p-4">
             <div className="mb-4">
-              <h2 className="text-xl font-bold">Follow-ups</h2>
+              <h3 className="text-lg font-bold text-white">Follow-ups</h3>
               <p className="mt-1 text-sm text-slate-400">
                 Follow-ups use the last outbound channel where possible.
               </p>
@@ -3892,12 +4147,12 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 </button>
               ))}
             </div>
-          </section>
+          </div>
         ) : null}
 
-        <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
+        <div className="rounded-xl border border-white/10 bg-slate-950 p-4">
           <div className="mb-4">
-            <h2 className="text-xl font-bold">Interested reply</h2>
+            <h3 className="text-lg font-bold text-white">Interested reply</h3>
             <p className="mt-1 text-sm text-slate-400">
               Use this when a lead replies positively and is ready for pricing.
             </p>
@@ -3950,11 +4205,11 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
               Use in Email
             </button>
           </div>
-        </section>
+        </div>
 
-        <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
+        <div className="rounded-xl border border-white/10 bg-slate-950 p-4">
           <div className="mb-4">
-            <h2 className="text-xl font-bold">Payment link reply</h2>
+            <h3 className="text-lg font-bold text-white">Payment link reply</h3>
             <p className="mt-1 text-sm text-slate-400">
               Use this after the lead confirms they want to go ahead.
             </p>
@@ -4039,11 +4294,22 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
               Use in Email
             </button>
           </div>
-        </section>
+        </div>
+            </div>
+          </section>
 
-        <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
+        <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-xl font-bold">Outreach</h2>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-300">
+                Message composer
+              </p>
+              <h2 className="mt-2 text-xl font-bold">Send outreach</h2>
+              <p className="mt-1 max-w-2xl text-sm text-slate-400">
+                Review the SMS or email body, recipient and delivery feedback
+                before sending.
+              </p>
+            </div>
 
             <div className="flex rounded-lg border border-white/10 bg-slate-900 p-1">
               {(["sms", "email"] as OutreachChannel[]).map((channel) => (
@@ -4185,41 +4451,49 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
           )}
         </section>
 
-        {latestBouncedEmail ? (
-          <section className="mt-6 rounded-2xl border border-rose-400/30 bg-rose-500/10 p-5">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-rose-500/15 px-3 py-1 text-xs font-bold uppercase text-rose-300">
-                Email bounced
-              </span>
-              {hasMobileFollowUp ? (
-                <span className="rounded-full bg-blue-500/15 px-3 py-1 text-xs font-bold text-blue-300">
-                  Mobile follow-up available
-                </span>
-              ) : null}
-            </div>
-            <p className="mt-3 text-sm font-bold text-white">
-              {hasMobileFollowUp
-                ? "Email bounced. Mobile is available for SMS follow-up."
-                : "Email bounced. Use SMS/mobile follow-up if available."}
-            </p>
-            <p className="mt-2 text-sm text-rose-100/80">
-              {latestBouncedEmail.toAddress
-                ? `Bounced recipient: ${latestBouncedEmail.toAddress}`
-                : "The latest outbound email could not be delivered."}
-              {bounceReason ? ` Reason: ${bounceReason}` : ""}
-            </p>
-          </section>
-        ) : null}
-
-        <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
+        <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-xl font-bold">Engagement</h2>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-300">
+                Engagement
+              </p>
+              <h2 className="mt-2 text-xl font-bold">Tracking and delivery</h2>
+              <p className="mt-1 max-w-2xl text-sm text-slate-400">
+                Open/click signals, delivery alerts and recommended follow-up
+                actions.
+              </p>
+            </div>
             {isEngagedHotLead ? (
               <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-bold uppercase text-emerald-300">
                 {engagementState === "hot" ? "Hot lead" : "Warm lead"}
               </span>
             ) : null}
           </div>
+          {latestBouncedEmail ? (
+            <div className="mb-4 rounded-xl border border-rose-400/30 bg-rose-500/10 p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-rose-500/15 px-3 py-1 text-xs font-bold uppercase text-rose-300">
+                  Email bounced
+                </span>
+                {hasMobileFollowUp ? (
+                  <span className="rounded-full bg-blue-500/15 px-3 py-1 text-xs font-bold text-blue-300">
+                    Mobile follow-up available
+                  </span>
+                ) : null}
+              </div>
+              <p className="mt-3 text-sm font-bold text-white">
+                {hasMobileFollowUp
+                  ? "Email bounced. Mobile is available for SMS follow-up."
+                  : "Email bounced. Use SMS/mobile follow-up if available."}
+              </p>
+              <p className="mt-2 text-sm text-rose-100/80">
+                {latestBouncedEmail.toAddress
+                  ? `Bounced recipient: ${latestBouncedEmail.toAddress}`
+                  : "The latest outbound email could not be delivered."}
+                {bounceReason ? ` Reason: ${bounceReason}` : ""}
+              </p>
+            </div>
+          ) : null}
           {engagementReason ? (
             <div className="mb-4 rounded-xl border border-white/10 bg-slate-900 px-4 py-3">
               <p className="text-sm font-bold text-white">{engagementReason}</p>
@@ -4283,8 +4557,17 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
           </div>
         </section>
 
-        <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
-          <h2 className="mb-4 text-xl font-bold">Message History</h2>
+        <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
+          <div className="mb-4">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-300">
+              Conversation history
+            </p>
+            <h2 className="mt-2 text-xl font-bold">Message history</h2>
+            <p className="mt-1 max-w-2xl text-sm text-slate-400">
+              Sent and received activity with channel, delivery status and
+              timestamps.
+            </p>
+          </div>
 
           {timeline.length ? (
             <div className="space-y-3">
@@ -4391,8 +4674,17 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
           )}
         </section>
 
-        <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
-          <h2 className="mb-4 text-xl font-bold">Callback Requests</h2>
+        <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
+          <div className="mb-4">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-300">
+              Callback requests
+            </p>
+            <h2 className="mt-2 text-xl font-bold">Callback submissions</h2>
+            <p className="mt-1 max-w-2xl text-sm text-slate-400">
+              Review submitted callback requests and manage forwarding
+              destinations.
+            </p>
+          </div>
 
           <div className="grid gap-6 lg:grid-cols-[0.85fr_1.15fr]">
             <div className="rounded-xl border border-white/10 bg-slate-900 p-4">
@@ -4499,10 +4791,24 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
             </div>
           </div>
         </section>
+        </CommunicationTab>
 
-        <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
+        <section
+          className={`rounded-2xl border border-white/10 bg-white/5 p-6 ${
+            activeTab === "business-info" ? "mt-6" : "hidden"
+          }`}
+        >
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-xl font-bold">Website Opportunity</h2>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-300">
+                Opportunity snapshot
+              </p>
+              <h2 className="mt-2 text-xl font-bold">Website Opportunity</h2>
+              <p className="mt-1 max-w-2xl text-sm text-slate-400">
+                Ranking, signal counts, presence confidence and key assessment
+                notes for this lead.
+              </p>
+            </div>
 
             <button
               type="button"
@@ -4520,6 +4826,42 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
             <p className="mb-4 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">
               {opportunityError}
             </p>
+          ) : null}
+
+          {lead.business_info_match ? (
+            <div className="mb-5 rounded-xl border border-white/10 bg-slate-950/60 p-4">
+              <h3 className="mb-3 font-bold text-white">
+                Business presence confidence
+              </h3>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <span
+                  className={`rounded-full px-3 py-1 text-xs font-bold ${getBusinessInfoMatchBadgeClass(
+                    lead.business_info_match
+                  )}`}
+                >
+                  {getBusinessInfoMatchLabel(lead.business_info_match)}
+                </span>
+                <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-200">
+                  Score {lead.business_info_match.score}
+                </span>
+                {lead.business_info_match.candidate_source ? (
+                  <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-300">
+                    Source {lead.business_info_match.candidate_source}
+                  </span>
+                ) : null}
+              </div>
+
+              {lead.business_info_match.reasons?.length ? (
+                <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-slate-300">
+                  {lead.business_info_match.reasons
+                    .slice(0, 4)
+                    .map((reason) => (
+                      <li key={reason}>{reason}</li>
+                    ))}
+                </ul>
+              ) : null}
+            </div>
           ) : null}
 
           {websiteEvaluation || websiteOpportunityV2 ? (
@@ -4679,8 +5021,18 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
           )}
         </section>
 
-        <section className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-6">
-          <h2 className="mb-4 text-xl font-bold">Generated Content</h2>
+        <section
+          className={`rounded-2xl border border-white/10 bg-white/5 p-6 ${
+            activeTab === "design" ? "mt-6" : "hidden"
+          }`}
+        >
+          <div className="mb-4">
+            <h2 className="text-xl font-bold">Generated content</h2>
+            <p className="mt-1 max-w-2xl text-sm text-slate-400">
+              Review the current generated description and page copy without
+              changing the saved site design controls.
+            </p>
+          </div>
 
           <div className="space-y-5">
             <div>

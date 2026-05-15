@@ -1,4 +1,5 @@
 import LeadDetailClient from "./LeadDetailClient";
+import { Suspense } from "react";
 
 type Props = {
   params: Promise<{
@@ -9,5 +10,9 @@ type Props = {
 export default async function LeadDetailPage({ params }: Props) {
   const { id } = await params;
 
-  return <LeadDetailClient slug={id} />;
+  return (
+    <Suspense fallback={null}>
+      <LeadDetailClient slug={id} />
+    </Suspense>
+  );
 }
