@@ -707,13 +707,6 @@ function getTradeHelpLabel(trade: unknown) {
   return getTradeLabel(trade).toLowerCase();
 }
 
-function getTradePeopleLabel(trade: unknown) {
-  if (isPlumbingGasFittingTrade(trade)) return "plumbing and gas fitting team";
-  if (isPlumberTrade(trade)) return "plumbers";
-
-  return "service";
-}
-
 function getServicePlaceholder(trade: unknown) {
   if (isPlumbingGasFittingTrade(trade)) {
     return "Leak, blocked drain, hot water, gas fitting...";
@@ -1593,7 +1586,6 @@ export async function buildGeneratedSiteHtml(lead: LeadRecord) {
   const primaryTrade = tradeProfile.primary_trade || trade;
   const tradeLabel = getProfileTradeLabel(trade, tradeProfile);
   const tradeHelpLabel = getTradeHelpLabel(trade);
-  const tradePeopleLabel = getTradePeopleLabel(trade);
   const servicePlaceholder = getServicePlaceholder(trade);
   const city = getText(lead.city).trim() || "Hobart";
   const citySlug = slugify(city || "local");
@@ -2027,7 +2019,7 @@ ${iconLinkHtml}
       <div class="container">
         <div class="section-header center">
           <div class="section-kicker">Why choose us</div>
-          <h2>Local ${escapeHtml(tradePeopleLabel)} you can call directly</h2>
+          <h2>Trusted local service</h2>
           <p class="muted">A simple, contact-first site for people who need clear help without hunting around.</p>
         </div>
         <div class="trust-grid">${trustHtml}</div>
