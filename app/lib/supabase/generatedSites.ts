@@ -2064,8 +2064,8 @@ ${iconLinkHtml}
       <div class="container">
         <div class="section-header">
           <div class="section-kicker">Contact</div>
-          <h2>Call now or request a callback</h2>
-          <p class="muted">Call directly for the fastest response, or send a callback request with a short job description.</p>
+          <h2>Get in touch</h2>
+          <p class="muted">Call directly for fast plumbing help or request a callback anytime.</p>
         </div>
         <div class="contact-layout">
           <div class="contact-panel">
