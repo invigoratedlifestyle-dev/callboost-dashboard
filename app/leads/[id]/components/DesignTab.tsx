@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type DesignTabProps = {
   isActive: boolean;
@@ -19,6 +19,13 @@ const previewViewports: Record<
   tablet: { label: "Tablet", width: 744, height: 1024 },
   desktop: { label: "Desktop", width: 1440, height: 900 },
 };
+
+const previewPresetOptions = [
+  "iphone",
+  "android",
+  "tablet",
+  "desktop",
+] as const satisfies readonly PreviewPreset[];
 
 type PreviewCardProps = {
   generatedSiteUrl?: string | null;
@@ -68,6 +75,8 @@ export function PreviewCard({
   const [previewPreset, setPreviewPreset] = useState<PreviewPreset>("iphone");
   const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [isPreviewExpanded, setIsPreviewExpanded] = useState(false);
+  const [modalViewport, setModalViewport] = useState({ width: 1600, height: 1000 });
   const viewport = previewViewports[previewPreset];
   const canPreview = Boolean(generatedSiteUrl) && !isLeadArchived;
   const iframeRefreshValue = refreshSignal + previewRefreshKey;
@@ -78,54 +87,92 @@ export function PreviewCard({
   );
   const isTabletPreview = previewPreset === "tablet";
   const isDesktopPreview = previewPreset === "desktop";
+  const frameChromeWidth = viewport.width + (isDesktopPreview ? 18 : 28);
+  const frameChromeHeight = viewport.height + (isDesktopPreview ? 52 : 43);
+  const expandedScale = Math.max(
+    0.25,
+    Math.min(
+      1,
+      (modalViewport.width - 64) / frameChromeWidth,
+      (modalViewport.height - 180) / frameChromeHeight
+    )
+  );
 
-  return (
-    <div className="mt-6 rounded-xl border border-white/10 bg-slate-950 p-4">
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h3 className="font-bold text-white">Preview</h3>
-          <p className="mt-1 text-sm text-slate-400">
-            Preview the generated site across mobile, tablet, and desktop
-            viewports without leaving the dashboard.
-          </p>
-        </div>
+  const refreshPreview = () => {
+    setIsPreviewLoading(true);
+    setPreviewRefreshKey((current) => current + 1);
+  };
 
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-300">
-            {viewport.width} x {viewport.height}
-          </span>
-          {(["iphone", "android", "tablet", "desktop"] as PreviewPreset[]).map((preset) => (
-            <button
-              key={preset}
-              type="button"
-              onClick={() => setPreviewPreset(preset)}
-              className={`rounded-lg px-3 py-2 text-xs font-bold ${
-                previewPreset === preset
-                  ? "bg-blue-600 text-white"
-                  : "border border-white/10 bg-slate-900 text-slate-300 hover:bg-slate-800"
-              }`}
-            >
-              {previewViewports[preset].label}
-            </button>
-          ))}
-          {generatedSiteUrl && !isLeadArchived ? (
-            <button
-              type="button"
-              onClick={() => {
-                setIsPreviewLoading(true);
-                setPreviewRefreshKey((current) => current + 1);
-              }}
-              disabled={isPreviewLoading}
-              className="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-xs font-bold text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isPreviewLoading ? "Refreshing..." : "Refresh Preview"}
-            </button>
-          ) : null}
-        </div>
-      </div>
+  useEffect(() => {
+    if (!isPreviewExpanded) return;
 
-      {canPreview && previewSrc ? (
-        <div className="overflow-x-auto pb-2">
+    const updateModalViewport = () => {
+      setModalViewport({
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsPreviewExpanded(false);
+      }
+    };
+    const previousOverflow = document.body.style.overflow;
+
+    updateModalViewport();
+    document.body.style.overflow = "hidden";
+    window.addEventListener("resize", updateModalViewport);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("resize", updateModalViewport);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isPreviewExpanded]);
+
+  const renderViewportButtons = () =>
+    previewPresetOptions.map((preset) => (
+      <button
+        key={preset}
+        type="button"
+        onClick={() => setPreviewPreset(preset)}
+        className={`rounded-lg px-3 py-2 text-xs font-bold ${
+          previewPreset === preset
+            ? "bg-blue-600 text-white"
+            : "border border-white/10 bg-slate-900 text-slate-300 hover:bg-slate-800"
+        }`}
+      >
+        {previewViewports[preset].label}
+      </button>
+    ));
+
+  const renderPreviewFrame = (expanded = false) => {
+    if (!previewSrc) return null;
+
+    const scale = expanded ? expandedScale : 1;
+
+    return (
+      <div
+        className={expanded ? "flex justify-center" : "overflow-x-auto pb-2"}
+        style={
+          expanded
+            ? {
+                minHeight: `${frameChromeHeight * scale}px`,
+              }
+            : undefined
+        }
+      >
+        <div
+          style={
+            expanded
+              ? {
+                  width: `${frameChromeWidth * scale}px`,
+                  height: `${frameChromeHeight * scale}px`,
+                }
+              : undefined
+          }
+        >
           <div
             className={`mx-auto border border-white/15 bg-slate-900 shadow-2xl shadow-black/40 ${
               isDesktopPreview
@@ -135,8 +182,10 @@ export function PreviewCard({
                   : "rounded-[2rem] p-3"
             }`}
             style={{
-              width: `${viewport.width + (isDesktopPreview ? 18 : 28)}px`,
-              maxWidth: `${viewport.width + (isDesktopPreview ? 18 : 28)}px`,
+              width: `${frameChromeWidth}px`,
+              maxWidth: `${frameChromeWidth}px`,
+              transform: expanded ? `scale(${scale})` : undefined,
+              transformOrigin: "top center",
             }}
           >
             {isDesktopPreview ? (
@@ -180,6 +229,50 @@ export function PreviewCard({
             </div>
           </div>
         </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="mt-6 rounded-xl border border-white/10 bg-slate-950 p-4">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h3 className="font-bold text-white">Preview</h3>
+          <p className="mt-1 text-sm text-slate-400">
+            Preview the generated site across mobile, tablet, and desktop
+            viewports without leaving the dashboard.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-300">
+            {viewport.width} x {viewport.height}
+          </span>
+          {renderViewportButtons()}
+          {generatedSiteUrl && !isLeadArchived ? (
+            <button
+              type="button"
+              onClick={refreshPreview}
+              disabled={isPreviewLoading}
+              className="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-xs font-bold text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isPreviewLoading ? "Refreshing..." : "Refresh Preview"}
+            </button>
+          ) : null}
+          {canPreview ? (
+            <button
+              type="button"
+              onClick={() => setIsPreviewExpanded(true)}
+              className="rounded-lg border border-blue-300/30 bg-blue-500/15 px-3 py-2 text-xs font-bold text-blue-100 hover:bg-blue-500/25"
+            >
+              Expand Preview
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      {canPreview && previewSrc ? (
+        renderPreviewFrame()
       ) : (
         <div className="rounded-xl border border-dashed border-white/15 bg-slate-900/70 px-4 py-8 text-center">
           <p className="text-sm font-bold text-slate-200">
@@ -189,6 +282,42 @@ export function PreviewCard({
           </p>
         </div>
       )}
+
+      {isPreviewExpanded && canPreview && previewSrc ? (
+        <div className="fixed inset-0 z-[120] bg-slate-950/90 p-4 backdrop-blur-sm">
+          <div className="flex h-full flex-col rounded-2xl border border-white/10 bg-slate-950 shadow-2xl shadow-black/50">
+            <div className="flex flex-col gap-3 border-b border-white/10 px-4 py-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <h3 className="text-lg font-black text-white">Preview</h3>
+                <p className="mt-1 text-sm font-bold text-slate-400">
+                  {viewport.label} - {viewport.width} x {viewport.height}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {renderViewportButtons()}
+                <button
+                  type="button"
+                  onClick={refreshPreview}
+                  disabled={isPreviewLoading}
+                  className="rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-xs font-bold text-slate-200 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isPreviewLoading ? "Refreshing..." : "Refresh Preview"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsPreviewExpanded(false)}
+                  className="rounded-lg bg-white px-3 py-2 text-xs font-black text-slate-950 hover:bg-slate-200"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto p-4">
+              {renderPreviewFrame(true)}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
