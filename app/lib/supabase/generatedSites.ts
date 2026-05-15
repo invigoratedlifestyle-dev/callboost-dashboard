@@ -2033,7 +2033,7 @@ ${iconLinkHtml}
         <div class="areas-panel">
           <div>
             <div class="section-kicker">Service areas</div>
-            <h2>Serving ${escapeHtml(city)} and nearby suburbs</h2>
+            <h2>Service areas</h2>
             <p>Local ${escapeHtml(servicePhrase)} for homes and businesses across the area.</p>
           </div>
           <div class="areas-list">${escapeHtml(serviceAreas)}</div>
