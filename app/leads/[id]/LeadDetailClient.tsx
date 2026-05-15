@@ -2873,7 +2873,14 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                         Generated site disabled because this lead is archived.
                       </span>
                     ) : generatedSiteUrl ? (
-                      <span>{generatedSiteUrl}</span>
+                      <a
+                        href={generatedSiteUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-300 hover:text-blue-200 hover:underline"
+                      >
+                        {generatedSiteUrl}
+                      </a>
                     ) : (
                       <span className="text-slate-500">
                         Generate a site first
