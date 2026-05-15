@@ -2053,7 +2053,7 @@ ${iconLinkHtml}
       <div class="container">
         <div class="section-header">
           <div class="section-kicker">FAQ</div>
-          <h2>Common service questions</h2>
+          <h2>Common questions</h2>
           <p class="muted">Straight answers before you pick up the phone.</p>
         </div>
         <div class="faq-grid">${faqHtml}</div>
