@@ -307,21 +307,24 @@ export function buildFollowUpBody(
   if (stage === 1) {
     if (engagementState === "hot") {
       if (args.channel === "sms") {
-        return `Hi ${smsName}, just wanted to check whether the preview looked close to what you'd want for the business:
+        return `Hi ${smsName},
+
+Just wanted to send the website example through again in case you missed it:
 ${previewUrl}
 
-Reply if you'd like any quick changes.
+Happy to make a few quick changes if you'd like anything adjusted.
 
-- Jamie, CallBoost Tasmania`;
+Jamie
+CallBoost Tasmania`;
       }
 
       return `Hey ${firstName},
 
-Just wanted to check whether the preview looked close to what you'd want for the business:
+Just wanted to send the website example through again in case you missed it:
 
 ${previewUrl}
 
-Happy to make a couple of quick changes if there is anything you'd like adjusted.
+Happy to make a few quick changes if you'd like anything adjusted.
 
 Cheers,
 Jamie
@@ -329,22 +332,25 @@ CallBoost Tasmania`;
     }
 
     if (previewUrl && args.channel === "sms") {
-      return `Hi ${smsName}, just checking you saw the website preview I made for you:
+      return `Hi ${smsName},
+
+Just wanted to send the website example through again in case you missed it:
 ${previewUrl}
 
-Reply if you'd like any quick changes.
+Happy to make a few quick changes if you'd like anything adjusted.
 
-- Jamie, CallBoost Tasmania`;
+Jamie
+CallBoost Tasmania`;
     }
 
     if (previewUrl) {
       return `Hey ${firstName},
 
-Just checking you saw the website preview I sent through:
+Just wanted to send the website example through again in case you missed it:
 
 ${previewUrl}
 
-Happy to make a couple of quick changes to suit how you want it 👍
+Happy to make a few quick changes if you'd like anything adjusted.
 
 Cheers,
 Jamie
@@ -353,9 +359,9 @@ CallBoost Tasmania`;
 
     return `Hey ${firstName},
 
-Just checking you saw the website preview I sent through.
+Just wanted to send the website example through again in case you missed it.
 
-Happy to make a couple of quick changes to suit how you want it 👍
+Happy to make a few quick changes if you'd like anything adjusted.
 
 Cheers,
 Jamie
@@ -693,3 +699,4 @@ export function getFollowUpDueStatus(
     latestOutboundAt: getIsoTime(outboundBaseline),
   };
 }
+
