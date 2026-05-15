@@ -741,10 +741,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     facebook: "",
     instagram: "",
   });
-  const [creatingCheckout, setCreatingCheckout] = useState(false);
   const [checkoutUrl, setCheckoutUrl] = useState("");
-  const [checkoutNotice, setCheckoutNotice] = useState("");
-  const [checkoutError, setCheckoutError] = useState("");
   const [openingPortal, setOpeningPortal] = useState(false);
   const [portalError, setPortalError] = useState("");
   const [redoingOpportunity, setRedoingOpportunity] = useState(false);
@@ -1826,51 +1823,6 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       setUpdatingStage("");
     }
   };
-  const handleCreateCheckoutLink = async () => {
-    if (!lead) return;
-
-    setCreatingCheckout(true);
-    setCheckoutUrl("");
-    setCheckoutNotice("");
-    setCheckoutError("");
-
-    try {
-      const res = await fetch("/api/stripe/checkout", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          leadId: lead.id,
-          slug: lead.slug || slug,
-        }),
-      });
-      const data = await res.json();
-
-      if (!res.ok || !data.url) {
-        throw new Error(data.error || "Failed to create checkout link");
-      }
-
-      setCheckoutUrl(data.url);
-
-      try {
-        await navigator.clipboard.writeText(getBrandedPaymentUrl(lead) || data.url);
-        setCheckoutNotice("Payment link copied to clipboard.");
-      } catch {
-        setCheckoutNotice("Payment link created.");
-      }
-
-      window.open(data.url, "_blank", "noopener,noreferrer");
-    } catch (error) {
-      setCheckoutError(
-        error instanceof Error
-          ? error.message
-          : "Failed to create checkout link"
-      );
-    } finally {
-      setCreatingCheckout(false);
-    }
-  };
   const handleOpenBillingPortal = async () => {
     if (!lead) return;
 
@@ -2950,7 +2902,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 </div>
               </div>
 
-              <div className="mt-4 flex flex-col gap-3 border-t border-white/10 pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="mt-4 flex flex-col gap-3 border-t border-white/10 pt-4 sm:flex-row sm:items-center">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                   {isLeadArchived ? (
                     <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-sm font-bold text-amber-200">
@@ -2976,51 +2928,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                     </button>
                   )}
                 </div>
-
-                <div className="flex flex-wrap items-center gap-3">
-                  <button
-                    onClick={handleCreateCheckoutLink}
-                    disabled={creatingCheckout}
-                    className="rounded-lg bg-green-600 px-4 py-2 text-sm font-bold hover:bg-green-500 disabled:cursor-not-allowed disabled:opacity-60"
-                  >
-                    {creatingCheckout ? "Creating..." : "Create Checkout Link"}
-                  </button>
-
-                  <span className="text-xs text-slate-400">
-                    Secondary payment action for clients ready to proceed.
-                  </span>
-                </div>
               </div>
-
-              {checkoutUrl ? (
-                <div className="mt-4 rounded-xl border border-green-400/20 bg-green-500/10 p-4">
-                  <p className="mb-2 text-sm font-bold text-green-300">
-                    Payment Link URL
-                  </p>
-                  <p className="mb-3 text-sm text-green-100">
-                    Checkout summary: {CALLBOOST_CHECKOUT_SUMMARY}.
-                  </p>
-                  <a
-                    href={brandedPaymentUrl || checkoutUrl}
-                    target="_blank"
-                    className="break-all text-sm text-blue-300 hover:text-blue-200"
-                  >
-                    {brandedPaymentUrl || checkoutUrl}
-                  </a>
-                </div>
-              ) : null}
-
-              {checkoutNotice ? (
-                <p className="mt-3 text-sm font-bold text-green-300">
-                  {checkoutNotice}
-                </p>
-              ) : null}
-
-              {checkoutError ? (
-                <p className="mt-3 rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">
-                  {checkoutError}
-                </p>
-              ) : null}
             </div>
 
             <div className="mt-6 rounded-xl border border-white/10 bg-slate-950 p-4">
