@@ -8,18 +8,19 @@ type DesignTabProps = {
   children: ReactNode;
 };
 
-type MobilePreviewPreset = "iphone" | "android" | "tablet";
+type PreviewPreset = "iphone" | "android" | "tablet" | "desktop";
 
-const mobilePreviewViewports: Record<
-  MobilePreviewPreset,
+const previewViewports: Record<
+  PreviewPreset,
   { label: string; width: number; height: number }
 > = {
   iphone: { label: "iPhone", width: 390, height: 844 },
   android: { label: "Android", width: 412, height: 915 },
   tablet: { label: "Tablet", width: 744, height: 1024 },
+  desktop: { label: "Desktop", width: 1440, height: 900 },
 };
 
-type MobilePreviewCardProps = {
+type PreviewCardProps = {
   generatedSiteUrl?: string | null;
   isLeadArchived: boolean;
   refreshSignal?: number;
@@ -27,7 +28,7 @@ type MobilePreviewCardProps = {
 
 function buildPreviewUrl(
   generatedSiteUrl: string | null | undefined,
-  viewport: MobilePreviewPreset,
+  viewport: PreviewPreset,
   refreshValue: number
 ) {
   if (!generatedSiteUrl) return generatedSiteUrl;
@@ -35,11 +36,17 @@ function buildPreviewUrl(
   const [urlWithoutHash, hash = ""] = generatedSiteUrl.split("#");
   const params = new URLSearchParams();
 
-  params.set("previewViewport", viewport === "tablet" ? "tablet" : "mobile");
+  if (viewport === "tablet") {
+    params.set("previewViewport", "tablet");
+  } else if (viewport !== "desktop") {
+    params.set("previewViewport", "mobile");
+  }
 
   if (refreshValue > 0) {
     params.set("previewRefresh", String(refreshValue));
   }
+
+  if (!params.toString()) return generatedSiteUrl;
 
   const separator = urlWithoutHash.includes("?") ? "&" : "?";
   const nextUrl = `${urlWithoutHash}${separator}${params.toString()}`;
@@ -53,16 +60,15 @@ export default function DesignTab({ isActive, children }: DesignTabProps) {
   );
 }
 
-export function MobilePreviewCard({
+export function PreviewCard({
   generatedSiteUrl,
   isLeadArchived,
   refreshSignal = 0,
-}: MobilePreviewCardProps) {
-  const [previewPreset, setPreviewPreset] =
-    useState<MobilePreviewPreset>("iphone");
+}: PreviewCardProps) {
+  const [previewPreset, setPreviewPreset] = useState<PreviewPreset>("iphone");
   const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
-  const viewport = mobilePreviewViewports[previewPreset];
+  const viewport = previewViewports[previewPreset];
   const canPreview = Boolean(generatedSiteUrl) && !isLeadArchived;
   const iframeRefreshValue = refreshSignal + previewRefreshKey;
   const previewSrc = buildPreviewUrl(
@@ -71,15 +77,16 @@ export function MobilePreviewCard({
     iframeRefreshValue
   );
   const isTabletPreview = previewPreset === "tablet";
+  const isDesktopPreview = previewPreset === "desktop";
 
   return (
     <div className="mt-6 rounded-xl border border-white/10 bg-slate-950 p-4">
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h3 className="font-bold text-white">Mobile Preview</h3>
+          <h3 className="font-bold text-white">Preview</h3>
           <p className="mt-1 text-sm text-slate-400">
-            Check the generated site in a mobile or tablet frame without leaving
-            the dashboard.
+            Preview the generated site across mobile, tablet, and desktop
+            viewports without leaving the dashboard.
           </p>
         </div>
 
@@ -87,7 +94,7 @@ export function MobilePreviewCard({
           <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-slate-300">
             {viewport.width} x {viewport.height}
           </span>
-          {(["iphone", "android", "tablet"] as MobilePreviewPreset[]).map((preset) => (
+          {(["iphone", "android", "tablet", "desktop"] as PreviewPreset[]).map((preset) => (
             <button
               key={preset}
               type="button"
@@ -98,7 +105,7 @@ export function MobilePreviewCard({
                   : "border border-white/10 bg-slate-900 text-slate-300 hover:bg-slate-800"
               }`}
             >
-              {mobilePreviewViewports[preset].label}
+              {previewViewports[preset].label}
             </button>
           ))}
           {generatedSiteUrl && !isLeadArchived ? (
@@ -120,17 +127,34 @@ export function MobilePreviewCard({
       {canPreview && previewSrc ? (
         <div className="overflow-x-auto pb-2">
           <div
-            className={`mx-auto border border-white/15 bg-slate-900 p-3 shadow-2xl shadow-black/40 ${
-              isTabletPreview ? "rounded-[1.75rem]" : "rounded-[2rem]"
+            className={`mx-auto border border-white/15 bg-slate-900 shadow-2xl shadow-black/40 ${
+              isDesktopPreview
+                ? "rounded-xl p-2"
+                : isTabletPreview
+                  ? "rounded-[1.75rem] p-3"
+                  : "rounded-[2rem] p-3"
             }`}
             style={{
-              width: `${viewport.width + 28}px`,
-              maxWidth: `${viewport.width + 28}px`,
+              width: `${viewport.width + (isDesktopPreview ? 18 : 28)}px`,
+              maxWidth: `${viewport.width + (isDesktopPreview ? 18 : 28)}px`,
             }}
           >
-            <div className="mb-2 mx-auto h-1.5 w-16 rounded-full bg-slate-700" />
+            {isDesktopPreview ? (
+              <div className="mb-2 flex items-center gap-2 rounded-t-lg bg-slate-800 px-3 py-2">
+                <span className="h-2.5 w-2.5 rounded-full bg-red-400" />
+                <span className="h-2.5 w-2.5 rounded-full bg-amber-300" />
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
+                <span className="ml-2 truncate rounded-md bg-slate-900 px-3 py-1 text-xs font-medium text-slate-400">
+                  {generatedSiteUrl}
+                </span>
+              </div>
+            ) : (
+              <div className="mb-2 mx-auto h-1.5 w-16 rounded-full bg-slate-700" />
+            )}
             <div
-              className="overflow-auto border border-black/60 bg-white"
+              className={`overflow-auto border border-black/60 bg-white ${
+                isDesktopPreview ? "rounded-b-lg" : ""
+              }`}
               style={{
                 boxSizing: "content-box",
                 width: `${viewport.width}px`,
@@ -141,7 +165,7 @@ export function MobilePreviewCard({
             >
               <iframe
                 src={previewSrc}
-                title="Generated site mobile and tablet preview"
+                title="Generated site responsive preview"
                 className="block border-0"
                 style={{
                   boxSizing: "border-box",
@@ -161,7 +185,7 @@ export function MobilePreviewCard({
           <p className="text-sm font-bold text-slate-200">
             {isLeadArchived
               ? "Generated site previews are disabled for archived leads."
-              : "Generate a site first to preview it on mobile."}
+              : "Generate a site first to preview it."}
           </p>
         </div>
       )}

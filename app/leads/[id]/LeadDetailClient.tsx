@@ -59,7 +59,7 @@ import {
 import BusinessInfoTab from "./components/BusinessInfoTab";
 import ClientSettingsTab from "./components/ClientSettingsTab";
 import CommunicationTab from "./components/CommunicationTab";
-import DesignTab, { MobilePreviewCard } from "./components/DesignTab";
+import DesignTab, { PreviewCard } from "./components/DesignTab";
 import { EnrichButton } from "./EnrichButton";
 import GenerateSiteButton from "./GenerateSiteButton";
 
@@ -2873,13 +2873,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                         Generated site disabled because this lead is archived.
                       </span>
                     ) : generatedSiteUrl ? (
-                      <a
-                        href={generatedSiteUrl}
-                        target="_blank"
-                        className="text-blue-300 hover:text-blue-200"
-                      >
-                        {generatedSiteUrl}
-                      </a>
+                      <span>{generatedSiteUrl}</span>
                     ) : (
                       <span className="text-slate-500">
                         Generate a site first
@@ -2908,36 +2902,9 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 </div>
               </div>
 
-              <div className="mt-4 flex flex-col gap-3 border-t border-white/10 pt-4 sm:flex-row sm:items-center">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                  {isLeadArchived ? (
-                    <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-sm font-bold text-amber-200">
-                      Generated site disabled because this lead is archived.
-                    </p>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        if (!generatedSiteUrl) {
-                          alert("Generate a site first.");
-                          return;
-                        }
-
-                        window.open(
-                          generatedSiteUrl,
-                          "_blank",
-                          "noopener,noreferrer"
-                        );
-                      }}
-                      className="min-h-10 w-full whitespace-nowrap rounded-lg border border-white/10 bg-slate-900/80 px-4 py-2 text-sm font-bold text-slate-200 hover:bg-slate-800 sm:w-auto"
-                    >
-                      View Desktop Preview
-                    </button>
-                  )}
-                </div>
-              </div>
             </div>
 
-            <MobilePreviewCard
+            <PreviewCard
               generatedSiteUrl={generatedSiteUrl}
               isLeadArchived={isLeadArchived}
               refreshSignal={mobilePreviewRefreshSignal}
