@@ -214,65 +214,6 @@ function buildWebsiteOpportunitySection(args: {
   ].join("\n");
 }
 
-function getSmsIssueTheme(issue: string) {
-  const lowerIssue = issue.toLowerCase();
-
-  if (
-    lowerIssue.includes("phone") ||
-    lowerIssue.includes("mobile") ||
-    lowerIssue.includes("click")
-  ) {
-    return "mobile contact options";
-  }
-
-  if (
-    lowerIssue.includes("call-to-action") ||
-    lowerIssue.includes("cta") ||
-    lowerIssue.includes("quote") ||
-    lowerIssue.includes("booking") ||
-    lowerIssue.includes("form")
-  ) {
-    return "clearer calls-to-action";
-  }
-
-  if (
-    lowerIssue.includes("trust") ||
-    lowerIssue.includes("review") ||
-    lowerIssue.includes("confidence")
-  ) {
-    return "trust and conversion elements";
-  }
-
-  if (lowerIssue.includes("local") || lowerIssue.includes("service area")) {
-    return "clearer local service messaging";
-  }
-
-  if (
-    lowerIssue.includes("content") ||
-    lowerIssue.includes("long") ||
-    lowerIssue.includes("repetitive") ||
-    lowerIssue.includes("clutter")
-  ) {
-    return "simpler homepage content";
-  }
-
-  return "a simpler way for customers to get in touch";
-}
-
-function getSmsIssueSummary(args: {
-  websiteOpportunityV2?: StoredWebsiteOpportunityResult | null;
-  websiteOpportunity?: FollowUpWebsiteOpportunity | null;
-  websiteEvaluation?: FollowUpWebsiteEvaluation | null;
-}) {
-  const themes = Array.from(
-    new Set(getWebsiteOpportunityIssues(args).map(getSmsIssueTheme))
-  ).slice(0, 2);
-
-  if (!themes.length) return "";
-
-  return themes.length === 1 ? themes[0] : `${themes[0]} and ${themes[1]}`;
-}
-
 function getSmsMonthlyPriceLabel() {
   return CALLBOOST_MONTHLY_RECURRING_LABEL.replace("/month", "/mo");
 }
@@ -300,7 +241,6 @@ export function buildFollowUpBody(
   const stageTwoName = businessName || name.trim() || "there";
   const previewUrl = (args.previewUrl || "").trim();
   const websiteOpportunitySection = buildWebsiteOpportunitySection(args);
-  const smsIssueSummary = getSmsIssueSummary(args);
   const smsName = name.trim() || stageTwoName;
   const engagementState = args.engagement?.engagement_state || "none";
 
@@ -396,19 +336,18 @@ CallBoost Tasmania`;
     }
 
     if (args.channel === "sms") {
-      if (smsIssueSummary) {
-        return `Hi ${smsName}, quick follow-up on the website preview I made for you: ${previewUrl}
+      return `Hi ${smsName},
 
-A refresh could help with ${smsIssueSummary}. Setup is ${CALLBOOST_SETUP_FEE_LABEL} + ${getSmsMonthlyPriceLabel()} managed hosting & support. Reply if you'd like changes.
+Just following up on the website example I sent through:
 
-- Jamie, CallBoost Tasmania`;
-      }
+${previewUrl}
 
-      return `Hi ${smsName}, quick follow-up on the website preview I made for you: ${previewUrl}
+A refresh like this can make it easier for customers to call, enquire, and find your services on mobile.
 
-Setup is ${CALLBOOST_SETUP_FEE_LABEL} + ${getSmsMonthlyPriceLabel()} managed hosting & support. Reply if you'd like changes or want me to keep it live.
+Setup is ${CALLBOOST_SETUP_FEE_LABEL} + ${getSmsMonthlyPriceLabel()} managed hosting & support.
 
-- Jamie, CallBoost Tasmania`;
+Jamie
+CallBoost Tasmania`;
     }
 
     return `Hey ${stageTwoName},
