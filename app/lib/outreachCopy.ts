@@ -128,6 +128,29 @@ function buildInitialOpportunityOutreachLines(
   previewUrl: string
 ) {
   const leadName = getLeadName(lead);
+
+  if (hasNoWebsiteOpportunity(lead)) {
+    return [
+      `Hey ${leadName},`,
+      "",
+      "I noticed you don’t currently have a dedicated business website, so I mocked up an example of what a modern mobile-friendly version could look like for your business.",
+      "",
+      previewUrl,
+      "",
+      "The main goal was making it easier for customers to:",
+      "",
+      "* quickly call or enquire",
+      "* find your services",
+      "* view your business professionally on mobile",
+      "",
+      "Happy to set it up properly for you if you like 👍",
+      "",
+      "Thanks,",
+      "Jamie",
+      "CallBoost Tasmania",
+    ];
+  }
+
   const lines = [`Hey ${leadName},`, ""];
 
   if (previewUrl) {
@@ -237,12 +260,15 @@ export function buildOpportunitySms(
   if (hasNoWebsiteOpportunity(lead)) {
     return buildShortOpportunitySms([
       `Hi ${leadName},`,
-      "I put together a quick mobile-friendly website preview for you:",
+      "",
+      "I noticed you don't currently have a business website, so I mocked up a mobile-friendly example:",
+      "",
       previewUrl,
       "",
-      "Happy to set this up properly for you if you like.",
+      "Made to help customers call, enquire, and find your services more easily on mobile.",
       "",
-      "- Jamie, CallBoost Tasmania",
+      "Jamie",
+      "CallBoost Tasmania",
     ]);
   }
 
