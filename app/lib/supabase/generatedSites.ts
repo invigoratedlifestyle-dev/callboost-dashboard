@@ -1866,7 +1866,15 @@ ${iconLinkHtml}
   <script>
     (() => {
       try {
-        const viewport = new URLSearchParams(window.location.search).get("previewViewport");
+        const params = new URLSearchParams(window.location.search);
+        let viewport = params.get("previewViewport");
+
+        if (!viewport && window.parent && window.parent !== window) {
+          try {
+            viewport = new URLSearchParams(window.parent.location.search).get("previewViewport");
+          } catch (error) {}
+        }
+
         if (viewport === "mobile" || viewport === "tablet") {
           document.documentElement.setAttribute("data-cb-preview-viewport", viewport);
           const forcePreviewHeroAsset = () => {
