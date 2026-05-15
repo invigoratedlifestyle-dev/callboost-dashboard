@@ -130,9 +130,7 @@ export function MobilePreviewCard({
           >
             <div className="mb-2 mx-auto h-1.5 w-16 rounded-full bg-slate-700" />
             <div
-              className={`overflow-auto border border-black/60 bg-white ${
-                isTabletPreview ? "rounded-[1.25rem]" : "rounded-[1.5rem]"
-              }`}
+              className="overflow-auto border border-black/60 bg-white"
               style={{
                 boxSizing: "content-box",
                 width: `${viewport.width}px`,
