@@ -59,7 +59,7 @@ import {
 import BusinessInfoTab from "./components/BusinessInfoTab";
 import ClientSettingsTab from "./components/ClientSettingsTab";
 import CommunicationTab from "./components/CommunicationTab";
-import DesignTab from "./components/DesignTab";
+import DesignTab, { MobilePreviewCard } from "./components/DesignTab";
 import { EnrichButton } from "./EnrichButton";
 import GenerateSiteButton from "./GenerateSiteButton";
 
@@ -2930,6 +2930,11 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 </div>
               </div>
             </div>
+
+            <MobilePreviewCard
+              generatedSiteUrl={generatedSiteUrl}
+              isLeadArchived={isLeadArchived}
+            />
 
             <div className="mt-6 rounded-xl border border-white/10 bg-slate-950 p-4">
               <div className="mb-4">
