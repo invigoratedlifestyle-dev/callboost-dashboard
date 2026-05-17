@@ -40,6 +40,7 @@ type FollowUpWebsiteOpportunity = {
 };
 
 type FollowUpWebsiteEvaluation = {
+  hasWebsite?: boolean;
   issues?: string[] | null;
   summary?: string | null;
   positives?: string[] | null;
@@ -87,10 +88,18 @@ function isPlaceholderWebsiteIssue(issue: string) {
 }
 
 function humanizeWebsiteOpportunityIssue(issue: string) {
-  const lowerIssue = issue.toLowerCase();
+  const lowerIssue = issue
+    .toLowerCase()
+    .replace(/\b(high|medium|low)[-\s]+confidence signals?\b/g, "")
+    .replace(/\b(high|medium|low)[-\s]+strength signals?\b/g, "")
+    .replace(/\bwebsite opportunity rating\b/g, "")
+    .replace(/\bopportunity score\b/g, "")
+    .replace(/\bseverity\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 
   if (lowerIssue.includes("old technology")) {
-    return "the site appears to be using older technology";
+    return "the site could feel a little more current for customers checking it on mobile";
   }
 
   if (
@@ -99,14 +108,14 @@ function humanizeWebsiteOpportunityIssue(issue: string) {
       lowerIssue.includes("mobile") ||
       lowerIssue.includes("prominent"))
   ) {
-    return "the phone number could be more prominent as a clickable mobile call-to-action";
+    return "the phone number could be easier to tap for customers who want to call quickly";
   }
 
   if (
     (lowerIssue.includes("length") || lowerIssue.includes("long")) &&
     (lowerIssue.includes("clutter") || lowerIssue.includes("repetitive"))
   ) {
-    return "some homepage content feels long or repetitive, which may reduce engagement";
+    return "the homepage could be simpler so customers can find the important details faster";
   }
 
   if (
@@ -115,23 +124,23 @@ function humanizeWebsiteOpportunityIssue(issue: string) {
       lowerIssue.includes("booking")) &&
     lowerIssue.includes("cta")
   ) {
-    return "the quote or booking call-to-action could be clearer";
+    return "the enquiry or booking option could be easier to find";
   }
 
   if (lowerIssue.includes("mobile")) {
-    return "the mobile experience could be simpler for customers who want to call quickly";
+    return "the mobile experience could be simpler for customers wanting to call quickly";
   }
 
   if (lowerIssue.includes("local") || lowerIssue.includes("positioning")) {
-    return "the site could make the local service area and offer clearer";
+    return "the site could make the local service area and main services clearer";
   }
 
   if (lowerIssue.includes("trust") || lowerIssue.includes("review")) {
-    return "the page could do more to build trust before someone gets in touch";
+    return "reviews or trust details could be easier to spot before someone gets in touch";
   }
 
   if (lowerIssue.includes("thin") || lowerIssue.includes("content")) {
-    return "the content could give customers more confidence before they enquire";
+    return "the service information could give customers more confidence before they enquire";
   }
 
   if (
@@ -139,15 +148,59 @@ function humanizeWebsiteOpportunityIssue(issue: string) {
     lowerIssue.includes("unreachable") ||
     lowerIssue.includes("load")
   ) {
-    return "some customers may have trouble loading or using the current site";
+    return "some customers may have trouble loading or using the site";
   }
 
-  return issue
-    .replace(/\bCTA\b/g, "call-to-action")
+  return lowerIssue
+    .replace(/\bcta\b/g, "call-to-action")
+    .replace(/\bsignals?\b/g, "things I noticed")
+    .replace(/\banalysis\b/g, "review")
+    .replace(/\brating\b/g, "review")
+    .replace(/\bscore\b/g, "review")
     .replace(/\s+/g, " ")
     .replace(/[.]+$/g, "")
     .replace(/^website\s+/i, "the website ")
     .replace(/^site\s+/i, "the site ");
+}
+
+function isNoWebsiteOpportunity(args: {
+  websiteOpportunityV2?: StoredWebsiteOpportunityResult | null;
+  websiteOpportunity?: FollowUpWebsiteOpportunity | null;
+  websiteEvaluation?: FollowUpWebsiteEvaluation | null;
+}) {
+  const context = buildOutreachOpportunityContext({
+    websiteOpportunityV2: args.websiteOpportunityV2,
+    websiteOpportunity: args.websiteOpportunity,
+    websiteEvaluation: args.websiteEvaluation,
+  });
+  const rawOpportunityIssues = Array.isArray(args.websiteOpportunity?.issues)
+    ? args.websiteOpportunity?.issues || []
+    : [];
+  const values = [
+    context.reason,
+    context.summary,
+    ...context.signalLabels,
+    ...context.issues,
+    args.websiteOpportunity?.issue,
+    args.websiteOpportunity?.summary,
+    args.websiteEvaluation?.summary,
+    ...(args.websiteEvaluation?.issues || []),
+    ...rawOpportunityIssues,
+  ];
+
+  return (
+    args.websiteEvaluation?.hasWebsite === false ||
+    values.some((value) => {
+      const issue = cleanIssue(value);
+
+      return (
+        isPlaceholderWebsiteIssue(issue) ||
+        /no website|no standalone|no real business website|directory|social media|facebook-only|instagram-only/i.test(
+          issue
+        )
+      );
+    })
+  );
 }
 
 function getWebsiteOpportunityIssues(args: {
@@ -189,6 +242,32 @@ function getWebsiteOpportunityIssues(args: {
 }
 
 function buildWebsiteOpportunitySection(args: {
+  websiteOpportunityV2?: StoredWebsiteOpportunityResult | null;
+  websiteOpportunity?: FollowUpWebsiteOpportunity | null;
+  websiteEvaluation?: FollowUpWebsiteEvaluation | null;
+}) {
+  const issues = getWebsiteOpportunityIssues(args);
+
+  if (!issues.length) {
+    return [
+      "A couple areas that could be improved:",
+      "- the mobile experience could be simpler for customers wanting to call quickly",
+      "- the services and enquiry options could be easier to find",
+    ].join("\n");
+  }
+
+  const intro =
+    issues.length === 1
+      ? "The main thing I noticed was:"
+      : "A few things I noticed with the current site were:";
+
+  return [
+    intro,
+    ...issues.slice(0, 3).map((issue) => `- ${issue}`),
+  ].join("\n");
+}
+
+function buildLegacyWebsiteOpportunitySection(args: {
   websiteOpportunityV2?: StoredWebsiteOpportunityResult | null;
   websiteOpportunity?: FollowUpWebsiteOpportunity | null;
   websiteEvaluation?: FollowUpWebsiteEvaluation | null;
@@ -240,7 +319,11 @@ export function buildFollowUpBody(
   const businessName = (args.businessName || "").trim();
   const stageTwoName = businessName || name.trim() || "there";
   const previewUrl = (args.previewUrl || "").trim();
-  const websiteOpportunitySection = buildWebsiteOpportunitySection(args);
+  const isNoWebsiteLead = isNoWebsiteOpportunity(args);
+  const websiteOpportunitySection = isNoWebsiteLead
+    ? buildLegacyWebsiteOpportunitySection(args)
+    : buildWebsiteOpportunitySection(args);
+  const firstWebsiteOwnerIssue = getWebsiteOpportunityIssues(args)[0];
   const smsName = name.trim() || stageTwoName;
   const engagementState = args.engagement?.engagement_state || "none";
 
@@ -336,6 +419,24 @@ CallBoost Tasmania`;
     }
 
     if (args.channel === "sms") {
+      if (!isNoWebsiteLead) {
+        const issueLine = firstWebsiteOwnerIssue
+          ? `One thing I noticed: ${firstWebsiteOwnerIssue}.`
+          : "A refresh could make it easier for customers to call or enquire from mobile.";
+
+        return `Hi ${smsName},
+
+Just following up on the website preview:
+${previewUrl}
+
+${issueLine}
+
+Setup is ${CALLBOOST_SETUP_FEE_LABEL} + ${getSmsMonthlyPriceLabel()} managed hosting and support.
+
+Jamie
+CallBoost Tasmania`;
+      }
+
       return `Hi ${smsName},
 
 Just following up on the website example I sent through:
@@ -346,6 +447,31 @@ A refresh like this can make it easier for customers to call, enquire, and find 
 
 Setup is ${CALLBOOST_SETUP_FEE_LABEL} + ${getSmsMonthlyPriceLabel()} managed hosting & support.
 
+Jamie
+CallBoost Tasmania`;
+    }
+
+    if (!isNoWebsiteLead) {
+      return `Hey ${stageTwoName},
+
+Just following up on the website preview I put together for you.
+
+${websiteOpportunitySection}
+
+Your preview is still live here:
+
+${previewUrl}
+
+Main goal was making it easier for customers to:
+- quickly call or enquire
+- find your services
+- navigate the site more easily on mobile
+
+Setup is ${CALLBOOST_SETUP_FEE_LABEL} with managed hosting & support at ${CALLBOOST_MONTHLY_RECURRING_LABEL}.
+
+Happy to make changes if you'd like anything adjusted.
+
+Thanks,
 Jamie
 CallBoost Tasmania`;
     }
