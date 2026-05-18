@@ -5,8 +5,12 @@ import { useMemo, useState } from "react";
 import {
   AU_STATE_TARGETS,
   CITY_TARGETS,
+  type AUStateCode,
 } from "../lib/leadTargeting/cities";
 import { TRADE_TARGETS } from "../lib/leadTargeting/trades";
+
+const LAST_STATE_STORAGE_KEY = "callboost.generateLeads.lastStateCode";
+const DEFAULT_STATE_KEY: AUStateCode = "TAS";
 
 type GenerateBatchTownResult = {
   town: string;
@@ -67,10 +71,46 @@ function getGenerationResultMessage(result: GenerateBatchTownResult) {
   return "no matching businesses found";
 }
 
+function isSupportedStateKey(value: string): value is AUStateCode {
+  return AU_STATE_TARGETS.some((stateTarget) => stateTarget.key === value);
+}
+
+function getFirstCityKeyForState(stateKey: AUStateCode) {
+  return (
+    CITY_TARGETS.find((cityTarget) => cityTarget.stateCode === stateKey)?.key ||
+    "hobart"
+  );
+}
+
+function getInitialTargetStateKey(): AUStateCode {
+  if (typeof window === "undefined") return DEFAULT_STATE_KEY;
+
+  try {
+    const storedStateKey = window.localStorage.getItem(LAST_STATE_STORAGE_KEY);
+
+    return storedStateKey && isSupportedStateKey(storedStateKey)
+      ? storedStateKey
+      : DEFAULT_STATE_KEY;
+  } catch {
+    return DEFAULT_STATE_KEY;
+  }
+}
+
+function rememberTargetStateKey(stateKey: AUStateCode) {
+  try {
+    window.localStorage.setItem(LAST_STATE_STORAGE_KEY, stateKey);
+  } catch {
+    // Ignore storage errors so lead generation still works in private browsing.
+  }
+}
+
 export default function LeadGenerationPanel() {
+  const [initialTargetStateKey] = useState(getInitialTargetStateKey);
   const [generating, setGenerating] = useState(false);
-  const [targetStateKey, setTargetStateKey] = useState("TAS");
-  const [targetCityKeys, setTargetCityKeys] = useState<string[]>(["hobart"]);
+  const [targetStateKey, setTargetStateKey] = useState(initialTargetStateKey);
+  const [targetCityKeys, setTargetCityKeys] = useState<string[]>(() => [
+    getFirstCityKeyForState(initialTargetStateKey),
+  ]);
   const [townSearch, setTownSearch] = useState("");
   const [targetTradeKey, setTargetTradeKey] = useState("plumber");
   const [generationLimit, setGenerationLimit] = useState(50);
@@ -268,12 +308,16 @@ export default function LeadGenerationPanel() {
               value={targetStateKey}
               onChange={(event) => {
                 const nextStateKey = event.target.value;
+
+                if (!isSupportedStateKey(nextStateKey)) return;
+
                 const nextFirstCityKey =
                   CITY_TARGETS.find(
                     (cityTarget) => cityTarget.stateCode === nextStateKey
                   )?.key || "hobart";
 
                 setTargetStateKey(nextStateKey);
+                rememberTargetStateKey(nextStateKey);
                 setTargetCityKeys([nextFirstCityKey]);
                 setTownSearch("");
               }}
