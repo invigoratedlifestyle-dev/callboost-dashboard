@@ -269,6 +269,14 @@ function getOpportunityLevelLabel(level?: WebsiteOpportunityLevel) {
   return "Unknown";
 }
 
+function getCompactOpportunityLevelLabel(level?: WebsiteOpportunityLevel) {
+  if (level === "high") return "High";
+  if (level === "medium") return "Medium";
+  if (level === "low") return "Low";
+
+  return getOpportunityLevelLabel(level);
+}
+
 function getOpportunityLevelBadgeClass(level?: WebsiteOpportunityLevel) {
   if (level === "high") return "bg-red-500/15 text-red-300";
   if (level === "medium") return "bg-yellow-500/15 text-yellow-300";
@@ -3975,7 +3983,20 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
         ) : null}
         </ClientSettingsTab>
 
-        <CommunicationTab isActive={activeTab === "communication"}>
+        <CommunicationTab
+          isActive={activeTab === "communication"}
+          previewUrl={generatedSiteUrl}
+          stageLabel={stageLabels[leadStage] || "Lead"}
+          stageBadgeClass={getStageBadgeClass(leadStage)}
+          statusLabel={getLeadStatusLabel(lead.status)}
+          statusBadgeClass={getLeadStatusBadgeClass(lead.status)}
+          opportunityLabel={getCompactOpportunityLevelLabel(
+            websiteOpportunityV2?.level
+          )}
+          opportunityBadgeClass={getOpportunityLevelBadgeClass(
+            websiteOpportunityV2?.level
+          )}
+        >
           <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
             <div className="mb-5">
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-300">
