@@ -57,7 +57,7 @@ export async function POST(req: Request) {
       leadsCreated,
       duplicatesSkipped:
         getNumber(result.existingSkipped) + getNumber(result.skippedDuplicates),
-      noOpportunitySkipped: getNumber(result.skippedNoOpportunity),
+      noOpportunitySkipped: 0,
       enrichmentFailed,
       totalSkipped: getNumber(result.skipped),
       metadata: {

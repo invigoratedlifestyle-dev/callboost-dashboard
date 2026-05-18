@@ -241,7 +241,7 @@ export async function POST(req: Request) {
         const rejected = getNumber(data.rejected ?? data.skippedWrongTrade);
         const duplicatesSkipped =
           getNumber(data.existingSkipped) + getNumber(data.skippedDuplicates);
-        const noOpportunitySkipped = getNumber(data.skippedNoOpportunity);
+        const noOpportunitySkipped = 0;
         const enrichmentFailed = getNumber(data.enrichmentFailed);
         const skipped = getNumber(
           data.skipped ??

@@ -21,10 +21,6 @@ import {
   updateLeadBySlug,
 } from "./supabase/leads";
 import { isValidTradeLead, type TradeValidationResult } from "./tradeValidation";
-import {
-  buildWebsiteOpportunityResult,
-  withEvaluatedAt,
-} from "./websiteOpportunity";
 
 const DEFAULT_TRADE = "plumber";
 const DEFAULT_CITY = "Hobart";
@@ -81,34 +77,6 @@ class GeneratedLeadEnrichmentTimeoutError extends Error {
 
 function getErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
-}
-
-function getGeneratedLeadOpportunity(args: {
-  website: string;
-  phone: string;
-  rating: string;
-  reviewCount: string;
-}) {
-  return withEvaluatedAt(
-    buildWebsiteOpportunityResult({
-      website: args.website,
-      phone: args.phone,
-      rating: args.rating,
-      reviewCount: args.reviewCount,
-      homepageHtml: "",
-    })
-  );
-}
-
-function isNoOpportunityGeneratedLead(
-  opportunity: ReturnType<typeof getGeneratedLeadOpportunity>
-) {
-  const signalCount =
-    opportunity.highSignals.length +
-    opportunity.mediumSignals.length +
-    opportunity.lowSignals.length;
-
-  return opportunity.level === "none" && signalCount > 0;
 }
 
 async function enrichGeneratedLeadWithTimeout(slug: string) {
@@ -830,7 +798,6 @@ export async function generateLeadsForTown(args: GenerateLeadsForTownArgs) {
   const leads = [];
   let enriched = 0;
   let enrichmentFailed = 0;
-  let skippedNoOpportunity = 0;
 
   for (const { place, tradeValidation } of cappedPlaces) {
     const businessName = getBusinessName(place);
@@ -859,22 +826,6 @@ export async function generateLeadsForTown(args: GenerateLeadsForTownArgs) {
         : place.userRatingCount !== undefined
           ? String(place.userRatingCount)
           : "";
-    const websiteOpportunity = getGeneratedLeadOpportunity({
-      website,
-      phone,
-      rating,
-      reviewCount,
-    });
-
-    if (isNoOpportunityGeneratedLead(websiteOpportunity)) {
-      skippedNoOpportunity += 1;
-      console.log(
-        "[Lead Generation] Skipping no-opportunity lead:",
-        businessName
-      );
-      continue;
-    }
-
     const leadPriorityScore =
       tradeValidation.score +
       (Number(place.rating) || 0) +
@@ -920,7 +871,6 @@ export async function generateLeadsForTown(args: GenerateLeadsForTownArgs) {
       email: "",
       description: "",
       services: [],
-      website_opportunity_v2: websiteOpportunity,
       ...googleReviewFields,
       aiGeneratedAt: "",
       enrichedAt: "",
@@ -965,8 +915,7 @@ export async function generateLeadsForTown(args: GenerateLeadsForTownArgs) {
     existingSkipped +
     skippedDuplicates +
     skippedInvalidLocation +
-    skippedInvalidPhone +
-    skippedNoOpportunity;
+    skippedInvalidPhone;
   const rejected = skippedWrongTrade;
   const totalFound = rawResults;
   const message = getGenerationMessage({
@@ -992,7 +941,6 @@ export async function generateLeadsForTown(args: GenerateLeadsForTownArgs) {
     skippedWrongTrade,
     skippedInvalidLocation,
     skippedInvalidPhone,
-    skippedNoOpportunity,
     enriched,
     enrichmentFailed,
   });
@@ -1015,7 +963,6 @@ export async function generateLeadsForTown(args: GenerateLeadsForTownArgs) {
     skippedWrongTrade,
     skippedInvalidLocation,
     skippedInvalidPhone,
-    skippedNoOpportunity,
     saved: leads.length,
     enriched,
     enrichmentFailed,
