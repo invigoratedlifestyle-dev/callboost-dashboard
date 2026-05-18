@@ -1935,7 +1935,10 @@ ${iconLinkHtml}
     .hero .button.secondary { background: var(--cta-color); color: var(--cta-text-color); }
     .hero-urgency { margin-top: 14px; color: rgba(255, 255, 255, 0.76); font-size: 14px; font-weight: 900; letter-spacing: 0.01em; }
     .template-hero-image-led .site-header { position: absolute; top: 0; left: 0; right: 0; z-index: 1000; background: rgba(2, 6, 23, 0.12); border-bottom: 0; box-shadow: none; backdrop-filter: blur(3px); pointer-events: auto; }
-    .template-hero-image-led .nav, .template-hero-image-led .nav-links, .template-hero-image-led .nav-links a, .template-hero-image-led .nav-call { position: relative; z-index: 1001; pointer-events: auto; }
+    .template-hero-image-led .nav { position: relative; z-index: 1001; pointer-events: auto; }
+    .template-hero-image-led .brand.has-logo { position: relative; z-index: 1000; pointer-events: none; }
+    .template-hero-image-led .brand.has-logo .brand-logo { pointer-events: auto; }
+    .template-hero-image-led .nav-links, .template-hero-image-led .nav-links a, .template-hero-image-led .nav-call { position: relative; z-index: 1002; pointer-events: auto; }
     .template-hero-image-led .brand strong, .template-hero-image-led .brand span, .template-hero-image-led .nav-links { color: white; text-shadow: 0 2px 18px rgba(0, 0, 0, 0.5); }
     .template-hero-image-led .brand-logo { filter: drop-shadow(0 10px 24px rgba(0, 0, 0, 0.42)); }
     .template-hero-image-led .nav-call { border: 1px solid rgba(255, 255, 255, 0.28); background: var(--cta-color); color: var(--cta-text-color); box-shadow: 0 14px 34px rgba(0, 0, 0, 0.22); backdrop-filter: blur(4px); }
