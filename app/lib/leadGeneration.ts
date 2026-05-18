@@ -18,13 +18,15 @@ import {
   duplicateLeadExists,
   insertIgnoredLead,
   insertLead,
+  updateLeadBySlug,
 } from "./supabase/leads";
 import { isValidTradeLead, type TradeValidationResult } from "./tradeValidation";
 
 const DEFAULT_TRADE = "plumber";
 const DEFAULT_CITY = "Hobart";
 const MAX_LEADS_PER_RUN = 50;
-const ENRICH_AFTER_GENERATE = true;
+const ENRICH_AFTER_GENERATE = false;
+const GENERATED_LEAD_ENRICHMENT_TIMEOUT_MS = 8000;
 
 export type GenerateLeadsForTownArgs = {
   trade?: string;
@@ -65,6 +67,76 @@ type GooglePlace = {
   businessStatus?: string;
   searchQueryFoundFrom?: string;
 };
+
+class GeneratedLeadEnrichmentTimeoutError extends Error {
+  constructor(timeoutMs: number) {
+    super(`Generated lead enrichment timed out after ${timeoutMs}ms`);
+    this.name = "GeneratedLeadEnrichmentTimeoutError";
+  }
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function enrichGeneratedLeadWithTimeout(slug: string) {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  const enrichmentPromise = enrichLead(slug).catch((error) => {
+    throw error;
+  });
+
+  try {
+    return await Promise.race([
+      enrichmentPromise,
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(
+          () =>
+            reject(
+              new GeneratedLeadEnrichmentTimeoutError(
+                GENERATED_LEAD_ENRICHMENT_TIMEOUT_MS
+              )
+            ),
+          GENERATED_LEAD_ENRICHMENT_TIMEOUT_MS
+        );
+      }),
+    ]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+    enrichmentPromise.catch((error) => {
+      console.warn("Generated lead enrichment finished after timeout/failure:", {
+        slug,
+        error: getErrorMessage(error),
+      });
+    });
+  }
+}
+
+async function markGeneratedLeadEnrichmentFailed(
+  savedLead: Record<string, unknown>,
+  error: unknown
+) {
+  const slug = typeof savedLead.slug === "string" ? savedLead.slug : "";
+
+  if (!slug) return savedLead;
+
+  try {
+    return await updateLeadBySlug(slug, {
+      ...savedLead,
+      enrichmentStatus: "failed",
+      enrichmentError: getErrorMessage(error),
+      enrichmentFailedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (updateError) {
+    console.warn("Failed to record generated lead enrichment failure:", {
+      slug,
+      error: getErrorMessage(updateError),
+    });
+
+    return savedLead;
+  }
+}
 
 type GoogleTextSearchResponse = {
   places?: GooglePlace[];
@@ -798,6 +870,8 @@ export async function generateLeadsForTown(args: GenerateLeadsForTownArgs) {
       ...googleReviewFields,
       aiGeneratedAt: "",
       enrichedAt: "",
+      enrichmentStatus: enrich ? "pending" : "pending_async",
+      enrichmentError: "",
       createdAt: now,
       updatedAt: now,
     });
@@ -808,7 +882,7 @@ export async function generateLeadsForTown(args: GenerateLeadsForTownArgs) {
 
     if (enrich) {
       try {
-        const enrichmentResult = await enrichLead(slug);
+        const enrichmentResult = await enrichGeneratedLeadWithTimeout(slug);
 
         console.log("Generated lead enriched:", {
           slug,
@@ -818,10 +892,14 @@ export async function generateLeadsForTown(args: GenerateLeadsForTownArgs) {
         leads.push(enrichmentResult.lead);
       } catch (error) {
         enrichmentFailed += 1;
-        leads.push(savedLead);
-        console.error("Generated lead enrichment failed:", {
+        const failedLead = await markGeneratedLeadEnrichmentFailed(
+          savedLead,
+          error
+        );
+        leads.push(failedLead);
+        console.warn("Generated lead enrichment failed non-fatally:", {
           slug,
-          error: error instanceof Error ? error.message : error,
+          error: getErrorMessage(error),
         });
       }
     } else {

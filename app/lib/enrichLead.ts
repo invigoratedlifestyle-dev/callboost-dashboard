@@ -18,6 +18,10 @@ import {
   withEvaluatedAt,
 } from "./websiteOpportunity";
 import type { WebsiteReachabilityStatus } from "./websiteOpportunity";
+
+const WEBSITE_FETCH_TIMEOUT_MS = 5000;
+const WEBSITE_FETCH_MAX_ATTEMPTS = 1;
+
 const ignoredSearchDomains = [
   "google.com",
   "yelp.com",
@@ -1126,7 +1130,7 @@ function isBlockedSocialFetch(htmlOrText: string, url: string) {
 
 async function fetchHtmlWithDebug(url: string) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10000);
+  const timeout = setTimeout(() => controller.abort(), WEBSITE_FETCH_TIMEOUT_MS);
   let res: Response;
 
   try {
@@ -1168,7 +1172,7 @@ async function fetchHtmlWithDebug(url: string) {
 
 async function fetchHtml(url: string) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10000);
+  const timeout = setTimeout(() => controller.abort(), WEBSITE_FETCH_TIMEOUT_MS);
 
   let res: Response;
 
@@ -1219,7 +1223,7 @@ function getReachabilityStatusFromFetchError(
   const text = getErrorText(error);
 
   if (
-    /repeated get failures|confirmed timeout|enotfound|dns|econnrefused|certificate|ssl|redirect loop|too many redirects|failed to fetch .*404|failed to fetch .*410|:\s*(404|410)\b/.test(
+    /repeated get failures|website get failed within enrichment budget|confirmed timeout|enotfound|dns|econnrefused|certificate|ssl|redirect loop|too many redirects|failed to fetch .*404|failed to fetch .*410|:\s*(404|410)\b/.test(
       text
     )
   ) {
@@ -1234,7 +1238,7 @@ async function fetchHtmlWithRetry(url: string) {
   let firstErrorDetail = "";
   let failedAttempts = 0;
 
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  for (let attempt = 0; attempt < WEBSITE_FETCH_MAX_ATTEMPTS; attempt += 1) {
     try {
       const html = await fetchHtml(url);
 
@@ -1264,11 +1268,11 @@ async function fetchHtmlWithRetry(url: string) {
   }
 
   if (
-    failedAttempts >= 2 &&
+    failedAttempts >= WEBSITE_FETCH_MAX_ATTEMPTS &&
     getReachabilityStatusFromFetchError(lastError) === "slow_or_unreliable"
   ) {
     throw new Error(
-      `Repeated GET failures after retry: ${
+      `Website GET failed within enrichment budget: ${
         getErrorText(lastError) || "website fetch failed"
       }`
     );
