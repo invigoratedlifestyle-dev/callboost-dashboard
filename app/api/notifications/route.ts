@@ -6,6 +6,7 @@ import {
 } from "../../lib/supabase/leadMessages";
 import { enrichLeadsWithEngagement } from "../../lib/engagementPriority";
 import { listLeads } from "../../lib/supabase/leads";
+import { listDismissedNotificationKeys } from "../../lib/supabase/notifications";
 import { getSupabaseAdmin } from "../../lib/supabase/server";
 
 type PaidLeadNotificationRow = {
@@ -19,6 +20,20 @@ type PaidLeadNotificationRow = {
 
 function getString(value: unknown) {
   return typeof value === "string" ? value : "";
+}
+
+function getEngagedNotificationId(args: {
+  id?: string | number | null;
+  slug: string;
+  isHot: boolean;
+  lastEngagedAt?: string | null;
+}) {
+  const leadKey =
+    args.id !== null && args.id !== undefined ? String(args.id) : args.slug;
+  const engagedAt = new Date(args.lastEngagedAt || "").getTime();
+  const eventKey = Number.isFinite(engagedAt) ? String(engagedAt) : "unknown";
+
+  return `${args.isHot ? "hot" : "warm"}-lead-${leadKey}-${eventKey}`;
 }
 
 async function listPaidLeadNotifications(limit = 20) {
@@ -53,7 +68,10 @@ async function listPaidLeadNotifications(limit = 20) {
   });
 }
 
-async function listEngagedLeadNotifications(limit = 20) {
+async function listEngagedLeadNotifications(
+  dismissedKeys: Set<string>,
+  limit = 20
+) {
   const leads = await enrichLeadsWithEngagement(await listLeads());
 
   return leads
@@ -68,7 +86,6 @@ async function listEngagedLeadNotifications(limit = 20) {
         new Date(a.last_engaged_at || "").getTime()
       );
     })
-    .slice(0, limit)
     .map((lead) => {
       const slug = getString(lead.slug);
       const businessName =
@@ -77,10 +94,20 @@ async function listEngagedLeadNotifications(limit = 20) {
         slug ||
         "Unknown business";
       const isHot = lead.engagement_state === "hot";
+      const leadId =
+        typeof lead.id === "string" || typeof lead.id === "number"
+          ? lead.id
+          : null;
+      const id = getEngagedNotificationId({
+        id: leadId,
+        slug,
+        isHot,
+        lastEngagedAt: lead.last_engaged_at,
+      });
 
       return {
         type: isHot ? ("hot_lead_engaged" as const) : ("warm_lead_engaged" as const),
-        id: `${isHot ? "hot" : "warm"}-lead-${lead.id || slug}`,
+        id,
         leadSlug: slug,
         businessName,
         body: isHot
@@ -91,15 +118,18 @@ async function listEngagedLeadNotifications(limit = 20) {
         createdAt: lead.last_engaged_at,
         label: isHot ? "Hot lead" : "Warm lead",
       };
-    });
+    })
+    .filter((notification) => !dismissedKeys.has(notification.id))
+    .slice(0, limit);
 }
 
 export async function GET() {
   try {
+    const dismissedKeys = await listDismissedNotificationKeys();
     const [replies, bouncedEmails, engagedLeads, followUps, payments] = await Promise.all([
       listUnreadReplyNotifications(20),
       listBouncedEmailNotifications(20),
-      listEngagedLeadNotifications(20),
+      listEngagedLeadNotifications(dismissedKeys, 20),
       listNeedsFollowUp(),
       listPaidLeadNotifications(20),
     ]);

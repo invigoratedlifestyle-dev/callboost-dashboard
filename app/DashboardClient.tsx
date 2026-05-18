@@ -2,7 +2,14 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type MouseEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { Lead, LeadStage, WebsiteEvaluation } from "./lib/leads";
 import type {
   StoredWebsiteOpportunityResult,
@@ -485,6 +492,13 @@ function playLeadReplySound(notification: DashboardNotification) {
   playDoubleBeep();
 }
 
+function isEngagedLeadNotification(notification: DashboardNotification) {
+  return (
+    notification.type === "hot_lead_engaged" ||
+    notification.type === "warm_lead_engaged"
+  );
+}
+
 function getStoredSoundEnabled() {
   return (
     typeof window !== "undefined" &&
@@ -675,6 +689,47 @@ export default function DashboardClient() {
     } catch (error) {
       console.error("Failed to load notifications:", error);
     }
+  }
+
+  function dismissEngagedLeadNotification(notification: DashboardNotification) {
+    if (!isEngagedLeadNotification(notification)) return false;
+
+    setNotifications((current) =>
+      current.filter((item) => item.id !== notification.id)
+    );
+    prevNotificationIdsRef.current.delete(notification.id);
+
+    void fetch("/api/notifications/dismiss", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        notificationKey: notification.id,
+        notificationType: notification.type,
+        leadSlug: notification.leadSlug,
+      }),
+      keepalive: true,
+    }).catch((error) => {
+      console.error("Failed to dismiss notification:", error);
+    });
+
+    return true;
+  }
+
+  function handleNotificationOpen(
+    event: MouseEvent<HTMLAnchorElement>,
+    notification: DashboardNotification
+  ) {
+    const dismissed = dismissEngagedLeadNotification(notification);
+
+    if (!dismissed || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      return;
+    }
+
+    event.preventDefault();
+    setNotificationsOpen(false);
+    router.push(`/leads/${notification.leadSlug}`);
   }
 
   function handleEnableSoundAlerts() {
@@ -1143,6 +1198,9 @@ export default function DashboardClient() {
                         <Link
                           key={notification.id}
                           href={`/leads/${notification.leadSlug}`}
+                          onClick={(event) =>
+                            handleNotificationOpen(event, notification)
+                          }
                           className="block rounded-lg border border-white/10 bg-white/5 p-3 hover:bg-white/10"
                         >
                           <div className="flex items-center justify-between gap-3">
