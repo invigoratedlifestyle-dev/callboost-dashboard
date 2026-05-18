@@ -1994,6 +1994,7 @@ ${iconLinkHtml}
     .template-hero-image-led .footer p, .template-hero-image-led .footer-links, .template-hero-image-led .footer-links a { color: color-mix(in srgb, var(--footer-text-color) 86%, transparent); }
     .template-hero-image-led .footer-bottom { margin-top: 30px; color: color-mix(in srgb, var(--footer-text-color) 72%, transparent); }
     .quote-strip { position: relative; z-index: 5; margin-top: -54px; padding-bottom: 34px; }
+    .template-hero-image-led .quote-strip { margin-top: 0; }
     .quote-card { display: grid; grid-template-columns: 0.8fr 1.2fr; gap: 28px; align-items: center; padding: 28px; border: 1px solid #e6eaf0; border-radius: 18px; background: white; box-shadow: 0 24px 60px rgba(15, 23, 42, 0.16); }
     .quote-card h2 { font-size: clamp(28px, 3.5vw, 38px); }
     .muted { color: #556070; }
