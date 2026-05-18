@@ -5,6 +5,10 @@ import {
 } from "../../../lib/leadTargeting/cities";
 import { generateLeadsForTown } from "../../../lib/leadGeneration";
 import { getTradeTarget } from "../../../lib/leadTargeting/trades";
+import {
+  createLeadGenerationRunSafe,
+  updateLeadGenerationRunSafe,
+} from "../../../lib/leadGenerationRuns";
 
 type GenerateBatchRequest = {
   state?: string;
@@ -19,6 +23,9 @@ type TownBatchResult = {
   town: string;
   created: number;
   skipped: number;
+  duplicatesSkipped: number;
+  noOpportunitySkipped: number;
+  enrichmentFailed: number;
   rejected: number;
   totalFound: number;
   success: boolean;
@@ -130,6 +137,9 @@ function getAggregateMessage(args: {
 }
 
 export async function POST(req: Request) {
+  const startedAt = Date.now();
+  let runId: string | null = null;
+
   try {
     const body = (await req.json().catch(() => ({}))) as GenerateBatchRequest;
     const stateKey = body.stateKey || body.state || "";
@@ -178,6 +188,17 @@ export async function POST(req: Request) {
       );
     }
 
+    runId = await createLeadGenerationRunSafe({
+      trade: tradeTarget.key,
+      stateCode: stateTarget.key,
+      towns,
+      requestedLimit: limit,
+      metadata: {
+        mode: "batch",
+        enrich: null,
+      },
+    });
+
     const results: TownBatchResult[] = [];
 
     for (const town of towns) {
@@ -188,6 +209,9 @@ export async function POST(req: Request) {
           town,
           created: 0,
           skipped: 0,
+          duplicatesSkipped: 0,
+          noOpportunitySkipped: 0,
+          enrichmentFailed: 0,
           rejected: 0,
           totalFound: 0,
           success: false,
@@ -215,12 +239,16 @@ export async function POST(req: Request) {
 
         const created = getNumber(data.created ?? data.saved);
         const rejected = getNumber(data.rejected ?? data.skippedWrongTrade);
+        const duplicatesSkipped =
+          getNumber(data.existingSkipped) + getNumber(data.skippedDuplicates);
+        const noOpportunitySkipped = getNumber(data.skippedNoOpportunity);
+        const enrichmentFailed = getNumber(data.enrichmentFailed);
         const skipped = getNumber(
           data.skipped ??
-            getNumber(data.existingSkipped) +
-              getNumber(data.skippedDuplicates) +
+            duplicatesSkipped +
               getNumber(data.skippedInvalidLocation) +
-              getNumber(data.skippedInvalidPhone)
+              getNumber(data.skippedInvalidPhone) +
+              noOpportunitySkipped
         );
         const totalFound = getNumber(data.totalFound ?? data.rawResults);
         const status = getTownStatus({
@@ -235,6 +263,9 @@ export async function POST(req: Request) {
           town: cityTarget.city,
           created,
           skipped,
+          duplicatesSkipped,
+          noOpportunitySkipped,
+          enrichmentFailed,
           rejected,
           totalFound,
           success: data.success !== false,
@@ -266,6 +297,9 @@ export async function POST(req: Request) {
           town: cityTarget.city,
           created: 0,
           skipped: 0,
+          duplicatesSkipped: 0,
+          noOpportunitySkipped: 0,
+          enrichmentFailed: 0,
           rejected: 0,
           totalFound: 0,
           success: false,
@@ -288,6 +322,8 @@ export async function POST(req: Request) {
       (summary, result) => {
         summary.created += result.created;
         summary.skipped += result.skipped;
+        summary.duplicatesSkipped += result.duplicatesSkipped;
+        summary.noOpportunitySkipped += result.noOpportunitySkipped;
         summary.rejected += result.rejected;
         summary.totalFound += result.totalFound;
         summary.errors += result.errors.length;
@@ -298,6 +334,8 @@ export async function POST(req: Request) {
         towns: results.length,
         created: 0,
         skipped: 0,
+        duplicatesSkipped: 0,
+        noOpportunitySkipped: 0,
         rejected: 0,
         totalFound: 0,
         errors: 0,
@@ -311,6 +349,36 @@ export async function POST(req: Request) {
       totalFound: totals.totalFound,
       errors: totals.errors,
     });
+    const status =
+      totals.created > 0 && totals.errors > 0
+        ? "partial"
+        : totals.errors > 0
+          ? "failed"
+          : "completed";
+
+    await updateLeadGenerationRunSafe(runId, {
+      status,
+      startedAt,
+      leadsFound: totals.totalFound,
+      leadsCreated: totals.created,
+      duplicatesSkipped: totals.duplicatesSkipped,
+      noOpportunitySkipped: totals.noOpportunitySkipped,
+      enrichmentFailed: results.reduce(
+        (sum, result) => sum + result.enrichmentFailed,
+        0
+      ),
+      totalSkipped: totals.skipped,
+      errorMessage:
+        status === "failed"
+          ? results.flatMap((result) => result.errors).join("; ") || message
+          : null,
+      metadata: {
+        mode: "batch",
+        townCount: towns.length,
+        errors: totals.errors,
+        rejected: totals.rejected,
+      },
+    });
 
     return NextResponse.json({
       success: true,
@@ -323,6 +391,11 @@ export async function POST(req: Request) {
     });
   } catch (error) {
     console.error("Failed to generate lead batch:", error);
+    await updateLeadGenerationRunSafe(runId, {
+      status: "failed",
+      startedAt,
+      errorMessage: error instanceof Error ? error.message : "Unknown error",
+    });
 
     return NextResponse.json(
       {

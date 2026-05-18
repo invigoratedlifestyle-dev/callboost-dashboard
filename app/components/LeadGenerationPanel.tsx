@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AU_STATE_TARGETS,
   CITY_TARGETS,
@@ -43,6 +43,20 @@ type GenerateBatchSummary = {
   results: GenerateBatchTownResult[];
 };
 
+type LeadGenerationRun = {
+  id: string;
+  created_at: string;
+  status: "running" | "completed" | "partial" | "failed";
+  trade: string;
+  state_code: string | null;
+  towns: string[];
+  leads_created: number;
+  duplicates_skipped: number;
+  no_opportunity_skipped: number;
+  total_skipped: number;
+  duration_ms: number | null;
+};
+
 function getGenerationResultClass(result: GenerateBatchTownResult) {
   if (result.status === "failed" || result.success === false) {
     return "text-red-300";
@@ -69,6 +83,34 @@ function getGenerationResultMessage(result: GenerateBatchTownResult) {
   }
 
   return "no matching businesses found";
+}
+
+function formatRunDate(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return "Unknown";
+
+  return new Intl.DateTimeFormat("en-AU", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function formatDuration(durationMs: number | null) {
+  if (!durationMs) return "-";
+  if (durationMs < 1000) return `${durationMs}ms`;
+
+  return `${(durationMs / 1000).toFixed(1)}s`;
+}
+
+function getRunStatusClass(status: LeadGenerationRun["status"]) {
+  if (status === "completed") return "bg-green-500/15 text-green-200";
+  if (status === "partial") return "bg-amber-500/15 text-amber-200";
+  if (status === "failed") return "bg-red-500/15 text-red-200";
+
+  return "bg-blue-500/15 text-blue-200";
 }
 
 function isSupportedStateKey(value: string): value is AUStateCode {
@@ -117,6 +159,8 @@ export default function LeadGenerationPanel() {
   const [generationProgress, setGenerationProgress] = useState("");
   const [generationSummary, setGenerationSummary] =
     useState<GenerateBatchSummary | null>(null);
+  const [recentRuns, setRecentRuns] = useState<LeadGenerationRun[]>([]);
+  const [loadingRecentRuns, setLoadingRecentRuns] = useState(false);
   const cityOptions = useMemo(
     () =>
       CITY_TARGETS.filter((cityTarget) => cityTarget.stateCode === targetStateKey),
@@ -141,6 +185,59 @@ export default function LeadGenerationPanel() {
       cityTarget.city.toLowerCase().includes(normalizedSearch)
     );
   }, [cityOptions, townSearch]);
+
+  async function loadRecentRuns(showLoading = true) {
+    if (showLoading) {
+      setLoadingRecentRuns(true);
+    }
+
+    try {
+      const res = await fetch("/api/leads/generation-runs", {
+        cache: "no-store",
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        console.warn("Failed to load lead generation runs:", data);
+        return;
+      }
+
+      setRecentRuns(Array.isArray(data.runs) ? data.runs : []);
+    } catch (error) {
+      console.warn("Failed to load lead generation runs:", error);
+    } finally {
+      if (showLoading) {
+        setLoadingRecentRuns(false);
+      }
+    }
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetch("/api/leads/generation-runs", {
+      cache: "no-store",
+    })
+      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+      .then(({ ok, data }) => {
+        if (cancelled) return;
+        if (!ok) {
+          console.warn("Failed to load lead generation runs:", data);
+          return;
+        }
+
+        setRecentRuns(Array.isArray(data.runs) ? data.runs : []);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.warn("Failed to load lead generation runs:", error);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function handleGenerateLeads() {
     const selectedTownKeys =
@@ -258,6 +355,7 @@ export default function LeadGenerationPanel() {
     } finally {
       setGenerating(false);
       setGenerationProgress("");
+      loadRecentRuns();
     }
   }
 
@@ -486,6 +584,79 @@ export default function LeadGenerationPanel() {
           </Link>
         </div>
       ) : null}
+
+      <div className="mt-5 rounded-xl border border-white/10 bg-slate-950/50 p-4">
+        <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-sm font-black text-white">Recent searches</h3>
+            <p className="text-xs font-medium text-slate-500">
+              Latest lead generation runs and filtering outcomes.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => loadRecentRuns()}
+            disabled={loadingRecentRuns}
+            className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-slate-200 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loadingRecentRuns ? "Refreshing..." : "Refresh"}
+          </button>
+        </div>
+
+        {recentRuns.length ? (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-left text-xs">
+              <thead className="text-slate-500">
+                <tr className="border-b border-white/10">
+                  <th className="py-2 pr-3 font-bold">When</th>
+                  <th className="py-2 pr-3 font-bold">Search</th>
+                  <th className="py-2 pr-3 font-bold">Status</th>
+                  <th className="py-2 pr-3 font-bold">Created</th>
+                  <th className="py-2 pr-3 font-bold">Duplicates</th>
+                  <th className="py-2 pr-3 font-bold">No opp.</th>
+                  <th className="py-2 pr-3 font-bold">Skipped</th>
+                  <th className="py-2 font-bold">Duration</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5 text-slate-300">
+                {recentRuns.map((run) => (
+                  <tr key={run.id}>
+                    <td className="py-2 pr-3 whitespace-nowrap">
+                      {formatRunDate(run.created_at)}
+                    </td>
+                    <td className="py-2 pr-3">
+                      <div className="font-bold text-slate-100">{run.trade}</div>
+                      <div className="max-w-xs truncate text-slate-500">
+                        {[run.state_code, ...run.towns].filter(Boolean).join(" - ")}
+                      </div>
+                    </td>
+                    <td className="py-2 pr-3">
+                      <span
+                        className={`rounded-full px-2 py-1 text-[11px] font-black uppercase ${getRunStatusClass(run.status)}`}
+                      >
+                        {run.status}
+                      </span>
+                    </td>
+                    <td className="py-2 pr-3 font-bold text-green-300">
+                      {run.leads_created}
+                    </td>
+                    <td className="py-2 pr-3">{run.duplicates_skipped}</td>
+                    <td className="py-2 pr-3">{run.no_opportunity_skipped}</td>
+                    <td className="py-2 pr-3">{run.total_skipped}</td>
+                    <td className="py-2">{formatDuration(run.duration_ms)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="rounded-lg border border-dashed border-white/10 px-3 py-4 text-sm font-bold text-slate-500">
+            {loadingRecentRuns
+              ? "Loading recent searches..."
+              : "No lead generation runs logged yet."}
+          </p>
+        )}
+      </div>
     </section>
   );
 }
