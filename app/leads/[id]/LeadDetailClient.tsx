@@ -1959,7 +1959,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     setFollowUpError("");
 
     const destination = getFollowUpDestination({
-      latestOutboundChannel: getLatestOutboundMessageChannel(messages),
+      latestOutboundChannel:
+        outreachChannel || getLatestOutboundMessageChannel(messages),
       phone: lead.phone,
       email: lead.email,
     });
@@ -2068,6 +2069,9 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     setEmailBodyEdited(true);
     setCloseReplyNotice("Close email loaded into composer.");
   };
+  const handleUseSelectedCloseReply = () => {
+    handleUseCloseReply(outreachChannel);
+  };
   const handleGeneratePaymentReplyLink = async () => {
     if (!lead) return;
 
@@ -2148,6 +2152,9 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     setEmailSubjectEdited(true);
     setEmailBodyEdited(true);
     setPaymentReplyNotice("Payment email loaded into composer.");
+  };
+  const handleUseSelectedPaymentReply = () => {
+    handleUsePaymentReply(outreachChannel);
   };
   const generatedDescription =
     lead.description || lead.solution || lead.subheadline || "";
@@ -3986,6 +3993,8 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
         <CommunicationTab
           isActive={activeTab === "communication"}
           previewUrl={generatedSiteUrl}
+          communicationChannel={outreachChannel}
+          onCommunicationChannelChange={handleOutreachChannelChange}
           stageLabel={stageLabels[leadStage] || "Lead"}
           stageBadgeClass={getStageBadgeClass(leadStage)}
           statusLabel={getLeadStatusLabel(lead.status)}
@@ -4017,7 +4026,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
             <div className="mb-4">
               <h3 className="text-lg font-bold text-white">Follow-ups</h3>
               <p className="mt-1 text-sm text-slate-400">
-                Follow-ups use the last outbound channel where possible.
+                Follow-ups use the selected channel where possible.
               </p>
             </div>
 
@@ -4107,17 +4116,10 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
             </button>
 
             <button
-              onClick={() => handleUseCloseReply("sms")}
+              onClick={handleUseSelectedCloseReply}
               className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500"
             >
-              Use in SMS
-            </button>
-
-            <button
-              onClick={() => handleUseCloseReply("email")}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500"
-            >
-              Use in Email
+              Use selected channel ({outreachChannel === "sms" ? "SMS" : "Email"})
             </button>
           </div>
         </div>
@@ -4194,19 +4196,11 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
             </button>
 
             <button
-              onClick={() => handleUsePaymentReply("sms")}
+              onClick={handleUseSelectedPaymentReply}
               disabled={!hasPaymentLink}
               className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Use in SMS
-            </button>
-
-            <button
-              onClick={() => handleUsePaymentReply("email")}
-              disabled={!hasPaymentLink}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              Use in Email
+              Use selected channel ({outreachChannel === "sms" ? "SMS" : "Email"})
             </button>
           </div>
         </div>
@@ -4214,7 +4208,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
           </section>
 
         <section className="rounded-2xl border border-white/10 bg-white/5 p-6">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="mb-4">
             <div>
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-300">
                 Message composer
@@ -4224,22 +4218,6 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
                 Review the SMS or email body, recipient and delivery feedback
                 before sending.
               </p>
-            </div>
-
-            <div className="flex rounded-lg border border-white/10 bg-slate-900 p-1">
-              {(["sms", "email"] as OutreachChannel[]).map((channel) => (
-                <button
-                  key={channel}
-                  onClick={() => handleOutreachChannelChange(channel)}
-                  className={`rounded-md px-4 py-2 text-sm font-bold ${
-                    outreachChannel === channel
-                      ? "bg-blue-600 text-white"
-                      : "text-slate-400 hover:text-white"
-                  }`}
-                >
-                  {channel === "sms" ? "SMS" : "Email"}
-                </button>
-              ))}
             </div>
           </div>
 

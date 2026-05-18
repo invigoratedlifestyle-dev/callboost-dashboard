@@ -2,10 +2,14 @@
 
 import type { ReactNode } from "react";
 
+type CommunicationChannel = "sms" | "email";
+
 type CommunicationTabProps = {
   isActive: boolean;
   children: ReactNode;
   previewUrl?: string;
+  communicationChannel: CommunicationChannel;
+  onCommunicationChannelChange: (channel: CommunicationChannel) => void;
   stageLabel: string;
   stageBadgeClass: string;
   statusLabel: string;
@@ -18,6 +22,8 @@ export default function CommunicationTab({
   isActive,
   children,
   previewUrl,
+  communicationChannel,
+  onCommunicationChannelChange,
   stageLabel,
   stageBadgeClass,
   statusLabel,
@@ -80,6 +86,36 @@ export default function CommunicationTab({
             >
               {opportunityLabel}
             </span>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-white/10 bg-white/5 p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-blue-300">
+              Communication channel
+            </p>
+            <p className="mt-1 text-sm text-slate-400">
+              Prepared replies will use this channel.
+            </p>
+          </div>
+
+          <div className="flex self-start rounded-lg border border-white/10 bg-slate-900 p-1 sm:self-auto">
+            {(["sms", "email"] as CommunicationChannel[]).map((channel) => (
+              <button
+                key={channel}
+                type="button"
+                onClick={() => onCommunicationChannelChange(channel)}
+                className={`rounded-md px-4 py-2 text-sm font-bold ${
+                  communicationChannel === channel
+                    ? "bg-blue-600 text-white"
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                {channel === "sms" ? "SMS" : "Email"}
+              </button>
+            ))}
           </div>
         </div>
       </section>
