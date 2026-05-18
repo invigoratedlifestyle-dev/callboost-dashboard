@@ -17,7 +17,7 @@ const previewViewports: Record<
   iphone: { label: "iPhone", width: 390, height: 844 },
   android: { label: "Android", width: 412, height: 915 },
   tablet: { label: "Tablet", width: 744, height: 1024 },
-  desktop: { label: "Desktop", width: 1440, height: 900 },
+  desktop: { label: "Desktop", width: 1920, height: 1080 },
 };
 
 const previewPresetOptions = [
