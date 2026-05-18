@@ -100,6 +100,17 @@ function getGeneratedLeadOpportunity(args: {
   );
 }
 
+function isNoOpportunityGeneratedLead(
+  opportunity: ReturnType<typeof getGeneratedLeadOpportunity>
+) {
+  const signalCount =
+    opportunity.highSignals.length +
+    opportunity.mediumSignals.length +
+    opportunity.lowSignals.length;
+
+  return opportunity.level === "none" && signalCount > 0;
+}
+
 async function enrichGeneratedLeadWithTimeout(slug: string) {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
@@ -855,7 +866,7 @@ export async function generateLeadsForTown(args: GenerateLeadsForTownArgs) {
       reviewCount,
     });
 
-    if (websiteOpportunity.level === "none") {
+    if (isNoOpportunityGeneratedLead(websiteOpportunity)) {
       skippedNoOpportunity += 1;
       console.log(
         "[Lead Generation] Skipping no-opportunity lead:",
