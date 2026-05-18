@@ -201,7 +201,7 @@ export function PreviewCard({
               <div className="mb-2 mx-auto h-1.5 w-16 rounded-full bg-slate-700" />
             )}
             <div
-              className={`overflow-auto border border-black/60 bg-white ${
+              className={`overflow-y-auto overflow-x-hidden border border-black/60 bg-white ${
                 isDesktopPreview ? "rounded-b-lg" : ""
               }`}
               style={{
