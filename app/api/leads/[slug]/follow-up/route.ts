@@ -10,14 +10,16 @@ import { appendEmailUnsubscribeFooter } from "../../../../lib/emailUnsubscribe";
 import { sendEmail, sendSms } from "../../../../lib/outboundMessages";
 import {
   buildOpenTrackingPixelUrl,
-  buildTrackedPreviewUrl,
   createPublicTrackingToken,
   createTrackingToken,
   getAppBaseUrl,
-  replacePreviewUrlWithTrackingUrl,
   textToTrackedHtml,
 } from "../../../../lib/messageTracking";
-import { getPreviewUrl } from "../../../../lib/previewUrls";
+import {
+  buildCleanPreviewUrl,
+  getPreviewUrl,
+  replacePreviewUrlsWithCustomerUrl,
+} from "../../../../lib/previewUrls";
 import { prepareOutboundSmsText } from "../../../../lib/smsOptOut";
 import {
   insertLeadMessage,
@@ -133,18 +135,8 @@ export async function POST(
     const baseUrl = getAppBaseUrl(req.url);
     const trackingToken = createTrackingToken();
     const publicTrackingToken = createPublicTrackingToken();
+    const previewUrl = buildCleanPreviewUrl(slug, baseUrl);
     const sitePreviewUrl = getPreviewUrl(lead, baseUrl);
-    const previewUrl = buildTrackedPreviewUrl({
-      appUrl: baseUrl,
-      slug,
-      includeToken: false,
-    });
-    const trackingUrl = buildTrackedPreviewUrl({
-      appUrl: baseUrl,
-      slug,
-      publicTrackingToken,
-      includeToken: true,
-    });
     const followUpBody = buildFollowUpBody(stage, leadName, {
       businessName: getString(lead.businessName),
       channel,
@@ -174,16 +166,15 @@ export async function POST(
         websiteOpportunityV2 as StoredWebsiteOpportunityResult | null,
       engagement,
     });
-    const trackedFollowUpBody = replacePreviewUrlWithTrackingUrl({
+    const cleanFollowUpBody = replacePreviewUrlsWithCustomerUrl({
       body: followUpBody,
-      previewUrl,
+      customerPreviewUrl: previewUrl,
       previewUrls: [sitePreviewUrl],
-      trackingUrl,
     });
     const messageBody =
       channel === "sms"
-        ? prepareOutboundSmsText(trackedFollowUpBody)
-        : appendEmailUnsubscribeFooter(trackedFollowUpBody);
+        ? prepareOutboundSmsText(cleanFollowUpBody)
+        : appendEmailUnsubscribeFooter(cleanFollowUpBody);
     let fromAddress = "";
     let providerMessageId = "";
     const provider = channel === "sms" ? "twilio" : "resend";
@@ -202,11 +193,7 @@ export async function POST(
           body: messageBody,
           html: textToTrackedHtml(
             messageBody,
-            buildOpenTrackingPixelUrl(baseUrl, trackingToken),
-            {
-              previewTrackingUrl: trackingUrl,
-              previewLinkLabel: "View your website preview",
-            }
+            buildOpenTrackingPixelUrl(baseUrl, trackingToken)
           ),
         });
         fromAddress = result.from;

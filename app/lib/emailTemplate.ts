@@ -1,9 +1,9 @@
 import type { Lead } from "./leads";
 import { appendEmailUnsubscribeFooter } from "./emailUnsubscribe";
-import { getBrandedPreviewUrl } from "./previewUrls";
+import { buildCustomerPreviewUrl } from "./previewUrls";
 
 export function getLeadUrl(lead: Lead) {
-  return getBrandedPreviewUrl(lead, process.env.NEXT_PUBLIC_APP_URL) || "";
+  return buildCustomerPreviewUrl(lead, process.env.NEXT_PUBLIC_APP_URL) || "";
 }
 
 export function transformIssueToSentence(issue: string): string {

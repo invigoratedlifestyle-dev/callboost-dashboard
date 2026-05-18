@@ -42,7 +42,7 @@ import {
   getFollowUpDestination,
   getLatestOutboundMessageChannel,
 } from "../../lib/followUps";
-import { getBrandedPreviewUrl } from "../../lib/previewUrls";
+import { buildCustomerPreviewUrl } from "../../lib/previewUrls";
 import {
   buildInterestedReplyEmail,
   buildInterestedReplyEmailSubject,
@@ -369,7 +369,7 @@ function getBrandedPaymentUrl(lead: LeadWithGeneratedContent) {
 }
 
 function getCustomerPreviewUrl(lead: LeadWithGeneratedContent) {
-  return getBrandedPreviewUrl(lead, getAppUrl());
+  return buildCustomerPreviewUrl(lead, getAppUrl());
 }
 
 function getInterestedReplyPersonalization(

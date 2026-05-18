@@ -4,14 +4,16 @@ import Twilio from "twilio";
 import { appendEmailUnsubscribeFooter } from "../../../../../lib/emailUnsubscribe";
 import {
   buildOpenTrackingPixelUrl,
-  buildTrackedPreviewUrl,
   createPublicTrackingToken,
   createTrackingToken,
   getAppBaseUrl,
-  replacePreviewUrlWithTrackingUrl,
   textToTrackedHtml,
 } from "../../../../../lib/messageTracking";
-import { getPreviewUrl } from "../../../../../lib/previewUrls";
+import {
+  buildCleanPreviewUrl,
+  getPreviewUrl,
+  replacePreviewUrlsWithCustomerUrl,
+} from "../../../../../lib/previewUrls";
 import { prepareOutboundSmsText } from "../../../../../lib/smsOptOut";
 import { insertLeadMessage } from "../../../../../lib/supabase/leadMessages";
 import {
@@ -196,28 +198,17 @@ export async function POST(
     const baseUrl = getAppBaseUrl(req.url);
     const trackingToken = createTrackingToken();
     const publicTrackingToken = createPublicTrackingToken();
+    const previewUrl = buildCleanPreviewUrl(slug, baseUrl);
     const sitePreviewUrl = getPreviewUrl(lead, baseUrl);
-    const previewUrl = buildTrackedPreviewUrl({
-      appUrl: baseUrl,
-      slug,
-      includeToken: false,
-    });
-    const trackingUrl = buildTrackedPreviewUrl({
-      appUrl: baseUrl,
-      slug,
-      publicTrackingToken,
-      includeToken: true,
-    });
-    const trackedBody = replacePreviewUrlWithTrackingUrl({
+    const cleanMessageBody = replacePreviewUrlsWithCustomerUrl({
       body: messageBody,
-      previewUrl,
+      customerPreviewUrl: previewUrl,
       previewUrls: [sitePreviewUrl],
-      trackingUrl,
     });
     const outboundBody =
       channel === "sms"
-        ? prepareOutboundSmsText(trackedBody)
-        : appendEmailUnsubscribeFooter(trackedBody);
+        ? prepareOutboundSmsText(cleanMessageBody)
+        : appendEmailUnsubscribeFooter(cleanMessageBody);
     let fromAddress = "";
     let providerMessageId = "";
     const provider = channel === "sms" ? "twilio" : "resend";
@@ -236,11 +227,7 @@ export async function POST(
           body: outboundBody,
           html: textToTrackedHtml(
             outboundBody,
-            buildOpenTrackingPixelUrl(baseUrl, trackingToken),
-            {
-              previewTrackingUrl: trackingUrl,
-              previewLinkLabel: "View your website preview",
-            }
+            buildOpenTrackingPixelUrl(baseUrl, trackingToken)
           ),
         });
         fromAddress = result.from;
