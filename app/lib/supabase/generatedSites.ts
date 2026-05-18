@@ -2078,7 +2078,7 @@ ${iconLinkHtml}
         <a href="#services">Services</a>
         <a href="#reviews">Reviews</a>
         <a href="#faq">FAQ</a>
-        <a href="#quote">Contact</a>
+        <a href="#contact">Contact</a>
       </nav>
       ${navCallHtml}
     </div>
@@ -2163,7 +2163,7 @@ ${iconLinkHtml}
       </div>
     </section>
 
-    <section class="section soft contact-section">
+    <section id="contact" class="section soft contact-section">
       <div class="container">
         <div class="section-header">
           <div class="section-kicker">Contact</div>
@@ -2235,6 +2235,24 @@ ${iconLinkHtml}
   ${mobileCallHtml}
 
   <script>
+    document.querySelectorAll('a[href^="#"]').forEach((link) => {
+      link.addEventListener("click", (event) => {
+        const href = link.getAttribute("href");
+
+        if (!href || href === "#") return;
+
+        const target = document.getElementById(href.slice(1));
+
+        if (!target) return;
+
+        event.preventDefault();
+        target.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      });
+    });
+
     document.querySelectorAll(".callback-form, .mini-form").forEach((form) => {
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
