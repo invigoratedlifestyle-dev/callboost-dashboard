@@ -267,32 +267,6 @@ function buildWebsiteOpportunitySection(args: {
   ].join("\n");
 }
 
-function buildLegacyWebsiteOpportunitySection(args: {
-  websiteOpportunityV2?: StoredWebsiteOpportunityResult | null;
-  websiteOpportunity?: FollowUpWebsiteOpportunity | null;
-  websiteEvaluation?: FollowUpWebsiteEvaluation | null;
-}) {
-  const context = buildOutreachOpportunityContext({
-    websiteOpportunityV2: args.websiteOpportunityV2,
-    websiteOpportunity: args.websiteOpportunity,
-    websiteEvaluation: args.websiteEvaluation,
-  });
-  const issues = getWebsiteOpportunityIssues(args);
-
-  if (!issues.length && context.level === "none") return "";
-
-  const intro = context.summary || context.reason
-    ? `The current website opportunity rating is ${context.level}: ${
-        context.summary || context.reason
-      }`
-    : "I had another look through your current website and noticed a few areas where a refresh could help improve enquiries and mobile usability.";
-
-  return [
-    intro,
-    ...(issues.length ? ["A few supporting points:", ...issues.map((issue) => `- ${issue}`)] : []),
-  ].join("\n");
-}
-
 function getSmsMonthlyPriceLabel() {
   return CALLBOOST_MONTHLY_RECURRING_LABEL.replace("/month", "/mo");
 }
@@ -320,9 +294,7 @@ export function buildFollowUpBody(
   const stageTwoName = businessName || name.trim() || "there";
   const previewUrl = (args.previewUrl || "").trim();
   const isNoWebsiteLead = isNoWebsiteOpportunity(args);
-  const websiteOpportunitySection = isNoWebsiteLead
-    ? buildLegacyWebsiteOpportunitySection(args)
-    : buildWebsiteOpportunitySection(args);
+  const websiteOpportunitySection = buildWebsiteOpportunitySection(args);
   const firstWebsiteOwnerIssue = getWebsiteOpportunityIssues(args)[0];
   const smsName = name.trim() || stageTwoName;
   const engagementState = args.engagement?.engagement_state || "none";
@@ -392,6 +364,29 @@ CallBoost Tasmania`;
   }
 
   if (stage === 2) {
+    if (isNoWebsiteLead && args.channel !== "sms") {
+      return `Hey ${stageTwoName},
+
+Just following up on the website preview I put together for you.
+
+I noticed you still don't currently have a dedicated business website, so the preview was mainly designed to make it easier for customers to:
+- quickly call or enquire
+- find your services
+- view your business professionally on mobile
+
+Your preview is still live here:
+
+${previewUrl}
+
+Setup is ${CALLBOOST_SETUP_FEE_LABEL} with managed hosting & support at ${CALLBOOST_MONTHLY_RECURRING_LABEL}.
+
+Happy to make changes if you'd like anything adjusted.
+
+Thanks,
+Jamie
+CallBoost Tasmania`;
+    }
+
     if (engagementState === "warm") {
       if (args.channel === "sms") {
         return `Hi ${smsName}, just floating this back to the top in case it was useful:
@@ -478,20 +473,24 @@ CallBoost Tasmania`;
 
     return `Hey ${stageTwoName},
 
-Just checking in regarding the website preview I put together for you.${websiteOpportunitySection ? `\n\n${websiteOpportunitySection}` : ""}
+Just following up on the website preview I put together for you.
 
-${websiteOpportunitySection ? "" : "A professional website can make a big difference when local customers search online before calling.\n\n"}Your preview is still live here:
+${websiteOpportunitySection}
+
+Your preview is still live here:
 
 ${previewUrl}
 
-I'll likely remove inactive previews soon as I continue building sites for other local businesses across Tasmania.
+Main goal was making it easier for customers to:
+- quickly call or enquire
+- find your services
+- navigate the site more easily on mobile
 
-Setup is ${CALLBOOST_SETUP_FEE_LABEL} with ongoing managed hosting & support at ${CALLBOOST_MONTHLY_RECURRING_LABEL}.
+Setup is ${CALLBOOST_SETUP_FEE_LABEL} with managed hosting & support at ${CALLBOOST_MONTHLY_RECURRING_LABEL}.
 
-If you'd like any changes or want me to keep the preview live, just reply here.
+Happy to make changes if you'd like anything adjusted.
 
-Cheers,
-
+Thanks,
 Jamie
 CallBoost Tasmania`;
   }
