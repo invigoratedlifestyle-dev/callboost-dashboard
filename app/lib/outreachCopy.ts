@@ -395,6 +395,45 @@ export function buildInterestedReplyEmail(
   return appendEmailUnsubscribeFooter(lines.join("\n"));
 }
 
+export function buildEngagedSoftCheckInSms(
+  args: InterestedReplyPersonalization = {}
+) {
+  const businessName = clean(args.businessName) || "there";
+
+  return appendOptOut([
+    `Hi ${businessName},`,
+    "",
+    "Saw you had another look at the website example. Happy to make a few quick changes if you'd like anything adjusted.",
+    "",
+    "Jamie",
+    "CallBoost Tasmania",
+  ].join("\n"));
+}
+
+export function buildEngagedSoftCheckInEmailSubject(
+  args: InterestedReplyPersonalization = {}
+) {
+  return `Website preview for ${getBusinessSetupTarget(args)}`;
+}
+
+export function buildEngagedSoftCheckInEmail(
+  args: InterestedReplyPersonalization = {}
+) {
+  const businessName = clean(args.businessName) || "there";
+
+  return appendEmailUnsubscribeFooter([
+    `Hey ${businessName},`,
+    "",
+    "Saw you had another look at the website example I put together.",
+    "",
+    "Happy to make a few quick changes if you'd like anything adjusted.",
+    "",
+    "Thanks,",
+    "Jamie",
+    "CallBoost Tasmania",
+  ].join("\n"));
+}
+
 export function buildPaymentSms(paymentLink: string) {
   return appendOptOut([
     "Perfect - here's the secure payment link to get started:",

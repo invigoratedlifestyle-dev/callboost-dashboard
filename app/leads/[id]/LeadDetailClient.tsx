@@ -44,6 +44,9 @@ import {
 } from "../../lib/followUps";
 import { buildCustomerPreviewUrl } from "../../lib/previewUrls";
 import {
+  buildEngagedSoftCheckInEmail,
+  buildEngagedSoftCheckInEmailSubject,
+  buildEngagedSoftCheckInSms,
   buildInterestedReplyEmail,
   buildInterestedReplyEmailSubject,
   buildInterestedReplySms,
@@ -149,6 +152,7 @@ type PendingFollowUpMetadata = {
   follow_up_stage: FollowUpStage;
   channel: OutreachChannel;
 };
+type EngagedReplyType = "soft_check_in" | "pricing_ready";
 
 const templateTradeOptions = [
   "plumber",
@@ -2023,54 +2027,45 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     setFollowUpNotice("Review the prepared follow-up in Outreach before sending.");
     setPreparingFollowUp(null);
   };
-  const handleCopyCloseReply = async (channel: OutreachChannel) => {
-    setCloseReplyNotice("");
-    setCloseReplyError("");
-
-    try {
-      const personalization = getInterestedReplyPersonalization(lead);
-      const copyText =
-        channel === "sms"
-          ? buildInterestedReplySms(personalization)
-          : `${buildInterestedReplyEmailSubject(
-              personalization
-            )}\n\n${buildInterestedReplyEmail(personalization)}`;
-
-      await navigator.clipboard.writeText(copyText);
-      setCloseReplyNotice(
-        channel === "sms" ? "Close SMS copied." : "Close email copied."
-      );
-    } catch {
-      setCloseReplyError("Could not copy close reply.");
-    }
-  };
-  const handleUseCloseReply = (channel: OutreachChannel) => {
+  const handlePrepareEngagedReply = (replyType: EngagedReplyType) => {
     setCloseReplyNotice("");
     setCloseReplyError("");
     setPendingFollowUpMetadata(null);
-    setOutreachChannel(channel);
+    setOutreachChannel(outreachChannel);
+    const personalization = getInterestedReplyPersonalization(lead);
 
-    if (channel === "sms") {
+    if (outreachChannel === "sms") {
       setSmsBody(
-        buildInterestedReplySms(getInterestedReplyPersonalization(lead))
+        replyType === "soft_check_in"
+          ? buildEngagedSoftCheckInSms(personalization)
+          : buildInterestedReplySms(personalization)
       );
       setSmsBodyEdited(true);
-      setCloseReplyNotice("Close SMS loaded into composer.");
+      setCloseReplyNotice(
+        replyType === "soft_check_in"
+          ? "Soft check-in SMS loaded into composer."
+          : "Pricing-ready SMS loaded into composer."
+      );
       return;
     }
 
     setEmailSubject(
-      buildInterestedReplyEmailSubject(getInterestedReplyPersonalization(lead))
+      replyType === "soft_check_in"
+        ? buildEngagedSoftCheckInEmailSubject(personalization)
+        : buildInterestedReplyEmailSubject(personalization)
     );
     setEmailOfferBody(
-      buildInterestedReplyEmail(getInterestedReplyPersonalization(lead))
+      replyType === "soft_check_in"
+        ? buildEngagedSoftCheckInEmail(personalization)
+        : buildInterestedReplyEmail(personalization)
     );
     setEmailSubjectEdited(true);
     setEmailBodyEdited(true);
-    setCloseReplyNotice("Close email loaded into composer.");
-  };
-  const handleUseSelectedCloseReply = () => {
-    handleUseCloseReply(outreachChannel);
+    setCloseReplyNotice(
+      replyType === "soft_check_in"
+        ? "Soft check-in email loaded into composer."
+        : "Pricing-ready email loaded into composer."
+    );
   };
   const handleGeneratePaymentReplyLink = async () => {
     if (!lead) return;
@@ -2108,29 +2103,7 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
       setGeneratingPaymentLink(false);
     }
   };
-  const handleCopyPaymentReply = async (channel: OutreachChannel) => {
-    const paymentLink = getBrandedPaymentUrl(lead);
-
-    if (!checkoutUrl || !paymentLink) return;
-
-    setPaymentReplyNotice("");
-    setPaymentReplyError("");
-
-    try {
-      const copyText =
-        channel === "sms"
-          ? buildPaymentSms(paymentLink)
-          : `${buildPaymentEmailSubject()}\n\n${buildPaymentEmail(paymentLink)}`;
-
-      await navigator.clipboard.writeText(copyText);
-      setPaymentReplyNotice(
-        channel === "sms" ? "Payment SMS copied." : "Payment email copied."
-      );
-    } catch {
-      setPaymentReplyError("Could not copy payment reply.");
-    }
-  };
-  const handleUsePaymentReply = (channel: OutreachChannel) => {
+  const handlePreparePaymentReply = () => {
     const paymentLink = getBrandedPaymentUrl(lead);
 
     if (!checkoutUrl || !paymentLink) return;
@@ -2138,9 +2111,9 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     setPaymentReplyNotice("");
     setPaymentReplyError("");
     setPendingFollowUpMetadata(null);
-    setOutreachChannel(channel);
+    setOutreachChannel(outreachChannel);
 
-    if (channel === "sms") {
+    if (outreachChannel === "sms") {
       setSmsBody(buildPaymentSms(paymentLink));
       setSmsBodyEdited(true);
       setPaymentReplyNotice("Payment SMS loaded into composer.");
@@ -2152,9 +2125,6 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
     setEmailSubjectEdited(true);
     setEmailBodyEdited(true);
     setPaymentReplyNotice("Payment email loaded into composer.");
-  };
-  const handleUseSelectedPaymentReply = () => {
-    handleUsePaymentReply(outreachChannel);
   };
   const generatedDescription =
     lead.description || lead.solution || lead.subheadline || "";
@@ -4076,15 +4046,15 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
 
         <div className="rounded-xl border border-white/10 bg-slate-950 p-4">
           <div className="mb-4">
-            <h3 className="text-lg font-bold text-white">Interested reply</h3>
+            <h3 className="text-lg font-bold text-white">Engaged reply</h3>
             <p className="mt-1 text-sm text-slate-400">
-              Use this when a lead replies positively and is ready for pricing.
+              Use this when a lead replies positively or re-engages with their preview.
             </p>
           </div>
 
           {mayBeReadyForClose ? (
             <p className="mb-4 rounded-lg bg-green-500/10 px-3 py-2 text-sm font-bold text-green-300">
-              This lead may be ready for a close reply.
+              This lead may be ready for a pricing-ready reply.
             </p>
           ) : null}
 
@@ -4102,24 +4072,17 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
 
           <div className="flex flex-wrap gap-3">
             <button
-              onClick={() => handleCopyCloseReply("sms")}
-              className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-bold text-white hover:bg-slate-600"
-            >
-              Copy close SMS
-            </button>
-
-            <button
-              onClick={() => handleCopyCloseReply("email")}
-              className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-bold text-white hover:bg-slate-600"
-            >
-              Copy close Email
-            </button>
-
-            <button
-              onClick={handleUseSelectedCloseReply}
+              onClick={() => handlePrepareEngagedReply("soft_check_in")}
               className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500"
             >
-              Use selected channel ({outreachChannel === "sms" ? "SMS" : "Email"})
+              Prepare soft check-in
+            </button>
+
+            <button
+              onClick={() => handlePrepareEngagedReply("pricing_ready")}
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500"
+            >
+              Prepare pricing-ready reply
             </button>
           </div>
         </div>
@@ -4180,27 +4143,11 @@ export default function LeadDetailClient({ slug }: { slug: string }) {
             </button>
 
             <button
-              onClick={() => handleCopyPaymentReply("sms")}
-              disabled={!hasPaymentLink}
-              className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-bold text-white hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              Copy payment SMS
-            </button>
-
-            <button
-              onClick={() => handleCopyPaymentReply("email")}
-              disabled={!hasPaymentLink}
-              className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-bold text-white hover:bg-slate-600 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              Copy payment Email
-            </button>
-
-            <button
-              onClick={handleUseSelectedPaymentReply}
+              onClick={handlePreparePaymentReply}
               disabled={!hasPaymentLink}
               className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Use selected channel ({outreachChannel === "sms" ? "SMS" : "Email"})
+              Prepare payment reply
             </button>
           </div>
         </div>
