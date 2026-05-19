@@ -2086,6 +2086,7 @@ ${iconLinkHtml}
         ${brandHtml}
       </a>
       <nav class="nav-links">
+        <a href="#quote">Quote</a>
         <a href="#services">Services</a>
         <a href="#reviews">Reviews</a>
         <a href="#faq">FAQ</a>
