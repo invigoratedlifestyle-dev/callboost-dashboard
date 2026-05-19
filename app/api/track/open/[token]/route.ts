@@ -27,8 +27,17 @@ export async function GET(
   try {
     const { token } = await params;
 
-    if (token) {
+    if (!token) {
+      console.warn("OPEN_TRACKING_ROUTE_MISSING_TOKEN");
+    } else {
       const message = await recordMessageOpen(token);
+
+      if (!message) {
+        console.warn("OPEN_TRACKING_ROUTE_TOKEN_NOT_FOUND", {
+          token,
+        });
+      }
+
       const lead = message?.slug ? await getLeadBySlug(message.slug) : null;
 
       if (lead) {

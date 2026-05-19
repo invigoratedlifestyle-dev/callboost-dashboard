@@ -235,9 +235,19 @@ export async function findLeadMessageByPublicTrackingToken(token: string) {
 }
 
 export async function recordMessageOpen(token: string) {
+  if (!token.trim()) {
+    console.warn("OPEN_TRACKING_MISSING_TOKEN");
+    return null;
+  }
+
   const message = await findLeadMessageByTrackingToken(token);
 
-  if (!message?.id) return null;
+  if (!message?.id) {
+    console.warn("OPEN_TRACKING_TOKEN_NOT_FOUND", {
+      token,
+    });
+    return null;
+  }
 
   const now = new Date().toISOString();
   const supabase = getSupabaseAdmin();
@@ -252,7 +262,14 @@ export async function recordMessageOpen(token: string) {
     .select("*")
     .single();
 
-  if (error) throw error;
+  if (error) {
+    console.warn("OPEN_TRACKING_UPDATE_FAILED", {
+      token,
+      messageId: message.id,
+      error,
+    });
+    throw error;
+  }
 
   return rowToLeadMessage(data as LeadMessageRow);
 }

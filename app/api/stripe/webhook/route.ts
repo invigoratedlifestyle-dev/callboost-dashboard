@@ -2,6 +2,13 @@ import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { sendEmail, sendSms } from "../../../lib/outboundMessages";
 import { getLeadStage } from "../../../lib/leadLifecycle";
+import {
+  buildOpenTrackingPixelUrl,
+  createPublicTrackingToken,
+  createTrackingToken,
+  getAppBaseUrl,
+  textToTrackedHtml,
+} from "../../../lib/messageTracking";
 import { prepareOutboundSmsText } from "../../../lib/smsOptOut";
 import { getStripe } from "../../../lib/stripe";
 import {
@@ -179,6 +186,8 @@ async function saveRecoveryMessage(args: {
   provider: string;
   providerMessageId?: string;
   error?: string;
+  trackingToken?: string | null;
+  publicTrackingToken?: string | null;
   stripeEventId: string;
   stripeInvoiceId: string;
 }) {
@@ -195,6 +204,8 @@ async function saveRecoveryMessage(args: {
     provider: args.provider,
     providerMessageId: args.providerMessageId || "",
     error: args.error || "",
+    trackingToken: args.trackingToken || null,
+    publicTrackingToken: args.publicTrackingToken || null,
     metadata: {
       reason: "payment_failed_recovery",
       stripe_event_id: args.stripeEventId,
@@ -328,11 +339,17 @@ async function sendPaymentFailedRecovery(args: {
     }
 
     if (email) {
+      const trackingToken = createTrackingToken();
+      const publicTrackingToken = createPublicTrackingToken();
+      const baseUrl = getAppBaseUrl();
+      const openPixelUrl = buildOpenTrackingPixelUrl(baseUrl, trackingToken);
+
       try {
         const result = await sendEmail({
           to: email,
           subject: emailSubject,
           body: emailBody,
+          html: textToTrackedHtml(emailBody, openPixelUrl),
         });
 
         await saveRecoveryMessage({
@@ -345,6 +362,8 @@ async function sendPaymentFailedRecovery(args: {
           status: "sent",
           provider: "resend",
           providerMessageId: result.providerMessageId,
+          trackingToken,
+          publicTrackingToken,
           stripeEventId: args.stripeEventId,
           stripeInvoiceId,
         });
@@ -378,6 +397,8 @@ async function sendPaymentFailedRecovery(args: {
           status: "failed",
           provider: "resend",
           error: message,
+          trackingToken,
+          publicTrackingToken,
           stripeEventId: args.stripeEventId,
           stripeInvoiceId,
         });

@@ -52,9 +52,22 @@ export function buildTrackedPreviewUrl(args: {
 }
 
 export function buildOpenTrackingPixelUrl(baseUrl: string, token: string) {
-  return `${baseUrl.replace(/\/+$/, "")}/api/track/open/${encodeURIComponent(
-    token
-  )}`;
+  const cleanBaseUrl = baseUrl.replace(/\/+$/, "");
+  const cleanToken = token.trim();
+
+  if (!cleanToken) {
+    console.warn("OPEN_TRACKING_PIXEL_MISSING_TOKEN");
+    return "";
+  }
+
+  if (!cleanBaseUrl || !/^https?:\/\//i.test(cleanBaseUrl)) {
+    console.warn("OPEN_TRACKING_PIXEL_MALFORMED_APP_URL", {
+      baseUrl,
+    });
+    return "";
+  }
+
+  return `${cleanBaseUrl}/api/track/open/${encodeURIComponent(cleanToken)}`;
 }
 
 function escapeHtml(value: string) {
@@ -105,9 +118,18 @@ export function textToTrackedHtml(
     .join("")
     .replace(/\n/g, "<br />");
 
-  return `${body}<img src="${escapeHtml(
-    openPixelUrl
-  )}" width="1" height="1" style="display:none" alt="" />`;
+  const pixelUrl = openPixelUrl.trim();
+  const openPixel = pixelUrl
+    ? `<img src="${escapeHtml(
+        pixelUrl
+      )}" width="1" height="1" style="width:1px;height:1px;max-width:1px;max-height:1px;overflow:hidden;border:0;outline:none;text-decoration:none;opacity:0;" alt="" aria-hidden="true" />`
+    : "";
+
+  if (!openPixel) {
+    console.warn("OPEN_TRACKING_PIXEL_NOT_INJECTED");
+  }
+
+  return `${body}${openPixel}`;
 }
 
 export function replacePreviewUrlWithTrackingUrl(args: {
