@@ -30,6 +30,10 @@ export async function GET(
     if (!token) {
       console.warn("OPEN_TRACKING_ROUTE_MISSING_TOKEN");
     } else {
+      console.log("OPEN_TRACKING_ROUTE_HIT", {
+        token,
+      });
+
       const message = await recordMessageOpen(token);
 
       if (!message) {

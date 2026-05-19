@@ -9,6 +9,10 @@ function isMarketingDomain(host: string) {
 
 function isProtectedPath(pathname: string) {
   if (pathname === "/") return true;
+  if (pathname.startsWith("/api/track/open/")) return false;
+  if (pathname === "/r" || pathname.startsWith("/r/")) return false;
+  if (pathname === "/preview" || pathname.startsWith("/preview/")) return false;
+  if (pathname === "/sites" || pathname.startsWith("/sites/")) return false;
   if (pathname === "/leads" || pathname.startsWith("/leads/")) return true;
   if (pathname.startsWith("/api/auth/")) return false;
   if (pathname === "/api/callback") return false;
